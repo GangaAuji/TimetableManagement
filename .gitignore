@@ -31,8 +31,7 @@ Documents/*
 uploads/*
 
 # Database and migration test files
-check_db.py
-check_schema.py
+
 check_teacher_panel.py
 analyze_tables.py
 apply_new_schema.py
@@ -40,18 +39,13 @@ create_availability_table.py
 create_basic_timetable.py
 create_sample_proxy_data.py
 create_test_data.py
-database.py
 enhance_database.py
-export_db_structure.py
 fix_columns.py
 fix_column_names.py
 fix_foreign_keys.py
 fix_template.py
-forms.py
-reset_passwords.py
 run_migration.py
 setup_invitation_table.py
-update_passwords.py
 verify_changes.py
 verify_database.py
 database_export.json

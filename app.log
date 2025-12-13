@@ -80,3 +80,5 @@
 2025-11-30 20:11:07,124 - app - INFO - Scheduling for day Saturday (2025-12-06)
 2025-11-30 20:11:07,131 - app - INFO - Archived 24 old timetable entries to history
 2025-11-30 20:11:07,192 - app - INFO - Timetable generation finished in 0.19s; status=success
+2025-12-13 11:22:34,889 - app - INFO - Blueprints registered successfully.
+2025-12-13 11:22:34,889 - app - INFO - College Timetable Management System application created.
