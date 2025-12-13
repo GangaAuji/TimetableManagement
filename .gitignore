@@ -95,7 +95,8 @@ ENV/
 migrations/versions/*.pyc
 migrations/*
 migrations/__pycache__/
- routes/__pycache__/*
+routes/__pycache__/*
+__pycache__
 
 test_academic_routes.py
 test_permission_system.py
