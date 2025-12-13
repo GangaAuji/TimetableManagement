@@ -107,3 +107,5 @@ test_timetable_generation.py
 test_user_management.py
 
 static/uploads/profiles/*
+
+v1_scripts_bkp
