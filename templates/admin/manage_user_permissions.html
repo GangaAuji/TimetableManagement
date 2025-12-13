@@ -1,0 +1,419 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Manage User Permissions - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Manage Permissions</h1>
+            <p class="text-muted">User: <strong>{{ user.username }}</strong> ({{ user.role }})</p>
+            {% if user.department_id %}
+                <p class="text-info">Department: <span class="badge bg-info">{{ user.department_name }}</span> 
+                {% if user.is_hod %}<span class="badge bg-warning">HOD</span>{% endif %}</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('user_mgmt_bp.manage_users') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Users
+        </a>
+    </div>
+
+    <!-- Current Permissions Overview -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Current Permissions</h5>
+                </div>
+                <div class="card-body">
+                    {% if user_permissions %}
+                        <div class="row">
+                            {% for module, perms in user_permissions | groupby('module') %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <h6 class="text-primary">{{ module | title }}</h6>
+                                <ul class="list-unstyled">
+                                    {% for perm in perms %}
+                                    <li class="mb-1">
+                                        <span class="badge bg-secondary me-2">{{ perm.source }}</span>
+                                        {{ perm.name }}
+                                        {% if perm.department_id %}
+                                            <small class="text-muted">(Dept: {{ perm.department_id }})</small>
+                                        {% endif %}
+                                        {% if perm.expires_at %}
+                                            <small class="text-warning">(Expires: {{ perm.expires_at.strftime('%Y-%m-%d') }})</small>
+                                        {% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No permissions assigned yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Management Tabs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#individual-permissions" role="tab">
+                                Individual Permissions
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#permission-groups" role="tab">
+                                Permission Groups
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#bulk-operations" role="tab">
+                                Bulk Operations
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content">
+                        <!-- Individual Permissions Tab -->
+                        <div class="tab-pane active" id="individual-permissions" role="tabpanel">
+                            <h6>Grant Individual Permission</h6>
+                            <form id="grant-permission-form" class="mb-4">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Permission</label>
+                                        <select name="permission_name" class="form-select" required>
+                                            <option value="">Select Permission</option>
+                                            {% for module, perms in permissions_by_module.items() %}
+                                                <optgroup label="{{ module | title }}">
+                                                    {% for perm in perms %}
+                                                    <option value="{{ perm.name }}">{{ perm.name }} - {{ perm.description }}</option>
+                                                    {% endfor %}
+                                                </optgroup>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Department (Optional)</label>
+                                        <select name="department_id" id="grant-department" class="form-select">
+                                            <option value="">All Departments</option>
+                                            {% for dept in departments %}
+                                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Course (Optional)</label>
+                                        <select name="course_id" id="grant-course" class="form-select" disabled>
+                                            <option value="">All Courses</option>
+                                            {% for course in courses %}
+                                            <option value="{{ course.id }}" data-dept="{{ course.department_id }}">{{ course.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="text-muted">Select department first</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Class/Year (Optional)</label>
+                                        <select name="class_id" id="grant-class" class="form-select">
+                                            <option value="">All Classes</option>
+                                            {% for class in classes %}
+                                            <option value="{{ class.id }}">{{ class.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="text-muted">FY, SY, TY, Fourth Year</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Expires (Optional)</label>
+                                        <input type="datetime-local" name="expires_at" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-10">
+                                        <label class="form-label">Notes (Optional)</label>
+                                        <input type="text" name="notes" class="form-control" placeholder="Optional notes">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-primary d-block w-100">Grant</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <h6>Revoke Individual Permission</h6>
+                            <form id="revoke-permission-form">
+                                <div class="row">
+                                    <div class="col-md-5">
+                                        <label class="form-label">Permission to Revoke</label>
+                                        <select name="permission_name" class="form-select" required>
+                                            <option value="">Select Permission</option>
+                                            {% for perm in user_permissions %}
+                                                {% if perm.source == 'individual' %}
+                                                <option value="{{ perm.permission_name }}" data-dept="{{ perm.permission_department_id or '' }}">
+                                                    {{ perm.permission_name }}
+                                                    {% if perm.permission_department_id %}(Dept: {{ perm.permission_department_id }}){% endif %}
+                                                </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Department</label>
+                                        <select name="department_id" class="form-select">
+                                            <option value="">All Departments</option>
+                                            {% for dept in departments %}
+                                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-danger d-block w-100">Revoke</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Permission Groups Tab -->
+                        <div class="tab-pane" id="permission-groups" role="tabpanel">
+                            <h6>Grant Permission Group</h6>
+                            <form id="grant-group-form" class="mb-4">
+                                <div class="row">
+                                    <div class="col-md-5">
+                                        <label class="form-label">Permission Group</label>
+                                        <select name="group_id" class="form-select" required>
+                                            <option value="">Select Permission Group</option>
+                                            {% for group in permission_groups %}
+                                            <option value="{{ group.id }}" title="{{ group.permissions or 'No permissions' }}">
+                                                {{ group.name }} ({{ group.module or 'General' }})
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Department (Optional)</label>
+                                        <select name="department_id" class="form-select">
+                                            <option value="">All Departments</option>
+                                            {% for dept in departments %}
+                                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-success d-block w-100">Grant Group</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <h6>Current Group Assignments</h6>
+                            {% if user_groups %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Group</th>
+                                                <th>Department</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for group in user_groups %}
+                                            <tr>
+                                                <td>{{ group.description }}</td>
+                                                <td>{{ group.name if group.name else 'All Departments' }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-danger revoke-group-btn" 
+                                                            data-group-id="{{ group.id }}" 
+                                                            data-dept-id="{{ group.name or '' }}">
+                                                        Revoke
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <p class="text-muted">No permission groups assigned.</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Bulk Operations Tab -->
+                        <div class="tab-pane" id="bulk-operations" role="tabpanel">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                Use bulk operations to quickly assign or revoke multiple permissions at once.
+                            </div>
+                            
+                            <h6>Bulk Grant Permissions</h6>
+                            <form id="bulk-grant-form">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Select Permissions</label>
+                                        <div style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px;">
+                                            {% for module, perms in permissions_by_module.items() %}
+                                                <h6 class="text-primary">{{ module | title }}</h6>
+                                                {% for perm in perms %}
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permission_names" value="{{ perm.name }}" id="bulk-perm-{{ perm.id }}">
+                                                    <label class="form-check-label" for="bulk-perm-{{ perm.id }}">
+                                                        {{ perm.name }}
+                                                    </label>
+                                                </div>
+                                                {% endfor %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Department (Optional)</label>
+                                        <select name="department_id" class="form-select">
+                                            <option value="">All Departments</option>
+                                            {% for dept in departments %}
+                                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-primary d-block w-100">Grant Selected</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for group revocation -->
+<form id="revoke-group-form" style="display: none;">
+    <input type="hidden" name="group_id">
+    <input type="hidden" name="department_id">
+</form>
+
+<script>
+$(document).ready(function() {
+    // Cascading dropdowns for department -> course
+    // Class (year level) is independent and always available
+    $('#grant-department').on('change', function() {
+        var deptId = $(this).val();
+        var courseSelect = $('#grant-course');
+        
+        // Reset and disable course dropdown
+        courseSelect.val('').prop('disabled', !deptId);
+        
+        if (deptId) {
+            // Show only courses for selected department
+            courseSelect.find('option').each(function() {
+                var option = $(this);
+                if (option.val() === '') {
+                    option.show();
+                } else {
+                    option.toggle(option.data('dept') == deptId);
+                }
+            });
+        }
+    });
+
+    // Grant individual permission
+    $('#grant-permission-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post('{{ url_for("user_mgmt_bp.grant_permission", user_id=user.id) }}', $(this).serialize())
+            .done(function(response) {
+                alert(response.message);
+                location.reload();
+            })
+            .fail(function(xhr) {
+                alert(xhr.responseJSON?.error || 'Error granting permission');
+            });
+    });
+
+    // Revoke individual permission
+    $('#revoke-permission-form').on('submit', function(e) {
+        e.preventDefault();
+        if (confirm('Are you sure you want to revoke this permission?')) {
+            $.post('{{ url_for("user_mgmt_bp.revoke_permission", user_id=user.id) }}', $(this).serialize())
+                .done(function(response) {
+                    alert(response.message);
+                    location.reload();
+                })
+                .fail(function(xhr) {
+                    alert(xhr.responseJSON?.error || 'Error revoking permission');
+                });
+        }
+    });
+
+    // Grant permission group
+    $('#grant-group-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post('{{ url_for("user_mgmt_bp.grant_permission_group", user_id=user.id) }}', $(this).serialize())
+            .done(function(response) {
+                alert(response.message);
+                location.reload();
+            })
+            .fail(function(xhr) {
+                alert(xhr.responseJSON?.error || 'Error granting permission group');
+            });
+    });
+
+    // Revoke permission group
+    $('.revoke-group-btn').on('click', function() {
+        if (confirm('Are you sure you want to revoke this permission group?')) {
+            var form = $('#revoke-group-form');
+            form.find('input[name="group_id"]').val($(this).data('group-id'));
+            form.find('input[name="department_id"]').val($(this).data('dept-id'));
+            
+            $.post('{{ url_for("user_mgmt_bp.revoke_permission_group", user_id=user.id) }}', form.serialize())
+                .done(function(response) {
+                    alert(response.message);
+                    location.reload();
+                })
+                .fail(function(xhr) {
+                    alert(xhr.responseJSON?.error || 'Error revoking permission group');
+                });
+        }
+    });
+
+    // Bulk grant permissions
+    $('#bulk-grant-form').on('submit', function(e) {
+        e.preventDefault();
+        var selectedPerms = $('input[name="permission_names"]:checked').length;
+        if (selectedPerms === 0) {
+            alert('Please select at least one permission.');
+            return;
+        }
+        
+        var formData = $(this).serialize() + '&user_ids={{ user.id }}';
+        $.post('{{ url_for("user_mgmt_bp.bulk_grant_permissions") }}', formData)
+            .done(function(response) {
+                alert(response.message);
+                if (response.errors) {
+                    console.log('Errors:', response.errors);
+                }
+                location.reload();
+            })
+            .fail(function(xhr) {
+                alert(xhr.responseJSON?.error || 'Error granting permissions');
+            });
+    });
+
+    // Auto-select department when revoking permission
+    $('#revoke-permission-form select[name="permission_name"]').on('change', function() {
+        var selectedOption = $(this).find('option:selected');
+        var deptId = selectedOption.data('dept');
+        $('#revoke-permission-form select[name="department_id"]').val(deptId);
+    });
+});
+</script>
+{% endblock %}

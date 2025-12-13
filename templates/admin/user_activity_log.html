@@ -1,0 +1,133 @@
+{% extends "admin/_layout.html" %}
+{% block title %}User Activity Log{% endblock %}
+{% block header_title %}User Activity Log{% endblock %}
+
+{% block styles %}
+<style>
+    .activity-row:hover {
+        background-color: rgba(243, 244, 246, 1);
+    }
+
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+
+    .create {
+        background-color: #10B981;
+    }
+
+    .update {
+        background-color: #3B82F6;
+    }
+
+    .delete {
+        background-color: #EF4444;
+    }
+
+    .reset {
+        background-color: #F59E0B;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md space-y-6">
+    <!-- Header with Actions -->
+    <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center space-x-4">
+            <h4 class="text-lg font-semibold text-gray-800">User Activity Log</h4>
+            <div class="relative">
+                <input type="text" id="log-search" placeholder="Search logs..."
+                    class="pl-8 pr-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+            <div>
+                <a href="{{ url_for('user_mgmt_bp.manage_users') }}"
+                    class="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Users
+                </a>
+            </div>
+            <select id="action-filter"
+                class="border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">All Actions</option>
+                <option value="created">User Created</option>
+                <option value="updated">User Updated</option>
+                <option value="deleted">User Deleted</option>
+                <option value="reset">Password Reset</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Activity Log Table -->
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Action</th>
+                    <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Target User</th>
+                    <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Performed By</th>
+                    <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Timestamp</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for log in logs %}
+                <tr class="activity-row" data-action="{{ log[3].lower() }}">
+                    <td class="py-3 px-4">
+                        <div class="flex items-center">
+                            <span class="status-indicator 
+                                {% if 'created' in log[3].lower() %}create
+                                {% elif 'updated' in log[3].lower() %}update
+                                {% elif 'deleted' in log[3].lower() %}delete
+                                {% else %}reset{% endif %}">
+                            </span>
+                            {{ log[3] }}
+                        </div>
+                    </td>
+                    <td class="py-3 px-4">{{ log[1] }}</td>
+                    <td class="py-3 px-4">{{ log[2] }}</td>
+                    <td class="py-3 px-4 text-sm text-gray-500">
+                        {{ log[4].strftime('%Y-%m-%d %H:%M:%S') }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-gray-500">No activity logs found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('log-search');
+        const actionFilter = document.getElementById('action-filter');
+        const rows = document.querySelectorAll('.activity-row');
+
+        function filterLogs() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const actionValue = actionFilter.value.toLowerCase();
+
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                const action = row.getAttribute('data-action');
+
+                const matchesSearch = text.includes(searchTerm);
+                const matchesAction = !actionValue || action.includes(actionValue);
+
+                row.classList.toggle('hidden', !matchesSearch || !matchesAction);
+            });
+        }
+
+        searchInput?.addEventListener('input', filterLogs);
+        actionFilter?.addEventListener('change', filterLogs);
+    });
+</script>
+{% endblock %}

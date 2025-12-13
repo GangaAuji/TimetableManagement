@@ -1,0 +1,577 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Manage Users{% endblock %}
+{% block header_title %}User Management{% endblock %}
+
+{% block extra_css %}
+<style>
+.user-row {
+    transition: all 0.3s ease;
+}
+.user-row:hover {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.03) 0%, rgba(147, 51, 234, 0.03) 100%);
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 0 #6366f1;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <div class="mb-6 md:mb-0">
+                <h2 class="text-4xl font-bold mb-2 flex items-center">
+                    <i class="fas fa-users-cog mr-3"></i>
+                    User Management
+                </h2>
+                <p class="text-blue-100 text-lg">Manage system users, roles, and permissions</p>
+            </div>
+            <div class="flex space-x-3">
+                <button class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 rounded-xl font-semibold transition-all shadow-lg flex items-center" data-bs-toggle="modal" data-bs-target="#inviteModal">
+                    <i class="fas fa-envelope mr-2"></i>Invite User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if request.args.get('highlight') == 'permissions' %}
+    <!-- Info Alert -->
+    <div class="alert bg-blue-50 border-l-4 border-blue-500 px-6 py-4 rounded-lg shadow-md">
+        <div class="flex items-start">
+            <i class="fas fa-info-circle text-blue-600 text-2xl mr-4 mt-1"></i>
+            <div>
+                <strong class="text-blue-900 font-bold">Manage User Permissions:</strong>
+                <p class="text-blue-800 mt-1">
+                    To manage permissions for a specific user, click the <i class="fas fa-key text-blue-600"></i> <strong>"Permissions"</strong> button in the Actions column for that user.
+                    You can grant individual permissions, assign permission groups, or set department-specific access.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Filters and Actions -->
+    <div class="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+        <form class="space-y-6" method="GET" action="{{ url_for('user_mgmt_bp.manage_users') }}">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Search Users</label>
+                    <div class="relative">
+                        <input type="text" class="w-full px-4 py-3 pl-10 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                               name="search" value="{{ search or '' }}" placeholder="Search username...">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Role Filter</label>
+                    <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" name="role">
+                        <option value="">All Roles</option>
+                        {% for r in roles %}
+                            <option value="{{ r[0] }}" {% if role_filter==r[0] %}selected{% endif %}>{{ r[0] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Status Filter</label>
+                    <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" name="status">
+                        <option value="">All Status</option>
+                        <option value="active" {% if status_filter=='active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if status_filter=='inactive' %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+                <div class="flex items-end space-x-2">
+                    <button class="btn-primary flex-1 px-6 py-3 rounded-xl shadow-md hover:shadow-lg font-semibold" type="submit">
+                        <i class="fas fa-filter mr-2"></i>Filter
+                    </button>
+                    <a class="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-xl shadow-md hover:shadow-lg font-semibold flex items-center justify-center transition-all" 
+                       href="{{ url_for('user_mgmt_bp.export_users', role=role_filter, status=status_filter, search=search) }}">
+                        <i class="fas fa-file-export"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Bulk Actions -->
+            <div class="flex flex-wrap gap-3 pt-4 border-t-2 border-gray-100">
+                <button type="button" class="btn-success px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg font-semibold" id="bulkActivateBtn">
+                    <i class="fas fa-toggle-on mr-2"></i>Activate Selected
+                </button>
+                <button type="button" class="btn-warning px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg font-semibold" id="bulkDeactivateBtn">
+                    <i class="fas fa-toggle-off mr-2"></i>Deactivate Selected
+                </button>
+                <button type="button" class="btn-danger px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg font-semibold" id="bulkDeleteBtn">
+                    <i class="fas fa-trash mr-2"></i>Delete Selected
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- User Table -->
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+        <div class="p-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-gray-100">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-users text-indigo-600 mr-3"></i>
+                        All Users
+                    </h3>
+                    <p class="text-sm text-gray-600 mt-1">Manage and monitor all system users</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="px-4 py-2 bg-white rounded-lg shadow-md">
+                        <span class="text-gray-500 text-sm">Total:</span>
+                        <span class="text-indigo-600 font-bold text-lg ml-2">{{ users|length if users else 0 }}</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <div class="overflow-x-auto">
+                <table class="min-w-full" id="usersTable">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                        <tr>
+                            <th class="py-4 px-6 w-12">
+                                <input type="checkbox" id="selectAll" class="w-4 h-4 rounded border-2 border-gray-300 cursor-pointer">
+                            </th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Display Name</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% if users is defined and users|length > 0 %}
+                            {% for id, username, role, status, last_login, display_name in users %}
+                            <tr class="user-row">
+                                <td class="py-4 px-6">
+                                    <input type="checkbox" class="row-check w-4 h-4 rounded border-2 border-gray-300 cursor-pointer" value="{{ id }}" />
+                                </td>
+                                <td class="py-4 px-6">
+                                    <span class="font-semibold text-gray-700">#{{ id }}</span>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="flex items-center">
+                                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold mr-3">
+                                            {{ username[0].upper() if username else '?' }}
+                                        </div>
+                                        <span class="font-semibold text-gray-800">{{ username }}</span>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <span class="text-gray-600">{{ display_name or '-' }}</span>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <span class="badge badge-info">{{ role }}</span>
+                                </td>
+                                <td class="py-4 px-6">
+                                    {% if status == 'active' %}
+                                    <span class="badge badge-success">Active</span>
+                                    {% else %}
+                                    <span class="badge badge-danger">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" class="edit-btn action-btn-enhanced px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition-all" data-user-id="{{ id }}">
+                                            <i class="fas fa-edit mr-1"></i>Edit
+                                        </button>
+                                        <a href="{{ url_for('user_mgmt_bp.manage_user_permissions', user_id=id) }}" 
+                                           class="action-btn-enhanced px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-all">
+                                            <i class="fas fa-key mr-1"></i>Permissions
+                                        </a>
+                                        <button type="button" class="reset-btn action-btn-enhanced px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm font-medium transition-all" data-user-id="{{ id }}">
+                                            <i class="fas fa-sync-alt mr-1"></i>Reset
+                                        </button>
+                                        <button type="button" class="toggle-btn action-btn-enhanced px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium transition-all" data-user-id="{{ id }}">
+                                            <i class="fas fa-toggle-on mr-1"></i>Toggle
+                                        </button>
+                                        <button type="button" class="delete-btn action-btn-enhanced px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-all" data-user-id="{{ id }}">
+                                            <i class="fas fa-trash mr-1"></i>Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-12">
+                                    <i class="fas fa-users-slash text-6xl text-gray-300 mb-4"></i>
+                                    <p class="text-gray-500 text-lg">No users found</p>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow-2xl rounded-2xl">
+            <div class="modal-header bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-t-2xl">
+                <h5 class="modal-title font-bold text-xl flex items-center">
+                    <i class="fas fa-user-edit mr-2"></i>Edit User
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-8">
+                <form id="editUserForm" method="POST" class="space-y-6">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" id="userId" name="user_id">
+                    
+                    <div>
+                        <label for="username" class="block text-sm font-bold text-gray-700 mb-2">Username</label>
+                        <input type="text" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                               id="username" name="username" required>
+                    </div>
+                    
+                    <div>
+                        <label for="password" class="block text-sm font-bold text-gray-700 mb-2">
+                            Password <span class="text-gray-500 font-normal text-xs">(leave blank to keep current)</span>
+                        </label>
+                        <input type="password" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                               id="password" name="password" minlength="8">
+                    </div>
+                    
+                    <div>
+                        <label for="email" class="block text-sm font-bold text-gray-700 mb-2">
+                            Email <span class="text-gray-500 font-normal text-xs">(profile-level reference)</span>
+                        </label>
+                        <input type="email" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                               id="email" name="email" placeholder="example@domain.com">
+                    </div>
+                    
+                    <div>
+                        <label for="role" class="block text-sm font-bold text-gray-700 mb-2">Role</label>
+                        <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                                id="role" name="role" required>
+                            <option value="Admin">Admin</option>
+                            <option value="Teacher">Teacher</option>
+                            <option value="Student">Student</option>
+                        </select>
+                    </div>
+                    
+                    <div class="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input class="w-5 h-5 rounded border-2 border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-3" 
+                               type="checkbox" id="is_active" name="is_active">
+                        <label class="text-sm font-medium text-gray-700" for="is_active">Account Active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-gray-50 rounded-b-2xl p-6">
+                <button type="button" class="px-6 py-3 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 font-semibold transition-all" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn-primary px-8 py-3 rounded-xl font-semibold shadow-lg" onclick="saveUserChanges()">
+                    <i class="fas fa-save mr-2"></i>Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Invite Modal -->
+<div class="modal fade" id="inviteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-2xl rounded-2xl">
+            <div class="modal-header bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-t-2xl">
+                <h5 class="modal-title font-bold text-xl flex items-center">
+                    <i class="fas fa-envelope-open-text mr-2"></i>Send Invitation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin.create_invitation') }}">
+                <div class="modal-body p-8 space-y-6">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
+                        <input type="text" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all" 
+                               name="name" required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                        <input type="email" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all" 
+                               name="email" required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Role</label>
+                        <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all" 
+                                name="role" required>
+                            <option value="Teacher">Teacher</option>
+                            <option value="Student">Student</option>
+                        </select>
+                    </div>
+                    
+                    <input type="hidden" name="days_valid" value="7" />
+                    
+                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
+                        <p class="text-sm text-blue-800 flex items-start">
+                            <i class="fas fa-info-circle mr-2 mt-0.5"></i>
+                            The invitation link will be valid for 7 days
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer bg-gray-50 rounded-b-2xl p-6">
+                    <button type="button" class="px-6 py-3 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 font-semibold transition-all" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-8 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all">
+                        <i class="fas fa-paper-plane mr-2"></i>Send Invite
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="toastContainer"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.__usersPageInit) return;
+    window.__usersPageInit = true;
+    const csrfToken = '{{ csrf_token() }}';
+
+    // Toast helper with enhanced styling
+    function showToast(message, type='info', timeout=4000) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return API.showSuccess(message);
+        
+        const toastEl = document.createElement('div');
+        toastEl.className = `toast align-items-center text-bg-${type} border-0 mb-2 shadow-lg`;
+        toastEl.role = 'alert';
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+        container.appendChild(toastEl);
+        const bsToast = new bootstrap.Toast(toastEl, { delay: timeout });
+        bsToast.show();
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+
+    // Initialize DataTables
+    if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
+        if (!jQuery.fn.dataTable.isDataTable('#usersTable')) {
+            jQuery('#usersTable').DataTable({
+                pageLength: 10,
+                order: [[1, 'asc']],
+                language: {
+                    search: "Search:",
+                    lengthMenu: "Show _MENU_ users",
+                    info: "Showing _START_ to _END_ of _TOTAL_ users"
+                }
+            });
+        }
+    }
+
+    // Event delegation for row actions
+    const usersTable = document.getElementById('usersTable');
+    usersTable?.addEventListener('click', function (e) {
+        const editBtn = e.target.closest('.edit-btn');
+        const delBtn = e.target.closest('.delete-btn');
+        const resetBtn = e.target.closest('.reset-btn');
+        const toggleBtn = e.target.closest('.toggle-btn');
+        
+        if (editBtn) {
+            const userId = editBtn.getAttribute('data-user-id');
+            openEditModal(userId);
+        } else if (delBtn) {
+            const userId = delBtn.getAttribute('data-user-id');
+            confirmAndDeleteUser(userId);
+        } else if (resetBtn) {
+            const userId = resetBtn.getAttribute('data-user-id');
+            if (resetBtn.dataset.pending === '1') return;
+            resetBtn.dataset.pending = '1';
+            resetUserPassword(userId).finally(() => { delete resetBtn.dataset.pending; });
+        } else if (toggleBtn) {
+            const userId = toggleBtn.getAttribute('data-user-id');
+            if (toggleBtn.dataset.pending === '1') return;
+            toggleBtn.dataset.pending = '1';
+            toggleUserStatus(userId).finally(() => { delete toggleBtn.dataset.pending; });
+        }
+    });
+
+    // Select all
+    const selectAll = document.getElementById('selectAll');
+    selectAll?.addEventListener('change', (e) => {
+        document.querySelectorAll('.row-check').forEach(cb => cb.checked = selectAll.checked);
+    });
+
+    // Bulk actions
+    function getSelectedIds() {
+        return Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+    }
+    
+    function postBulk(action, extra = {}) {
+        const ids = getSelectedIds();
+        if (ids.length === 0) { showToast('Select at least one user.', 'warning'); return; }
+        
+        const body = new URLSearchParams();
+        body.set('csrf_token', csrfToken);
+        body.set('action', action);
+        ids.forEach(id => body.append('user_ids[]', id));
+        if (extra.new_password) body.set('new_password', extra.new_password);
+        
+        fetch('/admin/users/bulk', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, 
+            body 
+        })
+          .then(r => r.json())
+          .then(j => {
+            if (j.error) throw new Error(j.error);
+            showToast(j.message || 'Done', 'success');
+            if (action === 'delete') {
+                ids.forEach(id => document.querySelector(`input.row-check[value="${id}"]`)?.closest('tr')?.remove());
+            } else {
+                setTimeout(() => location.reload(), 800);
+            }
+            if (j.temp_password) showToast('Temporary password: ' + j.temp_password, 'info', 8000);
+          })
+          .catch(err => showToast(err.message || 'Operation failed', 'danger'));
+    }
+    
+    document.getElementById('bulkActivateBtn')?.addEventListener('click', () => postBulk('activate'));
+    document.getElementById('bulkDeactivateBtn')?.addEventListener('click', () => postBulk('deactivate'));
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
+        if (confirm('Delete selected users? This cannot be undone.')) postBulk('delete');
+    });
+
+    function openEditModal(userId) {
+        fetch(`/admin/users/get/${encodeURIComponent(userId)}`)
+            .then(async response => {
+                if (!response.ok) {
+                    const txt = await response.text().catch(() => '');
+                    throw new Error(txt || `Server returned ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('userId').value = data.id;
+                document.getElementById('username').value = data.username || '';
+                document.getElementById('email').value = data.email || '';
+                document.getElementById('role').value = data.role || 'Student';
+                document.getElementById('is_active').checked = (data.status === 'active');
+                document.getElementById('password').value = '';
+                new bootstrap.Modal(document.getElementById('editUserModal')).show();
+            })
+            .catch(error => {
+                showToast('Error fetching user data: ' + (error.message || error), 'danger');
+            });
+    }
+
+    function confirmAndDeleteUser(userId) {
+        if (!confirm('Are you sure you want to delete this user?')) return;
+        fetch(`/admin/users/delete/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ csrf_token: csrfToken })
+        })
+        .then(async response => {
+            if (response.ok) {
+                const row = document.querySelector(`button.delete-btn[data-user-id="${userId}"]`)?.closest('tr');
+                if (row) row.remove();
+                showToast('User deleted successfully', 'success');
+            } else {
+                const txt = await response.text().catch(() => '');
+                throw new Error(txt || 'Delete failed');
+            }
+        })
+        .catch(error => showToast(error.message || 'Error deleting user', 'danger'));
+    }
+
+    function resetUserPassword(userId) {
+        if (!confirm('Reset password for this user?')) return;
+        return fetch(`/admin/users/reset_password/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ csrf_token: csrfToken })
+        })
+        .then(r => r.json())
+        .then(j => {
+            if (j.error) throw new Error(j.error);
+            showToast(j.message || 'Password reset', 'success');
+            if (j.temp_password) showToast('Temporary password: ' + j.temp_password, 'info', 8000);
+        })
+        .catch(err => showToast(err.message || 'Reset failed', 'danger'));
+    }
+
+    function toggleUserStatus(userId) {
+        return fetch(`/admin/users/toggle_status/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ csrf_token: csrfToken })
+        })
+        .then(r => r.json())
+        .then(j => {
+            if (j.error) throw new Error(j.error);
+            showToast('Status updated: ' + j.status, 'success');
+            setTimeout(() => location.reload(), 500);
+        })
+        .catch(err => showToast(err.message || 'Toggle failed', 'danger'));
+    }
+
+    // Save changes handler
+    window.saveUserChanges = function () {
+        const form = document.getElementById('editUserForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        data.is_active = formData.has('is_active');
+
+        const userId = data.user_id;
+        if (!userId) {
+            showToast('Missing user id', 'danger');
+            return;
+        }
+
+        // Client-side validation
+        if (!data.username || data.username.trim().length < 3) {
+            showToast('Username must be at least 3 characters', 'warning');
+            return;
+        }
+        if (data.email && !/^\S+@\S+\.\S+$/.test(data.email)) {
+            showToast('Email address looks invalid', 'warning');
+            return;
+        }
+        if (data.password && data.password.length > 0 && data.password.length < 8) {
+            showToast('Password must be at least 8 characters', 'warning');
+            return;
+        }
+
+        const params = new URLSearchParams(data);
+        fetch(`/admin/users/edit/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        })
+        .then(async response => {
+            if (response.ok) {
+                showToast('User updated successfully', 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                const j = await response.json().catch(() => ({}));
+                throw new Error(j.message || 'Update failed');
+            }
+        })
+        .catch(error => {
+            showToast(error.message || 'Error updating user', 'danger');
+        });
+    };
+});
+</script>
+{% endblock %}

@@ -1,0 +1,386 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Role Management{% endblock %}
+{% block header_title %}Role Management{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Protected badge pulse - Kept as this requires keyframe animation */
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+}
+
+.badge-protected {
+    animation: pulse-glow 2s infinite;
+}
+
+/* Custom Scrollbar for Table (Optional, but good for aesthetics) */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in max-w-7xl mx-auto flex flex-col h-[calc(100vh-140px)]">
+
+    <div class="bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 rounded-lg shadow-lg p-4 text-white mb-4 shrink-0">
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <div class="mb-4 md:mb-0">
+                <h2 class="text-2xl font-bold mb-1 flex items-center">
+                    <i class="fas fa-user-shield mr-2"></i>
+                    Role Management
+                </h2>
+                <p class="text-purple-100 text-sm">Manage user roles and permissions</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <a href="{{ url_for('user_mgmt_bp.export_roles') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-4 py-2 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center text-sm">
+                    <i class="fas fa-download mr-2"></i>Export Roles
+                </a>
+                <span class="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg font-medium shadow-lg flex items-center justify-center text-sm">
+                    <i class="fas fa-shield-alt mr-2"></i>{{ roles|length }} Roles
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-4 flex-grow overflow-y-auto custom-scrollbar">
+        
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 shrink-0">
+            <div class="p-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-200">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-plus-circle text-violet-600 mr-2"></i>
+                    Create New Role
+                </h3>
+            </div>
+            <div class="p-5">
+                <form method="POST" action="{{ url_for('user_mgmt_bp.add_role') }}" id="addRoleForm" class="space-y-4">
+                    {{ form.csrf_token }}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="{{ form.name.id }}" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                Role Name <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.name(class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm", required=true, placeholder="e.g., Content Manager") }}
+                        </div>
+                        <div>
+                            <label for="{{ form.description.id }}" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                Description
+                            </label>
+                            {{ form.description(class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm", placeholder="Brief description of the role") }}
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2 pt-2">
+                        <button type="submit" class="px-5 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 shadow-md hover:shadow-lg font-medium text-sm transition-all">
+                            <i class="fas fa-plus mr-1"></i>Create Role
+                        </button>
+                        <button type="reset" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium text-sm transition-all">
+                            <i class="fas fa-undo mr-1"></i>Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 flex-grow flex flex-col">
+            <div class="p-4 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-gray-200 shrink-0">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-list text-violet-600 mr-2"></i>
+                        Existing Roles
+                    </h3>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                        <i class="fas fa-shield-alt mr-1.5"></i>{{ roles|length }} Total
+                    </span>
+                </div>
+            </div>
+            
+            <div class="p-4 overflow-x-auto overflow-y-auto custom-scrollbar flex-grow">
+                <table class="min-w-full bg-white table-auto" id="rolesTable">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-10">
+                        <tr>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role Name</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Description</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-1/4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for role in roles %}
+                        <tr class="group hover:bg-violet-50/50 transition-colors">
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-semibold text-sm mr-2 shrink-0">
+                                        {{ role[1][0].upper() }}
+                                    </div>
+                                    <div>
+                                        <span class="font-medium text-gray-800 text-sm">{{ role[1] }}</span>
+                                        {% if role[1] == 'Super Admin' %}
+                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 badge-protected">
+                                            <i class="fas fa-lock mr-1"></i>Protected
+                                        </span>
+                                        {% endif %}
+                                        <div class="text-xs text-gray-500 sm:hidden">{{ role[2] or 'No description' }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-3 px-3 text-sm text-gray-600 hidden sm:table-cell">
+                                {{ role[2] or 'No description' }}
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                {% set role_name = role[1] %}
+                                {% if role_name != 'Super Admin' %}
+                                <div class="flex items-center gap-2">
+                                    <button class="edit-role inline-flex items-center px-2 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 hover:scale-[1.02] transition-all text-xs font-medium shadow-sm" data-id="{{ role[0] }}" title="Edit Role">
+                                        <i class="fas fa-edit"></i><span class="ml-1 hidden md:inline">Edit</span>
+                                    </button>
+                                    <button class="view-role-details inline-flex items-center px-2 py-1 bg-violet-600 text-white rounded-lg hover:bg-violet-700 hover:scale-[1.02] transition-all text-xs font-medium shadow-sm" data-id="{{ role[0] }}" title="View Details">
+                                        <i class="fas fa-eye"></i><span class="ml-1 hidden md:inline">View</span>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('user_mgmt_bp.delete_role', role_id=role[0]) }}" class="inline">
+                                        {{ form.csrf_token }}
+                                        <button type="submit" class="delete-role inline-flex items-center px-2 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 hover:scale-[1.02] transition-all text-xs font-medium shadow-sm" title="Delete Role" onclick="return confirm('Are you sure you want to delete this role? This action cannot be undone.')">
+                                            <i class="fas fa-trash"></i><span class="ml-1 hidden md:inline">Delete</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="inline-flex items-center text-xs text-gray-500">
+                                    <i class="fas fa-shield-alt mr-1"></i>System Protected
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center py-10 text-gray-500">
+                                <i class="fas fa-shield-alt text-5xl text-gray-300 mb-3"></i>
+                                <p class="text-base font-medium">No roles found.</p>
+                                <p class="text-gray-400 text-sm">Create your first role above</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="editRoleModal" class="modal hidden fixed z-50 inset-0 bg-gray-900 bg-opacity-50 items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg mx-auto">
+        <div class="modal-header bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-t-lg p-4 flex justify-between items-center">
+            <h3 class="modal-title font-bold text-lg flex items-center">
+                <i class="fas fa-edit mr-2"></i>Edit Role
+            </h3>
+            <button type="button" class="close-edit-modal text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        <form id="editRoleForm" method="POST" action="">
+            <div class="modal-body p-5 space-y-4">
+                {{ form.csrf_token }}
+                <input type="hidden" id="editRoleId" name="role_id">
+                <div>
+                    <label for="editRoleName" class="block text-sm font-semibold text-gray-700 mb-1.5">Role Name</label>
+                    <input id="editRoleName" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm" required />
+                </div>
+                <div>
+                    <label for="editRoleDescription" class="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
+                    <textarea id="editRoleDescription" name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-gray-50 rounded-b-lg p-4 flex justify-end gap-2">
+                <button type="button" class="close-edit-modal px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium text-sm transition-all">
+                    Close
+                </button>
+                <button type="submit" class="px-5 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 shadow-md hover:shadow-lg font-medium text-sm">
+                    <i class="fas fa-save mr-1"></i>Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="roleDetailsModal" class="modal hidden fixed z-50 inset-0 bg-gray-900 bg-opacity-50 items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg mx-auto">
+        <div class="modal-header bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-t-lg p-4 flex justify-between items-center">
+            <h3 class="modal-title font-bold text-lg flex items-center">
+                <i class="fas fa-info-circle mr-2"></i>Role Details
+            </h3>
+            <button type="button" class="close-details-modal text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="modal-body p-5 space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Role Name:</label>
+                <div class="flex items-center p-3 bg-violet-50 rounded-lg">
+                    <i class="fas fa-shield-alt text-violet-600 mr-3 text-xl"></i>
+                    <p id="detailRoleName" class="text-violet-700 text-xl font-bold"></p>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Description:</label>
+                <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p id="detailRoleDesc" class="text-gray-600 text-sm"></p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer bg-gray-50 rounded-b-lg p-4 flex justify-end">
+            <button type="button" class="close-details-modal px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium text-sm transition-all">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = '{{ csrf_token() }}';
+    const editModal = document.getElementById('editRoleModal');
+    const detailsModal = document.getElementById('roleDetailsModal');
+    
+    // Modal utility functions
+    function showModal(modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    
+    function hideModal(modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Edit role handler
+    document.addEventListener('click', async function(e) {
+        if (e.target.closest('.edit-role')) {
+            e.preventDefault();
+            const editBtn = e.target.closest('.edit-role');
+            const roleId = editBtn.dataset.id;
+            
+            // Basic visual feedback for loading
+            editBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; 
+            
+            try {
+                const response = await fetch(`/admin/users/roles/get/${roleId}`);
+                if (!response.ok) throw new Error('Failed to fetch role');
+                
+                const role = await response.json();
+                
+                document.getElementById('editRoleId').value = role.id;
+                document.getElementById('editRoleName').value = role.name || '';
+                document.getElementById('editRoleDescription').value = role.description || '';
+                
+                document.getElementById('editRoleForm').action = `/admin/users/roles/edit/${role.id}`;
+                showModal(editModal);
+            } catch (error) {
+                alert('Error loading role details: ' + error.message);
+            } finally {
+                // Restore button content
+                editBtn.innerHTML = '<i class="fas fa-edit"></i><span class="ml-1 hidden md:inline">Edit</span>';
+            }
+        }
+    });
+
+    // View role details handler
+    document.addEventListener('click', async function(e) {
+        if (e.target.closest('.view-role-details')) {
+            e.preventDefault();
+            const viewBtn = e.target.closest('.view-role-details');
+            const roleId = viewBtn.dataset.id;
+
+            viewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; 
+            
+            try {
+                const response = await fetch(`/admin/users/roles/get/${roleId}`);
+                if (!response.ok) throw new Error('Failed to fetch role');
+                
+                const role = await response.json();
+                
+                document.getElementById('detailRoleName').textContent = role.name || '';
+                document.getElementById('detailRoleDesc').textContent = role.description || 'No description provided';
+                
+                showModal(detailsModal);
+            } catch (error) {
+                alert('Error loading role details: ' + error.message);
+            } finally {
+                viewBtn.innerHTML = '<i class="fas fa-eye"></i><span class="ml-1 hidden md:inline">View</span>';
+            }
+        }
+    });
+
+    // Close modal handlers
+    document.querySelectorAll('.close-edit-modal').forEach(btn => {
+        btn.addEventListener('click', () => hideModal(editModal));
+    });
+    
+    document.querySelectorAll('.close-details-modal').forEach(btn => {
+        btn.addEventListener('click', () => hideModal(detailsModal));
+    });
+
+    // Close modals on backdrop click
+    [editModal, detailsModal].forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hideModal(modal);
+            }
+        });
+    });
+
+    // Form validation and delete confirmation remain as in original script, but simplified.
+
+    // Form validation
+    document.getElementById('addRoleForm')?.addEventListener('submit', function(e) {
+        const name = this.querySelector('[name="name"]').value.trim();
+        if (!name || name.length < 3) {
+            e.preventDefault();
+            alert('Role name must be at least 3 characters long.');
+        }
+    });
+
+    // Edit form validation
+    document.getElementById('editRoleForm')?.addEventListener('submit', function(e) {
+        const name = document.getElementById('editRoleName').value.trim();
+        if (!name || name.length < 3) {
+            e.preventDefault();
+            alert('Role name must be at least 3 characters long.');
+        }
+    });
+
+    // Delete confirmation with enhanced message
+    document.querySelectorAll('.delete-role').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            const roleRow = this.closest('tr');
+            // Assuming the role name is always in the second column's .font-medium span
+            const roleName = roleRow ? roleRow.querySelector('.font-medium').textContent.trim() : 'this role';
+            if (!confirm(`Are you sure you want to delete the role "${roleName}"?\n\nThis action cannot be undone and may affect users assigned to this role.`)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Keyboard shortcuts (unchanged)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (!editModal.classList.contains('hidden')) {
+                hideModal(editModal);
+            }
+            if (!detailsModal.classList.contains('hidden')) {
+                hideModal(detailsModal);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

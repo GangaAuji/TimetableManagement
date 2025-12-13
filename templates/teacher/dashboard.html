@@ -1,0 +1,479 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block header_title %}Teacher Dashboard{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+<style>
+.timetable-slot {
+    position: relative;
+    transition: all 0.3s ease;
+}
+.timetable-slot:hover {
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 0 #10b981;
+}
+.day-badge {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+.time-badge {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+.subject-badge {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+.class-badge {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <!-- Welcome Banner -->
+    <div class="bg-gradient-to-r from-green-500 to-teal-600 rounded-2xl shadow-xl p-8 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-3xl font-bold mb-2">Welcome back, {{ session.name or session.username }}! 👋</h2>
+                <p class="text-green-100">Here's your schedule and activities for today</p>
+            </div>
+            <div class="hidden md:block">
+                <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                    <i class="fas fa-chalkboard-teacher text-5xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="stat-card blue bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Today's Classes</p>
+                    <p class="text-4xl font-extrabold text-gray-800" id="todayClasses">{{ timetable|length }}</p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #3b82f6; --color-end: #2563eb;">
+                    <i class="fas fa-calendar-day text-3xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full mt-4"></div>
+        </div>
+
+        <div class="stat-card green bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Pending Absences</p>
+                    <p class="text-4xl font-extrabold text-gray-800" id="pendingAbsences">-</p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #10b981; --color-end: #059669;">
+                    <i class="fas fa-user-clock text-3xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-green-500 to-green-600 rounded-full mt-4"></div>
+        </div>
+
+        <div class="stat-card purple bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Weekly Classes</p>
+                    <p class="text-4xl font-extrabold text-gray-800" id="weeklyClasses">{{ timetable|length }}</p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #8b5cf6; --color-end: #7c3aed;">
+                    <i class="fas fa-calendar-week text-3xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full mt-4"></div>
+        </div>
+
+        <div class="stat-card yellow bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Total Absences</p>
+                    <p class="text-4xl font-extrabold text-gray-800" id="totalAbsences">-</p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #f59e0b; --color-end: #d97706;">
+                    <i class="fas fa-chart-line text-3xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full mt-4"></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Left Column: Enhanced Timetable -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+                <div class="p-6 bg-gradient-to-r from-green-50 to-teal-50 border-b-2 border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                                <i class="fas fa-calendar-alt text-green-600 mr-3"></i>
+                                My Weekly Timetable
+                            </h3>
+                            <p class="text-sm text-gray-600 mt-1">Your schedule for the week</p>
+                        </div>
+                        <button onclick="printTimetable()" class="btn-success px-4 py-2 rounded-xl shadow-md hover:shadow-xl flex items-center">
+                            <i class="fas fa-print mr-2"></i>Print
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full" id="timetableTable">
+                            <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                                <tr>
+                                    <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Day</th>
+                                    <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Time</th>
+                                    <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Subject</th>
+                                    <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Class & Division</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                {% for day, start_time, end_time, subject, class_name, division in timetable %}
+                                <tr class="timetable-slot hover:bg-green-50 transition-all">
+                                    <td class="py-4 px-6">
+                                        <span class="day-badge">{{ day }}</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="time-badge">{{ start_time|format_time_12hr }} - {{ end_time|format_time_12hr }}</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="subject-badge">{{ subject }}</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="class-badge">{{ class_name }} ({{ division }})</span>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center py-12">
+                                        <div class="flex flex-col items-center">
+                                            <i class="fas fa-calendar-times text-6xl text-gray-300 mb-4"></i>
+                                            <p class="text-gray-500 text-lg">Your timetable has not been generated yet.</p>
+                                            <p class="text-gray-400 text-sm mt-2">Contact admin to generate your schedule</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Absence Management -->
+        <div class="space-y-8">
+            <!-- Mark Absence Form -->
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+                <div class="p-6 bg-gradient-to-r from-red-50 to-orange-50 border-b-2 border-gray-100">
+                    <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-user-times text-red-600 mr-3"></i>
+                        Mark Absence
+                    </h3>
+                    <p class="text-sm text-gray-600 mt-1">Request proxy for your classes</p>
+                </div>
+                <form id="absenceForm" class="p-6 space-y-5">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div>
+                        <label for="absence_date" class="block text-sm font-bold text-gray-700 mb-2">
+                            Date of Absence <span class="text-red-500">*</span>
+                        </label>
+                        <input type="date" id="absence_date" name="absence_date" required 
+                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all">
+                    </div>
+                    <div>
+                        <label for="reason" class="block text-sm font-bold text-gray-700 mb-2">
+                            Reason (Optional)
+                        </label>
+                        <textarea id="reason" name="reason" rows="4" 
+                                  placeholder="Enter reason for absence..."
+                                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none"></textarea>
+                    </div>
+                    <button type="submit" id="submitAbsence" 
+                            class="btn-danger w-full px-6 py-3 rounded-xl shadow-lg hover:shadow-xl text-base font-semibold flex items-center justify-center">
+                        <i class="fas fa-paper-plane mr-2"></i>Submit Absence Request
+                    </button>
+                </form>
+            </div>
+
+            <!-- Absence History -->
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+                <div class="p-6 bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                                <i class="fas fa-history text-blue-600 mr-3"></i>
+                                Absence History
+                            </h3>
+                            <p class="text-sm text-gray-600 mt-1">Track your absence records</p>
+                        </div>
+                        <button onclick="refreshAbsences()" 
+                                class="text-blue-600 hover:text-blue-800 px-4 py-2 bg-blue-100 rounded-xl hover:bg-blue-200 transition-all font-medium">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div id="absencesContainer" class="space-y-4 max-h-96 overflow-y-auto">
+                        <!-- Populated by AJAX -->
+                        <div class="text-center py-8">
+                            <div class="spinner mx-auto mb-4"></div>
+                            <p class="text-gray-500">Loading absences...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script>
+function getCookie(name) {
+  let value = `; ${document.cookie}`;
+  let parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+function loadAbsences() {
+  $.get('{{ url_for("teacher.absences") }}', function(data) {
+    const container = $('#absencesContainer');
+    container.empty();
+    
+    if (!data.data || data.data.length === 0) {
+      container.html(`
+        <div class="text-center py-12">
+          <i class="fas fa-inbox text-5xl text-gray-300 mb-4"></i>
+          <p class="text-gray-500 text-lg">No absence history found</p>
+          <p class="text-gray-400 text-sm mt-2">Your absence records will appear here</p>
+        </div>
+      `);
+      $('#totalAbsences').text('0');
+      $('#pendingAbsences').text('0');
+      return;
+    }
+    
+    // Update stats
+    $('#totalAbsences').text(data.data.length);
+    const pending = data.data.filter(a => a.status === 'UNPROCESSED').length;
+    $('#pendingAbsences').text(pending);
+    
+    data.data.forEach(a => {
+      const statusColor = a.status === 'PROCESSED' ? 'green' : 'yellow';
+      const statusIcon = a.status === 'PROCESSED' ? 'check-circle' : 'clock';
+      const date = new Date(a.absence_date);
+      const formattedDate = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric'
+      });
+      
+      const card = $(`
+        <div class="absence-card p-5 bg-gradient-to-br from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-${statusColor}-300 transition-all duration-300 hover:shadow-lg" data-id="${a.id}">
+          <div class="flex justify-between items-start">
+            <div class="flex-1">
+              <div class="flex items-center mb-2">
+                <i class="fas fa-calendar-alt text-${statusColor}-600 mr-2"></i>
+                <p class="font-bold text-gray-800 text-lg">${formattedDate}</p>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-start">
+                  <i class="fas fa-comment-alt text-gray-400 mr-2 mt-1"></i>
+                  <p class="text-sm text-gray-600 flex-1">
+                    <span class="font-semibold">Reason:</span> ${a.reason || 'Not specified'}
+                  </p>
+                </div>
+                <div class="flex items-center">
+                  <i class="fas fa-${statusIcon} text-${statusColor}-600 mr-2"></i>
+                  <span class="badge badge-${a.status === 'PROCESSED' ? 'success' : 'warning'}">${a.status}</span>
+                </div>
+              </div>
+            </div>
+            ${a.status === 'UNPROCESSED' ? `
+              <button onclick="deleteAbsence(${a.id})" 
+                      class="ml-4 p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-all" 
+                      title="Delete">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `);
+      container.append(card);
+    });
+  }).fail(function() {
+    $('#absencesContainer').html(`
+      <div class="text-center py-12">
+        <i class="fas fa-exclamation-triangle text-5xl text-red-300 mb-4"></i>
+        <p class="text-red-500 text-lg">Failed to load absences</p>
+        <button onclick="loadAbsences()" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all">
+          Try Again
+        </button>
+      </div>
+    `);
+  });
+}
+
+function refreshAbsences() {
+  loadAbsences();
+  API.showSuccess('Absences refreshed successfully');
+}
+
+function deleteAbsence(id) {
+  if (!confirm('Are you sure you want to delete this absence record?')) return;
+  
+  $.ajax({
+    url: `{{ url_for("teacher.delete_absence", absence_id=0) }}`.replace('/0', `/${id}`),
+    type: 'DELETE',
+    headers: { 'X-CSRFToken': getCookie('csrf_token') },
+    success: function(resp) {
+      if (resp.ok) {
+        API.showSuccess('Absence deleted successfully');
+        loadAbsences();
+      } else {
+        API.showError(resp.error || 'Cannot delete this absence');
+      }
+    },
+    error: function() {
+      API.showError('Failed to delete absence');
+    }
+  });
+}
+
+function printTimetable() {
+  window.print();
+}
+
+$(document).ready(function() {
+  // Initialize DataTable if available
+  if ($.fn.dataTable && $('#timetableTable tbody tr').length > 1) {
+    $('#timetableTable').DataTable({
+      pageLength: 10,
+      order: [[0, 'asc']],
+      language: {
+        search: "Search:",
+        lengthMenu: "Show _MENU_ entries"
+      }
+    });
+  }
+  
+  // Load absences
+  loadAbsences();
+  
+  // Set minimum date to today
+  const today = new Date().toISOString().split('T')[0];
+  $('#absence_date').attr('min', today);
+
+  // Handle absence form submission
+  $('#absenceForm').on('submit', function(e) {
+    e.preventDefault();
+    const btn = $('#submitAbsence');
+    const originalHTML = btn.html();
+    
+    btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>Submitting...');
+
+    $.ajax({
+      url: '{{ url_for("teacher.absences") }}',
+      type: 'POST',
+      headers: { 'X-CSRFToken': $('input[name="csrf_token"]').val() },
+      contentType: 'application/json',
+      data: JSON.stringify({
+        absence_date: $('#absence_date').val(),
+        reason: $('#reason').val()
+      }),
+      success: function(resp) {
+        if (resp.ok) {
+          API.showSuccess('Absence recorded successfully! Proxy will be assigned automatically.');
+          $('#absenceForm')[0].reset();
+          loadAbsences();
+        } else {
+          API.showError(resp.error || 'Error recording absence');
+        }
+      },
+      error: function() {
+        API.showError('Failed to submit absence request');
+      },
+      complete: function() {
+        btn.prop('disabled', false).html(originalHTML);
+      }
+    });
+  });
+});
+
+// Print styles
+window.addEventListener('beforeprint', function() {
+  document.body.classList.add('print-mode');
+});
+
+window.addEventListener('afterprint', function() {
+  document.body.classList.remove('print-mode');
+});
+</script>
+
+<style>
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #timetableTable, #timetableTable * {
+    visibility: visible;
+  }
+  #timetableTable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .btn-success, .sidebar, header {
+    display: none !important;
+  }
+}
+
+.absence-card {
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.absence-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 4px;
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 12px 0 0 12px;
+}
+
+.absence-card:hover::before {
+    opacity: 1;
+}
+</style>
+{% endblock %}

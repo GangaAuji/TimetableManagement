@@ -1,0 +1,117 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}My Timetable{% endblock %}
+{% block header_title %}My Timetable{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.4.1/css/responsive.dataTables.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-xl font-semibold text-gray-700">Weekly Timetable</h3>
+    <a href="{{ url_for('teacher.download_timetable') }}" class="inline-flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+      <i class="fas fa-download mr-2"></i> Download CSV
+    </a>
+  </div>
+  <div class="overflow-x-auto">
+    <table id="ttTable" class="min-w-full bg-white display responsive nowrap" style="width:100%">
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Day</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Start</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">End</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Subject</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Class</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Division</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Populated by DataTables AJAX -->
+      </tbody>
+    </table>
+  </div>
+  <div id="gridWrapper" class="mt-8 hidden">
+    <h4 class="text-lg font-semibold text-gray-700 mb-2">Grid View</h4>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-200">
+          <tr id="gridHead">
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Day</th>
+          </tr>
+        </thead>
+        <tbody id="gridBody" class="divide-y divide-gray-200"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
+<script>
+$(document).ready(function() {
+  if (!$.fn.DataTable.isDataTable('#ttTable')) {
+    const dt = $('#ttTable').DataTable({
+      ajax: {
+        url: '{{ url_for("teacher.timetable_data") }}',
+        dataSrc: 'data'
+      },
+      columns: [
+        { data: 'day' },
+        { data: 'start_time' },
+        { data: 'end_time' },
+        { data: 'subject' },
+        { data: 'class' },
+        { data: 'division' }
+      ],
+      responsive: true,
+      pageLength: 25,
+      order: [[0, 'asc'], [1, 'asc']],
+      language: {
+        emptyTable: "No timetable entries yet."
+      }
+    });
+
+    // Build a simple grid view from the loaded data
+    dt.on('xhr', function() {
+      const json = dt.ajax.json() || { data: [] };
+      const rows = json.data || [];
+      if (!rows.length) return;
+      // Collect unique time ranges and sort
+      const pairs = Array.from(new Set(rows.map(r => `${r.start_time}-${r.end_time}`)))
+        .map(s => s.split('-'));
+      const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+      pairs.sort((a,b) => toMin(a[0]) - toMin(b[0]) || toMin(a[1]) - toMin(b[1]));
+
+      // Header
+      const head = document.getElementById('gridHead');
+      head.innerHTML = '<th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Day</th>' +
+        pairs.map(p => `<th class=\"py-3 px-4 text-left text-sm font-semibold text-gray-600\">${p[0]} - ${p[1]}</th>`).join('');
+
+      // Body
+      const body = document.getElementById('gridBody');
+      body.innerHTML = '';
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      days.forEach(day => {
+        const tr = document.createElement('tr');
+        const first = document.createElement('td');
+        first.className = 'py-3 px-4 font-medium'; first.textContent = day; tr.appendChild(first);
+        pairs.forEach(p => {
+          const td = document.createElement('td'); td.className = 'py-3 px-4';
+          const match = rows.find(r => r.day === day && r.start_time === p[0] && r.end_time === p[1]);
+          td.textContent = match ? `${match.subject} (${match.class}-${match.division})` : '';
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+      document.getElementById('gridWrapper').classList.remove('hidden');
+    });
+  }
+});
+</script>
+{% endblock %}

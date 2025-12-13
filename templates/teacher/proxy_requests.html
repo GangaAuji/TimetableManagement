@@ -1,0 +1,102 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Proxy Requests{% endblock %}
+{% block header_title %}Proxy Requests{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left: Create Request -->
+    <div class="lg:col-span-1">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Create Proxy Request</h3>
+            <form method="POST" action="{{ url_for('teacher.request_proxy') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Lecture</label>
+                    <select name="timetable_id" class="w-full border rounded px-3 py-2" required>
+                        <option value="" disabled selected>Select a lecture</option>
+                        {% for tid, day, st, et, subj in lectures or [] %}
+                        <option value="{{ tid }}">{{ day }} • {{ st|format_time_12hr }}-{{ et|format_time_12hr }} • {{ subj }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Preferred Proxy (optional)</label>
+                    <small class="block text-gray-500 mb-1">Select a faculty allocated to the same subject</small>
+                    <select name="proxy_faculty_id" class="w-full border rounded px-3 py-2">
+                        <option value="">No preference</option>
+                        {% for sid, proxies in proxy_map.items() %}
+                        <optgroup label="Subject ID {{ sid }}">
+                            {% for p in proxies %}
+                            <option value="{{ p.faculty_id }}">{{ p.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Absence Date</label>
+                    <input type="date" name="absence_date" class="w-full border rounded px-3 py-2" required>
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Submit
+                    Request</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right: Request Log -->
+    <div class="lg:col-span-2">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-700">My Proxy Log</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Date</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Day</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Time</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Subject</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Original</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Proxy</th>
+                            <th class="py-2 px-4 text-left text-sm text-gray-600">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for id, ad, st, appr_st, day, stt, ett, subj, ofname, pfname in logs %}
+                        <tr class="hover:bg-gray-50">
+                              <td class="py-2 px-4">{{ ad.strftime('%Y-%m-%d') if ad.strftime else ad }}</td>
+                            <td class="py-2 px-4">{{ day }}</td>
+                              <td class="py-2 px-4">{{ stt|format_time_12hr }}-{{ ett|format_time_12hr }}</td>
+                            <td class="py-2 px-4">{{ subj }}</td>
+                            <td class="py-2 px-4">{{ ofname }}</td>
+                            <td class="py-2 px-4">{{ pfname or '—' }}</td>
+                            <td class="py-2 px-4">
+                                {% if appr_st == 'PENDING' %}
+                                <span class="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-200 rounded-full">PENDING</span>
+                                {% elif appr_st == 'APPROVED' %}
+                                    {% if st == 'ASSIGNED' %}
+                                    <span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded-full">ASSIGNED</span>
+                                    {% else %}
+                                    <span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full">UNASSIGNED</span>
+                                    {% endif %}
+                                {% elif appr_st == 'REJECTED' %}
+                                <span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-200 rounded-full">REJECTED</span>
+                                {% else %}
+                                <span class="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">{{ st }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-gray-500">No proxy logs found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

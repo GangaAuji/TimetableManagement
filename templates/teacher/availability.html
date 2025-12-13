@@ -1,0 +1,40 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Availability{% endblock %}
+{% block header_title %}My Availability{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('teacher.availability') }}" class="bg-white p-6 rounded-lg shadow-md">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h3 class="text-xl font-semibold text-gray-700 mb-4">Weekly Availability</h3>
+  <p class="text-sm text-gray-600 mb-4">Set the time range you're typically available for each day. Uncheck if unavailable.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] %}
+    <div class="border rounded-md p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="font-semibold">{{ day }}</span>
+        <label class="inline-flex items-center">
+          <input type="checkbox" name="{{ day }}-available" {% if avail[day].is_available %}checked{% endif %} class="mr-2">
+          <span class="text-sm">Available</span>
+        </label>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Start</label>
+          <input type="time" name="{{ day }}-start" value="{{ avail[day].start_time }}" class="w-full border rounded px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">End</label>
+          <input type="time" name="{{ day }}-end" value="{{ avail[day].end_time }}" class="w-full border rounded px-3 py-2">
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="mt-6">
+    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+      <i class="fas fa-save mr-2"></i> Save Availability
+    </button>
+  </div>
+</form>
+{% endblock %}

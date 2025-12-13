@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin Panel{% endblock %} - College Timetable System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+
+    
+    <!-- Bootstrap CSS (for compatibility) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+    
+    <!-- Common Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Page Specific Styles -->
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen bg-gray-200">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar w-64 bg-gray-800 text-white flex flex-col transition-all duration-300 ease-in-out">
+            <!-- Header/Logo -->
+            <div class="px-6 py-4 border-b border-gray-700">
+                <a href="{{ url_for('admin.dashboard') }}" class="flex items-center space-x-3 text-xl font-bold">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                        <i class="fas fa-calendar-alt text-white text-sm"></i>
+                    </div>
+                    <span class="sidebar-text">Timetable Pro</span>
+                </a>
+            </div>
+            
+            <!-- Navigation Links -->
+            <nav class="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+                <a href="{{ url_for('admin.dashboard') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.dashboard' %}bg-gray-700 text-white{% endif %}">
+                    <i class="fas fa-tachometer-alt w-6"></i>
+                    <span class="ml-3 sidebar-text">Dashboard</span>
+                </a>
+                
+                <!-- Academic Management Section -->
+                {% if has_user_permission('manage_students') or has_user_permission('manage_faculty') or has_user_permission('manage_courses') or has_user_permission('manage_departments') or has_user_permission('manage_subjects') %}
+                <div class="pt-2">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider sidebar-text">Academic</h3>
+                    {% if has_user_permission('manage_students') %}
+                    <a href="{{ url_for('admin.manage_students') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.manage_students' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-user-graduate w-6"></i>
+                        <span class="ml-3 sidebar-text">Students</span>
+                    </a>
+                    {% endif %}
+                    {% if has_user_permission('manage_faculty') %}
+                    <a href="{{ url_for('admin.manage_faculty') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.manage_faculty' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-chalkboard-teacher w-6"></i>
+                        <span class="ml-3 sidebar-text">Faculty</span>
+                    </a>
+                    {% endif %}
+                    {% if has_user_permission('manage_courses') or has_user_permission('manage_departments') or has_user_permission('manage_subjects') %}
+                    <a href="{{ url_for('admin.manage_academics') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.manage_courses' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-book w-6"></i>
+                        <span class="ml-3 sidebar-text">Academics</span>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Faculty Management Section -->
+                {% if has_user_permission('manage_proxy') %}
+                <div class="pt-2">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider sidebar-text">Faculty</h3>
+                    <a href="{{ url_for('admin.proxy_log') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.proxy_log' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-user-clock w-6"></i>
+                        <span class="ml-3 sidebar-text">Proxy Log</span>
+                    </a>
+                </div>
+                {% endif %}
+                
+                <!-- Timetable Management Section -->
+                {% if has_user_permission('manage_timetable') or has_user_permission('view_timetable') %}
+                <div class="pt-2">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider sidebar-text">Timetable</h3>
+                    {% if has_user_permission('manage_timetable') %}
+                    <a href="{{ url_for('admin.generate_timetable') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.generate_timetable' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-cogs w-6"></i>
+                        <span class="ml-3 sidebar-text">Generate Timetable</span>
+                    </a>
+                    <a href="{{ url_for('admin.holidays_index') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.holidays_index' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-umbrella-beach w-6"></i>
+                        <span class="ml-3 sidebar-text">Holidays</span>
+                    </a>
+                    {% endif %}
+                    {% if has_user_permission('view_timetable') %}
+                    <a href="{{ url_for('admin.timetable_manage') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.timetable_manage' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-calendar-week w-6"></i>
+                        <span class="ml-3 sidebar-text">View Timetable</span>
+                    </a>
+                    <a href="{{ url_for('admin.rooms_index') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.rooms_index' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-door-open w-6"></i>
+                        <span class="ml-3 sidebar-text">Manage Rooms</span>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- User Management Section -->
+                {% if has_user_permission('manage_users') or has_user_permission('view_users') or has_user_permission('manage_roles') %}
+                <div class="pt-2">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider sidebar-text">User Management</h3>
+                    {% if has_user_permission('manage_users') or has_user_permission('view_users') %}
+                    <a href="{{ url_for('user_mgmt_bp.manage_users') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'user_mgmt_bp.manage_users' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-users w-6"></i>
+                        <span class="ml-3 sidebar-text">Users</span>
+                    </a>
+                    {% endif %}
+                    {% if has_user_permission('manage_users') %}
+                    <!-- <a href="{{ url_for('user_mgmt_bp.manage_users') }}?highlight=permissions" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'user_mgmt_bp.manage_user_permissions' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-key w-6"></i>
+                        <span class="ml-3 sidebar-text">User Permissions</span>
+                    </a> -->
+                    {% endif %}
+                    {% if has_user_permission('manage_roles') %}
+                    <a href="{{ url_for('user_mgmt_bp.manage_roles') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'user_mgmt_bp.manage_roles' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-user-shield w-6"></i>
+                        <span class="ml-3 sidebar-text">Roles</span>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- System Management Section (Super Admin only) -->
+                {% if session.role == 'Super Admin' %}
+                <div class="pt-2">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider sidebar-text">System</h3>
+                    <a href="{{ url_for('admin.manage_invitations') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'admin.manage_invitations' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-envelope-open-text w-6"></i>
+                        <span class="ml-3 sidebar-text">Invitations</span>
+                    </a>
+                    <a href="{{ url_for('user_mgmt_bp.activity_log') }}" class="nav-link flex items-center px-4 py-2 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md transition-colors {% if request.endpoint == 'user_mgmt_bp.activity_log' %}bg-gray-700 text-white{% endif %}">
+                        <i class="fas fa-history w-6"></i>
+                        <span class="ml-3 sidebar-text">Activity Log</span>
+                    </a>
+                </div>
+                {% endif %}
+            </nav>
+            
+            <!-- User Profile & Logout -->
+            <div class="px-4 py-4 border-t border-gray-700">
+                <a href="{{ url_for('profile.view_profile') }}" class="mb-3 p-3 bg-gray-700 rounded-lg block hover:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        {% if session.profile_photo and session.profile_photo != 'default-avatar.svg' %}
+                        <img src="{{ url_for('static', filename=session.profile_photo) }}" 
+                             alt="Profile" 
+                             class="w-8 h-8 rounded-full object-cover"
+                             onerror="this.outerHTML='<div class=\'w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-semibold text-white text-sm\'>{{ session.username[0].upper() }}</div>'">
+                        {% else %}
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-semibold text-white text-sm">
+                            {{ session.username[0].upper() }}
+                        </div>
+                        {% endif %}
+                        <div class="flex-1 min-w-0 sidebar-text">
+                            <p class="text-sm font-medium text-white truncate">{{ session.username }}</p>
+                            <p class="text-xs text-gray-300">Administrator</p>
+                        </div>
+                    </div>
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="flex items-center justify-center w-full px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors font-medium">
+                    <i class="fas fa-sign-out-alt mr-2"></i>
+                    <span class="sidebar-text">Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="bg-white shadow-md p-4 flex justify-between items-center">
+                <button id="sidebar-toggle" class="text-gray-600 focus:outline-none md:hidden">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <h1 class="text-2xl font-bold text-gray-800">{% block header_title %}Admin Panel{% endblock %}</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="hidden md:flex items-center space-x-2 text-gray-600">
+                        <i class="fas fa-clock text-blue-500"></i>
+                        <span class="text-sm font-medium" id="current-time"></span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Content Area -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert px-6 py-4 rounded-lg relative mb-4 {% if category == 'danger' %}bg-red-50 text-red-800 border-l-4 border-red-500{% else %}bg-green-50 text-green-800 border-l-4 border-green-500{% endif %} shadow-md" role="alert">
+                                <div class="flex items-center">
+                                    <i class="fas {% if category == 'danger' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} mr-3 text-xl"></i>
+                                    <span class="font-medium">{{ message }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <!-- Page Content -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <!-- Mobile Menu Overlay -->
+    <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden"></div>
+    
+    <!-- jQuery (required for DataTables and some legacy scripts) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Bootstrap JS (for compatibility with existing modals) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    
+    <!-- Common Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    
+    <!-- Admin Layout Specific Script -->
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarTexts = document.querySelectorAll('.sidebar-text');
+        const overlay = document.getElementById('overlay');
+
+        // Handle sidebar toggle for mobile and desktop
+        sidebarToggle?.addEventListener('click', () => {
+            if (window.innerWidth < 768) {
+                // Mobile: slide in/out
+                sidebar.classList.toggle('-translate-x-full');
+                overlay.classList.toggle('hidden');
+            } else {
+                // Desktop: collapse/expand
+                if (sidebar.classList.contains('w-64')) {
+                    sidebar.classList.remove('w-64');
+                    sidebar.classList.add('w-20');
+                    sidebarTexts.forEach(text => text.classList.add('opacity-0', 'hidden'));
+                } else {
+                    sidebar.classList.remove('w-20');
+                    sidebar.classList.add('w-64');
+                    sidebarTexts.forEach(text => text.classList.remove('opacity-0', 'hidden'));
+                }
+            }
+        });
+
+        // Handle overlay click to close mobile menu
+        overlay?.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                // Desktop: ensure sidebar is visible and overlay is hidden
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+                if (!sidebar.classList.contains('w-20')) {
+                    sidebar.classList.add('w-64');
+                }
+            } else {
+                // Mobile: hide sidebar by default
+                sidebar.classList.add('-translate-x-full');
+            }
+        });
+
+        // Initialize mobile state
+        if (window.innerWidth < 768) {
+            sidebar.classList.add('-translate-x-full');
+        }
+
+        // Update time display
+        function updateTime() {
+            const timeEl = document.getElementById('current-time');
+            if (timeEl) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit'
+                });
+                timeEl.textContent = timeStr;
+            }
+        }
+
+        updateTime();
+        setInterval(updateTime, 60000); // Update every minute
+    </script>
+    
+    <!-- Page Specific JavaScript -->
+    {% block scripts %}{% endblock %}
+    
+    <!-- Additional JS Block for Extra Scripts -->
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

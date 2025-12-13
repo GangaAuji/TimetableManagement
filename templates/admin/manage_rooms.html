@@ -1,0 +1,341 @@
+{% extends 'admin/_layout.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 fade-in">
+    
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-lg p-6 mb-8 text-white flex flex-col md:flex-row justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold flex items-center gap-3">
+                <i class="fas fa-door-open"></i> Manage Rooms
+            </h1>
+            <p class="text-blue-100 mt-1 text-sm">Configure classrooms, labs, and capacities.</p>
+        </div>
+        <button onclick="openAddRoomModal()" class="mt-4 md:mt-0 bg-white text-blue-600 font-semibold px-6 py-2.5 rounded-lg shadow-md hover:bg-blue-50 transition-all transform hover:-translate-y-0.5 flex items-center gap-2">
+            <i class="fas fa-plus"></i> Add New Room
+        </button>
+    </div>
+
+    {% if not rooms %}
+    <div class="text-center py-12 bg-white rounded-xl shadow-sm border border-dashed border-gray-300">
+        <div class="text-gray-400 text-5xl mb-4"><i class="fas fa-warehouse"></i></div>
+        <h3 class="text-xl font-medium text-gray-900">No rooms configured</h3>
+        <p class="text-gray-500 mt-1">Get started by adding a new room to the system.</p>
+    </div>
+    {% else %}
+
+    <div class="hidden md:block bg-white shadow-xl rounded-xl overflow-hidden border border-gray-100">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Room Details</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Capacity</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for room in rooms %}
+                    <tr class="hover:bg-blue-50/50 transition-colors duration-200 group">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold">
+                                    {{ room.room_number }}
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">Room {{ room.room_number }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if room.room_type == 'Laboratory' %} bg-purple-100 text-purple-800 
+                                {% elif room.room_type == 'Conference' %} bg-orange-100 text-orange-800 
+                                {% else %} bg-green-100 text-green-800 {% endif %}">
+                                {{ room.room_type }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <i class="fas fa-users text-gray-400 mr-2"></i>{{ room.capacity }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {{ room.department_name or '<span class="text-gray-400 italic">Shared</span>'|safe }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div class="flex justify-end gap-3 opacity-80 group-hover:opacity-100 transition-opacity">
+                                <button onclick="viewSchedule({{ room.id }})" class="text-teal-600 hover:text-teal-900 tooltip" title="View Schedule">
+                                    <i class="fas fa-calendar-alt text-lg"></i>
+                                </button>
+                                <button onclick="openEditRoomModal({{ room.id }})" class="text-indigo-600 hover:text-indigo-900 tooltip" title="Edit">
+                                    <i class="fas fa-edit text-lg"></i>
+                                </button>
+                                <button onclick="confirmDeleteRoom({{ room.id }})" class="text-red-600 hover:text-red-900 tooltip" title="Delete">
+                                    <i class="fas fa-trash-alt text-lg"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="md:hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% for room in rooms %}
+        <div class="bg-white rounded-xl shadow p-5 border border-gray-100 relative">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <span class="text-2xl font-bold text-gray-800">{{ room.room_number }}</span>
+                    <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">{{ room.department_name or 'General' }}</p>
+                </div>
+                <span class="px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-600">
+                    {{ room.room_type }}
+                </span>
+            </div>
+            
+            <div class="flex items-center text-sm text-gray-600 mb-6">
+                <i class="fas fa-chair mr-2 text-blue-500"></i> Max Capacity: {{ room.capacity }}
+            </div>
+
+            <div class="flex justify-between border-t pt-4">
+                <button onclick="viewSchedule({{ room.id }})" class="text-teal-600 text-sm font-medium hover:underline">Schedule</button>
+                <div class="flex gap-4">
+                    <button onclick="openEditRoomModal({{ room.id }})" class="text-indigo-600"><i class="fas fa-edit"></i></button>
+                    <button onclick="confirmDeleteRoom({{ room.id }})" class="text-red-600"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="roomModal" class="fixed inset-0 z-50 hidden transition-opacity duration-300" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeRoomModal()"></div>
+
+        <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2" id="modalTitle">
+                        <i class="fas fa-pen-to-square"></i> Add Room
+                    </h3>
+                </div>
+
+                <form id="roomForm" class="px-6 py-6 space-y-5">
+                    <input type="hidden" id="roomId" name="id">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
+                            <input type="text" id="roomNumber" name="room_number" required placeholder="e.g. 101-A"
+                                class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 shadow-sm transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                            <input type="number" id="capacity" name="capacity" min="1" required placeholder="Seats"
+                                class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 shadow-sm transition-all">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Room Type</label>
+                        <select id="roomType" name="room_type" required
+                            class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 shadow-sm">
+                            <option value="Classroom">Classroom</option>
+                            <option value="Laboratory">Laboratory</option>
+                            <option value="Conference">Conference Room</option>
+                            <option value="Studio">Studio</option>
+                            <option value="Auditorium">Auditorium</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Department (Optional)</label>
+                        <select id="departmentId" name="department_id"
+                            class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 shadow-sm">
+                            <option value="">-- Shared / General --</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mt-8 flex justify-end gap-3 border-t pt-4">
+                        <button type="button" onclick="closeRoomModal()"
+                            class="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 focus:ring-2 focus:ring-gray-300 transition-all">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                            class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 shadow-md hover:shadow-lg transition-all">
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="scheduleModal" class="fixed inset-0 z-50 hidden transition-opacity duration-300" aria-labelledby="schedule-title" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeScheduleModal()"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
+                <div class="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <i class="far fa-clock text-blue-600"></i> Room Schedule
+                    </h3>
+                    <button onclick="closeScheduleModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="scheduleContent" class="max-h-[60vh] overflow-y-auto p-0">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// --- UI Helpers ---
+const toggleModal = (modalId, show) => {
+    const el = document.getElementById(modalId);
+    if (show) {
+        el.classList.remove('hidden');
+        // Small delay to allow display:block to apply before opacity transition
+        setTimeout(() => el.classList.add('opacity-100'), 10); 
+    } else {
+        el.classList.remove('opacity-100');
+        setTimeout(() => el.classList.add('hidden'), 300);
+    }
+};
+
+// --- Room Logic ---
+
+function openAddRoomModal() {
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus-circle"></i> Add Room';
+    document.getElementById('roomForm').reset();
+    document.getElementById('roomId').value = '';
+    toggleModal('roomModal', true);
+}
+
+function openEditRoomModal(roomId) {
+    // Show a loading state if desired
+    fetch(`/admin/rooms/${roomId}`)
+        .then(response => response.json())
+        .then(room => {
+            document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Room';
+            document.getElementById('roomId').value = room.id;
+            document.getElementById('roomNumber').value = room.room_number;
+            document.getElementById('roomType').value = room.room_type;
+            document.getElementById('capacity').value = room.capacity;
+            document.getElementById('departmentId').value = room.department_id || '';
+            toggleModal('roomModal', true);
+        })
+        .catch(err => console.error(err));
+}
+
+function closeRoomModal() {
+    toggleModal('roomModal', false);
+}
+
+function confirmDeleteRoom(roomId) {
+    // Custom styled confirm could go here, using standard for reliability
+    if (confirm('Are you sure you want to remove this room? Data attached to it might be affected.')) {
+        fetch(`/admin/rooms/${roomId}`, { method: 'DELETE' })
+        .then(response => response.json())
+        .then(result => {
+            if (result.ok) location.reload();
+            else alert(result.error || 'Error deleting room');
+        });
+    }
+}
+
+document.getElementById('roomForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const roomId = formData.get('id');
+    const method = roomId ? 'PUT' : 'POST';
+    const url = roomId ? `/admin/rooms/${roomId}` : '/admin/rooms';
+    
+    // Add loading state to button
+    const btn = this.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    btn.disabled = true;
+
+    fetch(url, { method: method, body: formData })
+    .then(response => response.json())
+    .then(result => {
+        if (result.ok) location.reload();
+        else {
+            alert(result.error || 'Failed to save');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+});
+
+// --- Schedule Logic ---
+
+function viewSchedule(roomId) {
+    const content = document.getElementById('scheduleContent');
+    content.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-3xl"></i><p class="mt-2">Loading schedule...</p></div>';
+    toggleModal('scheduleModal', true);
+
+    fetch(`/admin/rooms/${roomId}/schedule`)
+        .then(response => response.json())
+        .then(data => {
+            if(!data.schedule || data.schedule.length === 0) {
+                content.innerHTML = `
+                    <div class="p-12 text-center flex flex-col items-center">
+                        <div class="bg-gray-100 p-4 rounded-full mb-3 text-gray-400">
+                            <i class="far fa-calendar-times text-2xl"></i>
+                        </div>
+                        <h4 class="text-gray-800 font-medium">No schedule found</h4>
+                        <p class="text-gray-500 text-sm">This room has no classes assigned yet.</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '<div class="divide-y divide-gray-100">';
+            data.schedule.forEach(slot => {
+                html += `
+                    <div class="p-4 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-4">
+                            <div class="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-center min-w-[80px]">
+                                <div class="text-xs font-bold uppercase tracking-wider">${slot.day.substr(0,3)}</div>
+                                <div class="text-sm font-bold">${slot.start_time}</div>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-900">${slot.subject_name}</h4>
+                                <div class="text-sm text-gray-500 flex items-center gap-2">
+                                    <span><i class="fas fa-user-tie text-gray-400 mr-1"></i> ${slot.faculty_name}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right sm:text-right">
+                            <span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">
+                                ${slot.class_name} ${slot.division_name}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            content.innerHTML = html;
+        })
+        .catch(err => {
+            content.innerHTML = '<div class="p-6 text-red-500 text-center">Failed to load schedule.</div>';
+        });
+}
+
+function closeScheduleModal() {
+    toggleModal('scheduleModal', false);
+}
+</script>
+{% endblock %}

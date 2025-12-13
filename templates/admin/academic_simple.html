@@ -1,0 +1,248 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Academic Management{% endblock %}
+{% block header_title %}Academic Management{% endblock %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-xl p-8 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-4xl font-bold mb-2">Academic Management</h2>
+                <p class="text-indigo-100 text-lg">Centralized hub for all academic operations</p>
+            </div>
+            <div class="hidden md:block">
+                <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                    <i class="fas fa-university text-6xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Quick Stats
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="stat-card blue bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex-1">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Academic Years</p>
+                    <p class="text-4xl font-extrabold text-gray-800 mb-2">{{ academic_years_count }}</p>
+                    <p class="text-sm text-gray-600 flex items-center">
+                        <i class="fas fa-calendar-check text-green-600 mr-1"></i>
+                        <span class="font-semibold">Active Programs</span>
+                    </p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #3b82f6; --color-end: #2563eb;">
+                    <i class="fas fa-graduation-cap text-4xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"></div>
+        </div>
+
+        <div class="stat-card green bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex-1">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Semesters</p>
+                    <p class="text-4xl font-extrabold text-gray-800 mb-2">{{ semesters_count }}</p>
+                    <p class="text-sm text-gray-600 flex items-center">
+                        <i class="fas fa-list text-green-600 mr-1"></i>
+                        <span class="font-semibold">Defined Periods</span>
+                    </p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #10b981; --color-end: #059669;">
+                    <i class="fas fa-calendar-alt text-4xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-green-500 to-green-600 rounded-full"></div>
+        </div>
+
+        <div class="stat-card purple bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex-1">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Total Subjects</p>
+                    <p class="text-4xl font-extrabold text-gray-800 mb-2">{{ subjects_count }}</p>
+                    <p class="text-sm text-gray-600 flex items-center">
+                        <i class="fas fa-book-open text-purple-600 mr-1"></i>
+                        <span class="font-semibold">Curriculum</span>
+                    </p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #8b5cf6; --color-end: #7c3aed;">
+                    <i class="fas fa-book text-4xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
+        </div>
+
+        <div class="stat-card yellow bg-white p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex-1">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Course Batches</p>
+                    <p class="text-4xl font-extrabold text-gray-800 mb-2">{{ batches_count }}</p>
+                    <p class="text-sm text-gray-600 flex items-center">
+                        <i class="fas fa-users text-orange-600 mr-1"></i>
+                        <span class="font-semibold">Active Batches</span>
+                    </p>
+                </div>
+                <div class="icon-wrapper rounded-2xl p-4" style="--color-start: #f59e0b; --color-end: #d97706;">
+                    <i class="fas fa-users text-4xl text-white"></i>
+                </div>
+            </div>
+            <div class="h-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full"></div>
+        </div>
+    </div> -->
+
+    <!-- Management Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+        <a href="{{ url_for('academic.manage_academic_years') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-calendar-year text-6xl text-blue-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Time</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ academic_years_count }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-blue-600 transition-colors mt-1">
+                        Academic Years</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_courses') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-graduation-cap text-6xl text-emerald-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-book-reader"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Programs</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ courses_count }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-emerald-600 transition-colors mt-1">
+                        Active Courses</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_semesters') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-clock text-6xl text-teal-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-xl group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-hourglass-half"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Periods</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ semesters_count }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-teal-600 transition-colors mt-1">
+                        Semesters</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_subjects') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-book text-6xl text-purple-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-swatchbook"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Curriculum</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ subjects_count }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-purple-600 transition-colors mt-1">
+                        Subjects</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_batches') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-users text-6xl text-orange-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Students</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ batches_count }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-orange-600 transition-colors mt-1">
+                        Course Batches</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_allocations') }}"
+            class="group bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fas fa-chalkboard-teacher text-6xl text-red-600"></i>
+            </div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-red-50 text-red-600 flex items-center justify-center text-xl group-hover:bg-red-600 group-hover:text-white transition-colors">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Staff</span>
+                </div>
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ allocations|length if faculty_allocations
+                        else 0 }}</h3>
+                    <p class="text-sm font-medium text-gray-500 group-hover:text-red-600 transition-colors mt-1">Faculty
+                        Allocations</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('academic.manage_departments') }}"
+            class="group col-span-1 sm:col-span-2 bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl p-5 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden text-white">
+            <div class="absolute top-0 right-0 p-4 opacity-20">
+                <i class="fas fa-building text-7xl text-white"></i>
+            </div>
+            <div class="relative z-10 h-full flex flex-col justify-between">
+                <div class="flex items-center gap-4 mb-2">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl">
+                        <i class="fas fa-university"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-3xl font-bold">{{ departments|length if departments else 0 }}</h3>
+                        <p class="text-blue-100 font-medium">Departments</p>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm font-medium text-blue-100 group-hover:text-white">
+                    <span>Manage Organization</span>
+                    <i class="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                </div>
+            </div>
+        </a>
+
+    </div>
+</div>
+{% endblock %}

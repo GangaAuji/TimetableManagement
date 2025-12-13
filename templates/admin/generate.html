@@ -1,0 +1,554 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Generate Timetable{% endblock %}
+{% block header_title %}Timetable Generation{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Card hover effect */
+.settings-card {
+    transition: all 0.3s ease;
+}
+.settings-card:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Checkbox custom styling */
+.day-checkbox {
+    transition: all 0.2s ease;
+}
+.day-checkbox:checked {
+    background-color: #10b981;
+    border-color: #10b981;
+}
+
+/* Loading spinner */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* Subject list styling */
+.subject-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.subject-item {
+    transition: all 0.2s ease;
+}
+.subject-item:hover {
+    background: #f9fafb;
+    transform: translateX(4px);
+}
+
+/* Stats badge */
+.stats-badge {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in max-w-6xl mx-auto">
+
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-lg shadow-lg p-4 text-white">
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <div class="mb-4 md:mb-0">
+                <h2 class="text-2xl font-bold mb-1 flex items-center">
+                    <i class="fas fa-magic mr-2"></i>
+                    Timetable Generation
+                </h2>
+                <p class="text-purple-100 text-sm">Automatically generate optimized schedules</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <span class="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg font-medium shadow-lg flex items-center justify-center text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>AI-Powered
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-500 text-xl"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-800">
+                    <strong>Important:</strong> Generating a new timetable will overwrite any existing schedule for the selected group. 
+                    Ensure all subjects and faculty allocations are correct before proceeding.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form action="{{ url_for('admin.generate_timetable') }}" method="POST" id="generateForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Selection Card -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 settings-card">
+                    <div class="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                            <i class="fas fa-school text-purple-600 mr-2"></i>
+                            Class Selection
+                        </h3>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <label for="course" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                Course <span class="text-red-500">*</span>
+                            </label>
+                            <select id="course" name="course" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm">
+                                <option disabled {% if not selected_course %}selected{% endif %}>Select a course</option>
+                                {% for course in courses %}
+                                <option value="{{ course[0] }}" {% if selected_course and (selected_course|string)==(course[0]|string) %}selected{% endif %}>{{ course[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="class" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                Class <span class="text-red-500">*</span>
+                            </label>
+                            <select id="class" name="class" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm">
+                                <option disabled {% if not selected_class %}selected{% endif %}>Select a class</option>
+                                {% for c in classes %}
+                                <option value="{{ c[0] }}" {% if selected_class and (selected_class|string)==(c[0]|string) %}selected{% endif %}>{{ c[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="division" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                                Division <span class="text-red-500">*</span>
+                            </label>
+                            <select id="division" name="division" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm">
+                                <option disabled {% if not selected_division %}selected{% endif %}>Select a division</option>
+                                {% for d in divisions %}
+                                <option value="{{ d[0] }}" {% if selected_division and (selected_division|string)==(d[0]|string) %}selected{% endif %}>{{ d[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schedule Settings Card -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 settings-card">
+                    <div class="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                            <i class="fas fa-cog text-indigo-600 mr-2"></i>
+                            Schedule Configuration
+                        </h3>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Week Start Date</label>
+                                <input type="date" name="week_start_date" value="{{ (form_state.week_start_date if form_state and form_state.week_start_date) or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Lecture Duration (min)</label>
+                                <input type="number" min="15" step="5" name="lecture_minutes" value="{{ (form_state.lecture_minutes if form_state) or 45 }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Day Start Time</label>
+                                <input type="time" name="day_start" value="{{ (form_state.day_start if form_state) or '09:00' }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Day End Time</label>
+                                <input type="time" name="day_end" value="{{ (form_state.day_end if form_state) or '15:00' }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Break Start Time</label>
+                                <input type="time" name="break_start" value="{{ (form_state.break_start if form_state) or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="Optional" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Break Duration (min)</label>
+                                <input type="number" min="0" step="5" name="break_duration" value="{{ (form_state.break_duration if form_state) or 0 }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Working Days</label>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] %}
+                                {% for d in days %}
+                                <label class="inline-flex items-center space-x-2 cursor-pointer p-2 rounded hover:bg-gray-50">
+                                    <input type="checkbox" name="working_days" value="{{ d }}" class="day-checkbox h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500" {% if form_state and form_state.working_days and d in form_state.working_days %}checked{% else %}checked{% endif %} />
+                                    <span class="text-sm">{{ d }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column - Eligible Subjects -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 settings-card sticky top-6">
+                    <div class="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                            <i class="fas fa-book text-emerald-600 mr-2"></i>
+                            Eligible Subjects
+                        </h3>
+                        <p class="text-xs text-gray-600 mt-1">Based on current selection</p>
+                    </div>
+                    <div id="eligiblePanel" class="p-4 text-sm">
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-arrow-left text-3xl text-gray-300 mb-2"></i>
+                            <p>Select course, class and division</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="bg-white rounded-lg shadow-lg p-4 border border-gray-100">
+            <div class="flex flex-col sm:flex-row justify-end gap-2">
+                <button type="button" id="previewBtn" class="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm transition-all flex items-center justify-center">
+                    <i class="fas fa-eye mr-2"></i>Preview Timetable
+                </button>
+                <button type="button" id="coverageBtn" class="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm transition-all flex items-center justify-center">
+                    <i class="fas fa-file-csv mr-2"></i>Coverage CSV
+                </button>
+                <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 shadow-md hover:shadow-lg font-medium text-sm transition-all flex items-center justify-center">
+                    <i class="fas fa-magic mr-2"></i>Generate Timetable
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Generation Result -->
+    {% if generation_result %}
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
+        <div class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                Generation Summary
+            </h3>
+        </div>
+        <div class="p-5">
+            <p class="text-sm text-gray-700 mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                <i class="fas fa-info-circle mr-2"></i>{{ generation_result.message }}
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <h4 class="font-semibold text-gray-800 mb-2 flex items-center">
+                        <i class="fas fa-check text-green-600 mr-2"></i>Assigned Sessions
+                        <span class="ml-2 stats-badge text-white text-xs px-2 py-0.5 rounded-full">{{ generation_result.assigned|length }}</span>
+                    </h4>
+                    <div class="subject-list border rounded-lg p-3 bg-gray-50">
+                        <ul class="space-y-2">
+                            {% for e in generation_result.assigned[:20] %}
+                            <li class="subject-item p-2 rounded border-l-4 border-green-500 bg-white text-xs">
+                                <strong>{{ e.day }}</strong> {{ e.start_time }}-{{ e.end_time }}<br/>
+                                {{ e.subject_name }} <span class="text-gray-600">({{ e.faculty_name }})</span>
+                                {% if e.room_number %}<br/><span class="text-gray-500"><i class="fas fa-door-open mr-1"></i>Room {{ e.room_number }}</span>{% endif %}
+                                {% if e.is_proxy %}<span class="text-orange-600 text-xs">[proxy]</span>{% endif %}
+                            </li>
+                            {% endfor %}
+                            {% if generation_result.assigned|length > 20 %}
+                            <li class="text-gray-500 text-center py-2">...and {{ generation_result.assigned|length - 20 }} more</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-800 mb-2 flex items-center">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>Unassigned Slots
+                        {% if generation_result.unassigned %}
+                        <span class="ml-2 bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">{{ generation_result.unassigned|length }}</span>
+                        {% endif %}
+                    </h4>
+                    {% if generation_result.unassigned and generation_result.unassigned|length %}
+                    <div class="subject-list border rounded-lg p-3 bg-gray-50">
+                        <ul class="space-y-2">
+                            {% for u in generation_result.unassigned %}
+                            <li class="subject-item p-2 rounded border-l-4 border-yellow-500 bg-white text-xs">
+                                <strong>{{ u.day }}</strong> {{ u.start_time }}-{{ u.end_time }}<br/>
+                                <span class="text-gray-600">{{ u.reason }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="border rounded-lg p-6 bg-gray-50 text-center">
+                        <i class="fas fa-check-circle text-green-500 text-3xl mb-2"></i>
+                        <p class="text-gray-600">All slots assigned successfully!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if generation_result.proxy_suggestions and generation_result.proxy_suggestions|length %}
+            <div class="mt-4">
+                <h4 class="font-semibold text-gray-800 mb-2 flex items-center">
+                    <i class="fas fa-user-friends text-blue-600 mr-2"></i>Proxy Suggestions
+                    <span class="ml-2 bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">{{ generation_result.proxy_suggestions|length }}</span>
+                </h4>
+                <div class="subject-list border rounded-lg p-3 bg-gray-50">
+                    <ul class="space-y-2">
+                        {% for p in generation_result.proxy_suggestions[:10] %}
+                        <li class="subject-item p-2 rounded border-l-4 border-blue-500 bg-white text-xs">
+                            <strong>{{ p.day }}</strong> {{ p.time }}: {{ p.subject_name }}<br/>
+                            <span class="text-gray-600">{{ p.replacement_faculty }} <i class="fas fa-arrow-left mx-1"></i> (primary: {{ p.primary_faculty }})</span>
+                        </li>
+                        {% endfor %}
+                        {% if generation_result.proxy_suggestions|length > 10 %}
+                        <li class="text-gray-500 text-center py-2">...and {{ generation_result.proxy_suggestions|length - 10 }} more</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Preview Modal -->
+<div id="previewModal" class="modal hidden fixed z-50 inset-0 bg-gray-900 bg-opacity-50 items-center justify-center">
+    <div class="modal-content bg-white rounded-lg shadow-2xl border-0 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="modal-header bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 flex-shrink-0">
+            <div class="flex justify-between items-center">
+                <h3 class="modal-title font-bold text-lg flex items-center">
+                    <i class="fas fa-eye mr-2"></i>Timetable Preview
+                </h3>
+                <button id="closePreview" class="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+            </div>
+        </div>
+        <div id="previewContent" class="modal-body p-5 overflow-y-auto flex-1 text-sm">
+            <div class="text-center py-8">
+                <i class="fas fa-spinner spinner text-4xl text-purple-600"></i>
+                <p class="text-gray-600 mt-2">Loading preview...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const courseSelect = document.getElementById('course');
+        const classSelect = document.getElementById('class');
+        const divisionSelect = document.getElementById('division');
+
+        courseSelect.addEventListener('change', async function () {
+            const courseId = this.value;
+            classSelect.innerHTML = '<option disabled selected>Loading classes...</option>';
+            divisionSelect.innerHTML = '<option disabled selected>Select a division</option>';
+            try {
+                const resp = await fetch(`/admin/api/classes?course_id=${courseId}`);
+                if (!resp.ok) throw new Error('Failed to load classes');
+                const data = await resp.json();
+                classSelect.innerHTML = '<option disabled selected>Select a class</option>';
+                data.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id; opt.textContent = c.name;
+                    classSelect.appendChild(opt);
+                });
+                refreshEligibleSubjects();
+            } catch (err) {
+                classSelect.innerHTML = '<option disabled selected>Select a class</option>';
+                console.error(err);
+                alert('Could not load classes.');
+            }
+        });
+
+        classSelect.addEventListener('change', async function () {
+            const classId = this.value;
+            divisionSelect.innerHTML = '<option disabled selected>Loading divisions...</option>';
+            try {
+                const resp = await fetch(`/admin/api/divisions?class_id=${classId}`);
+                if (!resp.ok) throw new Error('Failed to load divisions');
+                const data = await resp.json();
+                divisionSelect.innerHTML = '<option disabled selected>Select a division</option>';
+                data.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id; opt.textContent = d.name;
+                    divisionSelect.appendChild(opt);
+                });
+                refreshEligibleSubjects();
+            } catch (err) {
+                divisionSelect.innerHTML = '<option disabled selected>Select a division</option>';
+                console.error(err);
+                alert('Could not load divisions.');
+            }
+        });
+
+        divisionSelect.addEventListener('change', refreshEligibleSubjects);
+
+        async function refreshEligibleSubjects() {
+            const course = courseSelect.value;
+            const cls = classSelect.value;
+            const division = divisionSelect.value;
+            const panel = document.getElementById('eligiblePanel');
+            if (!course || !cls || !division) {
+                panel.innerHTML = '<div class="text-gray-500">Select course, class and division to view eligible subjects.</div>';
+                return;
+            }
+            panel.innerHTML = '<div class="text-gray-600">Loading subjects...</div>';
+            try {
+                const url = `/admin/api/eligible_subjects?course_id=${encodeURIComponent(course)}&class_id=${encodeURIComponent(cls)}&division_id=${encodeURIComponent(division)}`;
+                const resp = await fetch(url);
+                const json = await resp.json();
+                if (!resp.ok) {
+                    panel.innerHTML = `<div class="text-red-600">Error: ${json.message || 'Failed to load eligible subjects'}</div>`;
+                    return;
+                }
+                const eligible = json.eligible || [];
+                const missing = json.missing || [];
+                let html = '';
+                html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+                html += '<div><h4 class="font-medium mb-1">Eligible</h4>';
+                if (eligible.length === 0) {
+                    html += '<div class="text-gray-500">No subjects with matching allocations.</div>';
+                } else {
+                    html += '<ul class="list-disc ml-5 space-y-1">';
+                    eligible.forEach(s => {
+                        const fac = (s.faculty || []).map(f => `${f.name}${f.is_primary ? ' (Primary)' : ''}`).join(', ');
+                        html += `<li><span class="font-medium">${s.name}</span>${s.course_code ? ` <span class=\"text-gray-500\">(${s.course_code})</span>` : ''}<br/><span class="text-gray-600">Faculty: ${fac || '—'}</span></li>`;
+                    });
+                    html += '</ul>';
+                }
+                html += '</div>';
+                html += '<div><h4 class="font-medium mb-1">Missing allocations</h4>';
+                if (missing.length === 0) {
+                    html += '<div class="text-gray-500">None</div>';
+                } else {
+                    html += '<ul class="list-disc ml-5 space-y-1">';
+                    missing.forEach(s => {
+                        const allocUrl = `/admin/academic/allocations?class_id=${encodeURIComponent(cls)}&division_id=${encodeURIComponent(division)}&course_id=${encodeURIComponent(course)}&subject_id=${encodeURIComponent(s.id)}`;
+                        html += `<li><span class=\"font-medium\">${s.name}</span>${s.course_code ? ` <span class=\\\"text-gray-500\\\">(${s.course_code})</span>` : ''}
+                            <a href=\"${allocUrl}\" class=\\\"text-indigo-600 hover:underline ml-2\\\">Allocate now</a>
+                        </li>`;
+                    });
+                    html += '</ul>';
+                    html += '<div class="text-xs text-gray-500 mt-1">Tip: Add a faculty allocation for this Class/Division to include the subject.</div>';
+                }
+                html += '</div>';
+                html += '</div>';
+                panel.innerHTML = html || '<div class="text-gray-500">No data.</div>';
+            } catch (err) {
+                console.error(err);
+                panel.innerHTML = '<div class="text-red-600">An error occurred while loading subjects.</div>';
+            }
+        }
+
+        // Preview timetable logic
+        const previewBtn = document.getElementById('previewBtn');
+        const coverageBtn = document.getElementById('coverageBtn');
+        const previewModal = document.getElementById('previewModal');
+        const closePreview = document.getElementById('closePreview');
+        const previewContent = document.getElementById('previewContent');
+
+        if (previewBtn) {
+            previewBtn.addEventListener('click', async function () {
+            const course = document.getElementById('course').value;
+            const cls = document.getElementById('class').value;
+            const division = document.getElementById('division').value;
+            if (!course || !cls || !division) {
+                alert('Please select course, class and division to preview.');
+                return;
+            }
+            // collect schedule inputs
+            const week_start_date = document.querySelector('input[name="week_start_date"]').value || null;
+            const day_start = document.querySelector('input[name="day_start"]').value || '09:00';
+            const day_end = document.querySelector('input[name="day_end"]').value || '15:00';
+            const lecture_minutes = parseInt(document.querySelector('input[name="lecture_minutes"]').value || '45', 10);
+            const break_start = document.querySelector('input[name="break_start"]').value || null;
+            const break_duration = parseInt(document.querySelector('input[name="break_duration"]').value || '0', 10);
+            const workingDays = Array.from(document.querySelectorAll('input[name="working_days"]:checked')).map(i => i.value);
+            previewContent.innerHTML = 'Loading preview...';
+            previewModal.classList.remove('hidden');
+            try {
+                const resp = await fetch('/admin/api/generate_preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ course, class: cls, division, week_start_date, day_start, day_end, lecture_minutes, break_start, break_duration, working_days: workingDays })
+                });
+                const json = await resp.json();
+                if (!resp.ok) {
+                    previewContent.innerHTML = `<div class="text-red-600">Error: ${json.error || 'Failed to generate preview'}</div>`;
+                    return;
+                }
+                // render assigned grouped by day
+                const byDay = {};
+                (json.assigned || []).forEach(e => {
+                    byDay[e.day] = byDay[e.day] || [];
+                    byDay[e.day].push(e);
+                });
+                const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                let html = '';
+                dayOrder.forEach(day => {
+                    if (!byDay[day] || byDay[day].length === 0) return;
+                    html += `<h4 class="font-semibold mt-3">${day}</h4><table class="w-full text-sm"><tbody>`;
+                    byDay[day].forEach(s => {
+                        const roomInfo = s.room_number ? ` — <span class=\"text-gray-600\">Room ${s.room_number}</span>` : '';
+                        html += `<tr class=\"border-t\"><td class=\"py-1 w-28\">${s.start_time}-${s.end_time}</td><td class=\"py-1\">${s.subject_name} <span class=\"text-gray-500\">(${s.faculty_name}${s.is_proxy ? ' - proxy' : ''})</span>${roomInfo}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                });
+                if (json.skipped_holidays && json.skipped_holidays.length) {
+                    html += `<h4 class="font-semibold mt-3">Holidays Skipped</h4><ul class="list-disc ml-6">`;
+                    json.skipped_holidays.forEach(h => html += `<li>${h.day} (${h.date}) - ${h.name}</li>`);
+                    html += '</ul>';
+                }
+                if (json.unassigned && json.unassigned.length) {
+                    html += `<h4 class="font-semibold mt-3">Unassigned Slots</h4><ul class="list-disc ml-6">`;
+                    json.unassigned.forEach(u => html += `<li>${u.day} ${u.start_time}-${u.end_time}: ${u.reason}</li>`);
+                    html += '</ul>';
+                }
+                if (json.proxy_suggestions && json.proxy_suggestions.length) {
+                    html += `<h4 class="font-semibold mt-3">Proxy Suggestions</h4><ul class="list-disc ml-6">`;
+                    json.proxy_suggestions.forEach(p => html += `<li>${p.day} ${p.time}: ${p.subject_name} → ${p.replacement_faculty} (primary: ${p.primary_faculty})</li>`);
+                    html += '</ul>';
+                }
+                previewContent.innerHTML = html || '<div>No slots generated.</div>';
+            } catch (err) {
+                previewContent.innerHTML = '<div class="text-red-600">An error occurred while generating preview.</div>';
+                console.error(err);
+            }
+        });
+        }
+
+        if (closePreview) {
+            closePreview.addEventListener('click', function () {
+                previewModal.classList.add('hidden');
+            });
+        }
+
+        // Coverage CSV download
+        if (coverageBtn) {
+            coverageBtn.addEventListener('click', function() {
+            const course = document.getElementById('course').value;
+            const cls = document.getElementById('class').value;
+            const division = document.getElementById('division').value;
+            const lecture_minutes = parseInt(document.querySelector('input[name="lecture_minutes"]').value || '45', 10);
+            if (!course || !cls || !division) {
+                alert('Please select course, class and division first.');
+                return;
+            }
+            const url = `/admin/api/coverage.csv?course_id=${encodeURIComponent(course)}&class_id=${encodeURIComponent(cls)}&division_id=${encodeURIComponent(division)}&lecture_minutes=${encodeURIComponent(lecture_minutes)}`;
+            window.location.href = url;
+            });
+        }
+    });
+</script>
+{% endblock %}

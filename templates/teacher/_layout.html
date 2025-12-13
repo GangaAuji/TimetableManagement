@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Teacher Panel{% endblock %} - College Timetable System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Common Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Page Specific Styles -->
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 font-sans">
+    <div class="flex h-screen bg-gray-50">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar fixed inset-y-0 left-0 z-20 md:relative md:translate-x-0 flex flex-col shadow-2xl transition-all duration-300">
+            <!-- Header/Logo -->
+            <div class="px-6 py-4 border-b border-gray-700 flex items-center">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center shadow-lg transition-all duration-300" id="sidebar-icon">
+                    <i class="fas fa-chalkboard-teacher text-white text-xl"></i>
+                </div>
+                <span class="sidebar-text font-bold text-xl ml-3 logo-text transition-opacity duration-300">Teacher Panel</span>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 px-4 py-6 space-y-2">
+                <a href="{{ url_for('teacher.dashboard') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'teacher.dashboard' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt w-6 mr-3"></i>
+                    <span class="sidebar-text font-medium">Dashboard</span>
+                </a>
+                <a href="{{ url_for('teacher.my_timetable') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'teacher.my_timetable' %}active{% endif %}">
+                    <i class="fas fa-calendar-alt w-6 mr-3"></i>
+                    <span class="sidebar-text font-medium">My Timetable</span>
+                </a>
+                <a href="{{ url_for('teacher.availability') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'teacher.availability' %}active{% endif %}">
+                    <i class="fas fa-clipboard-check w-6 mr-3"></i>
+                    <span class="sidebar-text font-medium">Availability</span>
+                </a>
+                <a href="{{ url_for('teacher.proxy_requests') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint in ['teacher.proxy_requests','teacher.request_proxy'] %}active{% endif %}">
+                    <i class="fas fa-user-clock w-6 mr-3"></i>
+                    <span class="sidebar-text font-medium">Proxy Requests</span>
+                </a>
+                <a href="{{ url_for('teacher.assignments') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'teacher.assignments' %}active{% endif %}">
+                    <i class="fas fa-book w-6 mr-3"></i>
+                    <span class="sidebar-text font-medium">Assignments</span>
+                </a>
+            </nav>
+            
+            <!-- User Profile & Logout -->
+            <div class="px-4 py-4 border-t border-gray-700">
+                <a href="{{ url_for('profile.view_profile') }}" class="mb-3 p-3 bg-gray-700 rounded-lg block hover:bg-gray-600 transition-colors" id="user-profile">
+                    <div class="flex items-center space-x-3">
+                        {% if session.profile_photo and session.profile_photo != 'default-avatar.svg' %}
+                        <img src="{{ url_for('static', filename=session.profile_photo) }}" 
+                             alt="Profile" 
+                             class="w-8 h-8 rounded-full object-cover"
+                             onerror="this.outerHTML='<div class=\'w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-semibold text-white text-sm\'>{{ (session.name or session.username)[0].upper() }}</div>'">
+                        {% else %}
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-semibold text-white text-sm">
+                            {{ (session.name or session.username)[0].upper() }}
+                        </div>
+                        {% endif %}
+                        <div class="flex-1 min-w-0 sidebar-text">
+                            <p class="text-sm font-medium text-white truncate">{{ session.name or session.username }}</p>
+                            <p class="text-xs text-gray-300">Faculty Member</p>
+                        </div>
+                    </div>
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="flex items-center justify-center w-full px-4 py-3 rounded-lg bg-red-500/90 hover:bg-red-600 transition-all duration-300 font-medium shadow-lg hover:shadow-xl hover:scale-105">
+                    <i class="fas fa-sign-out-alt mr-2"></i>
+                    <span class="sidebar-text">Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+            <!-- Header -->
+            <header class="header shadow-sm p-4 flex justify-between items-center border-b border-gray-200">
+                <button id="sidebar-toggle" class="text-gray-600 hover:text-gray-800 focus:outline-none transition-colors">
+                    <i class="fas fa-bars text-2xl"></i>
+                </button>
+                <h1 class="text-2xl font-bold text-gray-800">{% block header_title %}Teacher Dashboard{% endblock %}</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="hidden md:flex items-center space-x-2 text-gray-600">
+                        <i class="fas fa-clock text-green-500"></i>
+                        <span class="text-sm font-medium" id="current-time"></span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto p-6 fade-in">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert px-6 py-4 rounded-lg relative mb-4 {% if category == 'danger' or category == 'error' %}bg-red-50 text-red-800 border-l-4 border-red-500{% else %}bg-green-50 text-green-800 border-l-4 border-green-500{% endif %} shadow-md" role="alert">
+                            <div class="flex items-center">
+                                <i class="fas {% if category == 'danger' or category == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} mr-3 text-xl"></i>
+                                <span class="font-medium">{{ message }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <!-- Mobile Overlay -->
+    <div id="overlay" class="overlay fixed inset-0 z-10 hidden md:hidden"></div>
+    
+    <!-- Common Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    
+    <!-- Teacher Panel Specific JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebarTexts = document.querySelectorAll('.sidebar-text');
+            const sidebarIcon = document.getElementById('sidebar-icon');
+            const userProfile = document.getElementById('user-profile');
+            const overlay = document.getElementById('overlay');
+            
+            let isCollapsed = false;
+
+            sidebarToggle.addEventListener('click', () => {
+                if (window.innerWidth >= 768) {
+                    // Desktop: Collapse/Expand
+                    isCollapsed = !isCollapsed;
+                    
+                    if (isCollapsed) {
+                        sidebar.classList.remove('w-64');
+                        sidebar.classList.add('w-20');
+                        sidebarTexts.forEach(text => {
+                            text.style.opacity = '0';
+                            text.style.visibility = 'hidden';
+                        });
+                        if (userProfile) {
+                            userProfile.style.opacity = '0';
+                            userProfile.style.visibility = 'hidden';
+                        }
+                    } else {
+                        sidebar.classList.remove('w-20');
+                        sidebar.classList.add('w-64');
+                        setTimeout(() => {
+                            sidebarTexts.forEach(text => {
+                                text.style.opacity = '1';
+                                text.style.visibility = 'visible';
+                            });
+                            if (userProfile) {
+                                userProfile.style.opacity = '1';
+                                userProfile.style.visibility = 'visible';
+                            }
+                        }, 150);
+                    }
+                } else {
+                    // Mobile: Toggle visibility with overlay
+                    sidebar.classList.toggle('open');
+                    overlay.classList.toggle('hidden');
+                }
+            });
+
+            // Close sidebar on mobile when clicking overlay
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                overlay.classList.add('hidden');
+            });
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 768) {
+                    overlay.classList.add('hidden');
+                    if (!isCollapsed) {
+                        sidebar.classList.add('w-64');
+                        sidebar.classList.remove('w-20', 'open');
+                        sidebarTexts.forEach(text => {
+                            text.style.opacity = '1';
+                            text.style.visibility = 'visible';
+                        });
+                        if (userProfile) {
+                            userProfile.style.opacity = '1';
+                            userProfile.style.visibility = 'visible';
+                        }
+                    }
+                } else {
+                    sidebar.classList.remove('open', 'w-20');
+                    sidebar.classList.add('w-64');
+                }
+            });
+        });
+    </script>
+    
+    <!-- Page Specific JavaScript -->
+    {% block scripts %}{% endblock %}
+    
+    <!-- Additional JS Block -->
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
