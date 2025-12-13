@@ -1,0 +1,435 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Manage Invitations{% endblock %}
+{% block header_title %}Registration Invitations{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Table Row Hover Effect */
+    .data-row {
+        transition: background-color 0.2s ease;
+    }
+    .data-row:hover {
+        background-color: #f8fafc; /* slate-50 */
+    }
+
+    /* Scrollbar beautification */
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+
+    /* Status badge animation for pending */
+    @keyframes pulse-soft {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    .badge-pending {
+        animation: pulse-soft 2s infinite;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in flex flex-col h-[calc(100vh-140px)]">
+
+    <div class="shrink-0 space-y-3 mb-3">
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <i class="fas fa-envelope-open-text text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800 leading-tight">Registration Invitations</h2>
+                    <p class="text-xs text-gray-500">Manage and track invitations</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <button onclick="exportInvitations()" class="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex-1 sm:flex-initial">
+                    <i class="fas fa-file-export mr-2"></i>Export
+                </button>
+                <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center justify-center flex-1 sm:flex-initial whitespace-nowrap">
+                    <i class="fas fa-plus mr-2"></i>Create New
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-yellow-400 p-2.5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium uppercase">Pending</p>
+                    <p class="text-lg font-bold text-gray-800">{{ stats.pending or 0 }}</p>
+                </div>
+                <i class="fas fa-clock text-yellow-400 text-xl opacity-20"></i>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-green-500 p-2.5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium uppercase">Used</p>
+                    <p class="text-lg font-bold text-gray-800">{{ stats.used or 0 }}</p>
+                </div>
+                <i class="fas fa-check-circle text-green-500 text-xl opacity-20"></i>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-gray-500 p-2.5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium uppercase">Expired</p>
+                    <p class="text-lg font-bold text-gray-800">{{ stats.expired or 0 }}</p>
+                </div>
+                <i class="fas fa-times-circle text-gray-500 text-xl opacity-20"></i>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-indigo-500 p-2.5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium uppercase">Total</p>
+                    <p class="text-lg font-bold text-gray-800">{{ stats.total or 0 }}</p>
+                </div>
+                <i class="fas fa-envelope text-indigo-500 text-xl opacity-20"></i>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+            <form method="GET" class="flex flex-col sm:flex-row gap-2">
+                <div class="relative flex-grow">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <i class="fas fa-search text-xs"></i>
+                    </span>
+                    <input type="text" name="search" value="{{ search }}" placeholder="Search by email or name..." 
+                        class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <select name="status" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500">
+                    <option value="">All Status</option>
+                    <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>Pending</option>
+                    <option value="used" {% if status_filter=='used' %}selected{% endif %}>Used</option>
+                    <option value="expired" {% if status_filter=='expired' %}selected{% endif %}>Expired</option>
+                </select>
+                <button type="submit" class="px-4 py-1.5 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-medium transition-colors">Apply</button>
+                <button type="button" onclick="clearFilters()" class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 text-sm transition-colors">Clear</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex-grow overflow-hidden flex flex-col">
+        <div class="overflow-auto custom-scrollbar flex-grow relative">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-48">Name</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Role</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden lg:table-cell">Details</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Status</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden md:table-cell">Created</th>
+                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden xl:table-cell">Expires</th>
+                        <th class="py-3 px-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-32">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                    {% for inv in invitations %}
+                    <tr class="data-row group">
+                        <td class="py-2.5 px-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-2">
+                                    {{ inv[3][0].upper() if inv[3] else '?' }}
+                                </div>
+                                <span class="font-medium text-gray-900">{{ inv[3] }}</span>
+                            </div>
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap text-gray-600">
+                            {{ inv[2] }}
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium 
+                                {% if inv[4] == 'Student' %}bg-blue-50 text-blue-700 border border-blue-100
+                                {% elif inv[4] == 'Teacher' %}bg-green-50 text-green-700 border border-green-100
+                                {% else %}bg-gray-50 text-gray-700 border border-gray-100{% endif %}">
+                                {{ inv[4] }}
+                            </span>
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap text-gray-500 text-xs hidden lg:table-cell">
+                            {% if inv[9] %}
+                                <span title="Course">{{ inv[9] }}</span>
+                            {% elif inv[10] %}
+                                <span title="Department">{{ inv[10] }}</span>
+                            {% else %}
+                                <span class="text-gray-300">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap">
+                            {% if inv[5] == 'pending' %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 badge-pending">Pending</span>
+                            {% elif inv[5] == 'used' %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Used</span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Expired</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500 hidden md:table-cell">
+                            {{ inv[6].strftime('%b %d, %Y') }}
+                        </td>
+                        <td class="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500 hidden xl:table-cell">
+                            {{ inv[7].strftime('%b %d, %Y') }}
+                        </td>
+                        
+                        <td class="py-2.5 px-4 whitespace-nowrap text-center">
+                            <div class="flex items-center justify-center gap-3">
+                                {% if inv[5] == 'pending' %}
+                                    <button type="button" onclick="copyLink('{{ inv[0] }}', this)" title="Copy Link" class="text-indigo-600 hover:text-indigo-900 transition-colors">
+                                        <i class="fas fa-copy text-lg"></i>
+                                    </button>
+                                    
+                                    <form method="POST" action="{{ url_for('admin.resend_invitation', invitation_id=inv[0]) }}" class="inline-block">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <button type="submit" title="Resend Email" class="text-blue-600 hover:text-blue-900 transition-colors">
+                                            <i class="fas fa-redo text-lg"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <form method="POST" action="{{ url_for('admin.revoke_invitation', invitation_id=inv[0]) }}" class="inline-block" onsubmit="return confirm('Revoke this invitation?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <button type="submit" title="Revoke Invitation" class="text-red-600 hover:text-red-900 transition-colors">
+                                            <i class="fas fa-ban text-lg"></i>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <span class="text-gray-300 text-xs italic">No actions</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-12 text-gray-500">
+                            <div class="flex flex-col items-center justify-center">
+                                <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
+                                <p>No invitations found.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if total_pages > 1 %}
+        <div class="bg-gray-50 border-t border-gray-200 px-4 py-2 flex items-center justify-between shrink-0">
+            <span class="text-xs text-gray-500">Page {{ page }} of {{ total_pages }}</span>
+            <div class="flex gap-1">
+                {% if page > 1 %}
+                <a href="{{ url_for('admin.manage_invitations', page=page-1, search=search, status=status_filter) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Prev</a>
+                {% endif %}
+                {% if page < total_pages %}
+                <a href="{{ url_for('admin.manage_invitations', page=page+1, search=search, status=status_filter) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="createModal" class="modal hidden fixed z-50 inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center shrink-0">
+            <h3 class="font-bold text-lg text-gray-800">Create New Invitation</h3>
+            <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" onclick="closeCreateModal()">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="overflow-y-auto p-6">
+            <form method="POST" action="{{ url_for('admin.create_invitation') }}" id="inviteForm" class="space-y-4">
+                {{ form.csrf_token }}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Full Name</label>
+                        <input name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="John Doe">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Email</label>
+                        <input name="email" type="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="john@example.com">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Role</label>
+                        <select name="role" id="roleSelect" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" onchange="toggleRoleFields()">
+                            <option value="">Select Role</option>
+                            <option value="Student">Student</option>
+                            <option value="Teacher">Teacher</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Validity (Days)</label>
+                        <input name="days_valid" type="number" value="7" min="1" max="90" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
+                    </div>
+                </div>
+
+                <div id="studentFields" class="hidden bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h4 class="text-xs font-bold text-blue-800 uppercase tracking-wide mb-3">Student Details</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Course</label>
+                            <select name="course_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
+                                <option value="">Select</option>
+                                {% for course in courses %}<option value="{{ course[0] }}">{{ course[1] }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Class</label>
+                            <select name="class_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
+                                <option value="">Select</option>
+                                {% for class in classes %}<option value="{{ class[0] }}">{{ class[1] }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Division</label>
+                            <select name="division_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
+                                <option value="">Select</option>
+                                {% for division in divisions %}<option value="{{ division[0] }}">{{ division[1] }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="teacherFields" class="hidden bg-green-50 p-4 rounded-lg border border-green-100">
+                    <h4 class="text-xs font-bold text-green-800 uppercase tracking-wide mb-3">Teacher Details</h4>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Department</label>
+                        <select name="department_id" class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-green-500 text-sm">
+                            <option value="">Select Department</option>
+                            {% for dept in departments %}<option value="{{ dept[0] }}">{{ dept[1] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-3">
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 text-sm">Cancel</button>
+                    <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 text-sm shadow-md">Create Invitation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 z-50 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 transition-all transform translate-y-2">
+    <i id="toast-icon" class="fas fa-check-circle text-green-400"></i>
+    <span id="toast-message" class="text-sm font-medium">Action completed</span>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Modal Logic
+    function openCreateModal() {
+        const modal = document.getElementById('createModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.getElementById('inviteForm').reset();
+        toggleRoleFields();
+    }
+
+    function closeCreateModal() {
+        const modal = document.getElementById('createModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Role Field Logic
+    function toggleRoleFields() {
+        const role = document.getElementById('roleSelect').value;
+        const studentFields = document.getElementById('studentFields');
+        const teacherFields = document.getElementById('teacherFields');
+
+        if (role === 'Student') {
+            studentFields.classList.remove('hidden');
+            teacherFields.classList.add('hidden');
+        } else if (role === 'Teacher') {
+            studentFields.classList.add('hidden');
+            teacherFields.classList.remove('hidden');
+        } else {
+            studentFields.classList.add('hidden');
+            teacherFields.classList.add('hidden');
+        }
+    }
+
+    // Copy Link Logic
+    async function copyLink(invitationId, button) {
+        try {
+            const resp = await fetch(`/admin/invitation/copy_link/${invitationId}`);
+            const data = await resp.json();
+
+            if (data.url) {
+                await navigator.clipboard.writeText(data.url);
+                
+                // Visual feedback on button
+                const originalIcon = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check text-green-600 text-lg"></i>';
+                showToast('Link copied to clipboard!', 'success');
+
+                setTimeout(() => {
+                    button.innerHTML = originalIcon;
+                }, 2000);
+            } else {
+                showToast('Failed to get link', 'error');
+            }
+        } catch (e) {
+            console.error('Copy error:', e);
+            showToast('Failed to copy link', 'error');
+        }
+    }
+
+    // Toast Logic
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        const icon = document.getElementById('toast-icon');
+        const messageEl = document.getElementById('toast-message');
+
+        if (type === 'success') {
+            icon.className = 'fas fa-check-circle text-green-400';
+        } else {
+            icon.className = 'fas fa-times-circle text-red-400';
+        }
+
+        messageEl.textContent = message;
+        toast.classList.remove('hidden', 'translate-y-2', 'opacity-0');
+        
+        setTimeout(() => {
+            toast.classList.add('translate-y-2', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 300);
+        }, 3000);
+    }
+
+    function clearFilters() {
+        window.location.href = '{{ url_for("admin.manage_invitations") }}';
+    }
+
+    function exportInvitations() {
+        const searchParam = new URLSearchParams(window.location.search).get('search') || '';
+        const statusParam = new URLSearchParams(window.location.search).get('status') || '';
+        let exportUrl = '/admin/invitations/export?';
+        if (searchParam) exportUrl += `search=${encodeURIComponent(searchParam)}&`;
+        if (statusParam) exportUrl += `status=${encodeURIComponent(statusParam)}`;
+        window.location.href = exportUrl;
+    }
+
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success')) {
+            showToast('Invitation created successfully!', 'success');
+        }
+    });
+</script>
+{% endblock %}

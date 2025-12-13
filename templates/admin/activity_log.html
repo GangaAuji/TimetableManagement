@@ -1,0 +1,107 @@
+{% extends "admin/_layout.html" %}
+{% block title %}User Activity Log{% endblock %}
+{% block header_title %}User Activity Log{% endblock %}
+
+{% block styles %}
+<style>
+.activity-row:nth-child(even) { background-color: rgba(243, 244, 246, 0.5); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white p-6 rounded shadow">
+  <div class="mb-4 flex justify-between items-center">
+    <h3 class="text-lg font-semibold">Activity Log</h3>
+    <div class="flex gap-2">
+      <input type="text" id="search" placeholder="Search activities..." 
+             class="px-3 py-1 border rounded">
+      <select id="type-filter" class="px-3 py-1 border rounded">
+        <option value="">All Activities</option>
+        <option value="login">Logins</option>
+        <option value="create">Creation</option>
+        <option value="edit">Updates</option>
+        <option value="delete">Deletions</option>
+      </select>
+      <a href="{{ url_for('user_mgmt_bp.export_activity_log') }}" class="px-3 py-1 border rounded bg-gray-50 hover:bg-gray-100">Export CSV</a>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left">Time</th>
+          <th class="px-4 py-2 text-left">User</th>
+          <th class="px-4 py-2 text-left">Activity</th>
+          <th class="px-4 py-2 text-left">Details</th>
+          <th class="px-4 py-2 text-left">IP Address</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for log in logs %}
+        <tr class="activity-row hover:bg-gray-50"
+            data-activity="{{ log[2] }}"
+            data-user="{{ log[7] }}"
+            data-details="{{ log[3] or '' }}">
+          <td class="px-4 py-2 text-sm">
+            {{ log[6].strftime('%Y-%m-%d %H:%M:%S') }}
+          </td>
+          <td class="px-4 py-2">
+            {{ log[8] or log[7] }}
+            {% if log[8] != log[7] %}
+            <span class="text-sm text-gray-500">({{ log[7] }})</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2">
+            <span class="px-2 py-1 text-xs font-medium rounded-full
+              {% if 'login' in log[2] %}bg-green-100 text-green-800
+              {% elif 'create' in log[2] %}bg-blue-100 text-blue-800
+              {% elif 'edit' in log[2] %}bg-yellow-100 text-yellow-800
+              {% elif 'delete' in log[2] %}bg-red-100 text-red-800
+              {% else %}bg-gray-100 text-gray-800{% endif %}">
+              {{ log[2] }}
+            </span>
+          </td>
+          <td class="px-4 py-2 text-sm">{{ log[3] or 'No details' }}</td>
+          <td class="px-4 py-2 text-sm font-mono">{{ log[4] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const search = document.getElementById('search');
+  const typeFilter = document.getElementById('type-filter');
+  const rows = document.querySelectorAll('.activity-row');
+
+  function filterLogs() {
+    const searchTerm = search.value.toLowerCase();
+    const activityType = typeFilter.value.toLowerCase();
+
+    rows.forEach(row => {
+      const user = row.dataset.user.toLowerCase();
+      const activity = row.dataset.activity.toLowerCase();
+      const details = row.dataset.details.toLowerCase();
+      
+      const matchesSearch = !searchTerm || 
+        user.includes(searchTerm) || 
+        activity.includes(searchTerm) || 
+        details.includes(searchTerm);
+        
+      const matchesType = !activityType || 
+        activity.includes(activityType);
+
+      row.classList.toggle('hidden', !matchesSearch || !matchesType);
+    });
+  }
+
+  search?.addEventListener('input', filterLogs);
+  typeFilter?.addEventListener('change', filterLogs);
+});
+</script>
+{% endblock %}

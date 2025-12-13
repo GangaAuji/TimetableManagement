@@ -1,0 +1,82 @@
+2025-11-30 20:01:42,656 - app - INFO - Blueprints registered successfully.
+2025-11-30 20:01:42,658 - app - INFO - College Timetable Management System application created.
+2025-11-30 20:01:45,572 - app - INFO - generate_timetable POST received; form keys: ['csrf_token', 'course', 'class', 'division', 'week_start_date', 'lecture_minutes', 'day_start', 'day_end', 'break_start', 'break_duration', 'working_days']
+2025-11-30 20:01:45,581 - app - INFO - Starting timetable generation for course=1 class=1 division=1
+2025-11-30 20:01:45,602 - app - INFO - Fetched 4 subject_rows for generation
+2025-11-30 20:01:45,607 - app - INFO - Fetched 4 allocation_rows for 4 subjects
+2025-11-30 20:01:45,615 - app - INFO - Fetched 5 proxy_pool_rows
+2025-11-30 20:01:45,616 - app - INFO - Built 24 session requirements (theory/practical blocks) to schedule
+2025-11-30 20:01:45,633 - app - INFO - Loaded rooms_by_type keys: ['Classroom', 'Laboratory']
+2025-11-30 20:01:45,643 - app - INFO - Scheduling for day Monday (2025-12-01)
+2025-11-30 20:01:45,647 - app - INFO - Assigned subject 201 to faculty 33 on Monday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,648 - app - INFO - Assigned subject 202 to faculty 33 on Monday 08:30-09:15 (room=101)
+2025-11-30 20:01:45,650 - app - INFO - Assigned subject 302 to faculty 35 on Monday 09:15-10:00 (room=101)
+2025-11-30 20:01:45,650 - app - INFO - Assigned subject 302 to faculty 35 on Monday 10:20-11:05 (room=103)
+2025-11-30 20:01:45,654 - app - INFO - Scheduling for day Tuesday (2025-12-02)
+2025-11-30 20:01:45,655 - app - INFO - Assigned subject 201 to faculty 33 on Tuesday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,657 - app - INFO - Assigned subject 202 to faculty 33 on Tuesday 08:30-09:15 (room=101)
+2025-11-30 20:01:45,657 - app - INFO - Assigned subject 302 to faculty 35 on Tuesday 09:15-10:00 (room=101)
+2025-11-30 20:01:45,662 - app - INFO - Assigned subject 302 to faculty 35 on Tuesday 10:20-11:05 (room=103)
+2025-11-30 20:01:45,664 - app - INFO - Scheduling for day Wednesday (2025-12-03)
+2025-11-30 20:01:45,664 - app - INFO - Assigned subject 102 to faculty 31 on Wednesday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,664 - app - INFO - Assigned subject 102 to faculty 31 on Wednesday 08:30-09:15 (room=103)
+2025-11-30 20:01:45,664 - app - INFO - Assigned subject 201 to faculty 38 on Wednesday 09:15-10:00 (room=101)
+2025-11-30 20:01:45,664 - app - INFO - Assigned subject 201 to faculty 38 on Wednesday 10:20-11:05 (room=103)
+2025-11-30 20:01:45,671 - app - INFO - Scheduling for day Thursday (2025-12-04)
+2025-11-30 20:01:45,671 - app - INFO - Assigned subject 202 to faculty 33 on Thursday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,675 - app - INFO - Assigned subject 202 to faculty 33 on Thursday 08:30-09:15 (room=103)
+2025-11-30 20:01:45,678 - app - INFO - Assigned subject 102 to faculty 31 on Thursday 09:15-10:00 (room=101)
+2025-11-30 20:01:45,678 - app - INFO - Assigned subject 102 to faculty 31 on Thursday 10:20-11:05 (room=103)
+2025-11-30 20:01:45,682 - app - INFO - Scheduling for day Friday (2025-12-05)
+2025-11-30 20:01:45,683 - app - INFO - Assigned subject 302 to faculty 35 on Friday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,685 - app - INFO - Assigned subject 201 to faculty 38 on Friday 08:30-09:15 (room=101)
+2025-11-30 20:01:45,685 - app - INFO - Assigned subject 201 to faculty 38 on Friday 09:15-10:00 (room=103)
+2025-11-30 20:01:45,687 - app - INFO - Assigned subject 102 to faculty 31 on Friday 10:20-11:05 (room=101)
+2025-11-30 20:01:45,687 - app - INFO - Scheduling for day Saturday (2025-12-06)
+2025-11-30 20:01:45,690 - app - INFO - Assigned subject 202 to faculty 33 on Saturday 07:45-08:30 (room=101)
+2025-11-30 20:01:45,694 - app - INFO - Assigned subject 202 to faculty 33 on Saturday 08:30-09:15 (room=103)
+2025-11-30 20:01:45,696 - app - INFO - Assigned subject 102 to faculty 31 on Saturday 09:15-10:00 (room=101)
+2025-11-30 20:01:45,696 - app - INFO - Assigned subject 302 to faculty 35 on Saturday 11:05-11:50 (room=101)
+2025-11-30 20:01:45,705 - app - INFO - Archived 24 old timetable entries to history
+2025-11-30 20:01:45,744 - app - INFO - Timetable generation finished in 0.16s; status=success
+2025-11-30 20:11:01,134 - app - INFO - Blueprints registered successfully.
+2025-11-30 20:11:01,134 - app - INFO - College Timetable Management System application created.
+2025-11-30 20:11:06,997 - app - INFO - generate_timetable POST received; form keys: ['csrf_token', 'course', 'class', 'division', 'week_start_date', 'lecture_minutes', 'day_start', 'day_end', 'break_start', 'break_duration', 'working_days']
+2025-11-30 20:11:07,000 - app - INFO - Starting timetable generation for course=1 class=1 division=1
+2025-11-30 20:11:07,017 - app - INFO - Fetched 4 subject_rows for generation
+2025-11-30 20:11:07,022 - app - INFO - Fetched 4 allocation_rows for 4 subjects
+2025-11-30 20:11:07,027 - app - INFO - Fetched 5 proxy_pool_rows
+2025-11-30 20:11:07,030 - app - INFO - Built 24 session requirements (theory/practical blocks) to schedule
+2025-11-30 20:11:07,053 - app - INFO - Loaded rooms_by_type keys: ['Classroom', 'Laboratory']
+2025-11-30 20:11:07,058 - app - INFO - Scheduling for day Monday (2025-12-01)
+2025-11-30 20:11:07,058 - app - INFO - Assigned subject 201 to faculty 38 on Monday 07:45-08:30 (room=102)
+2025-11-30 20:11:07,064 - app - INFO - Assigned subject 201 to faculty 38 on Monday 08:30-09:15 (room=103)
+2025-11-30 20:11:07,066 - app - INFO - Assigned subject 202 to faculty 33 on Monday 09:15-10:00 (room=102)
+2025-11-30 20:11:07,068 - app - INFO - Assigned subject 202 to faculty 33 on Monday 10:20-11:05 (room=202)
+2025-11-30 20:11:07,073 - app - INFO - Assigned subject 302 to faculty 35 on Monday 11:05-11:50 (room=101)
+2025-11-30 20:11:07,075 - app - INFO - Assigned subject 302 to faculty 35 on Monday 11:50-12:35 (room=103)
+2025-11-30 20:11:07,075 - app - INFO - Scheduling for day Tuesday (2025-12-02)
+2025-11-30 20:11:07,078 - app - INFO - Assigned subject 201 to faculty 38 on Tuesday 07:45-08:30 (room=102)
+2025-11-30 20:11:07,080 - app - INFO - Assigned subject 201 to faculty 38 on Tuesday 08:30-09:15 (room=103)
+2025-11-30 20:11:07,082 - app - INFO - Assigned subject 202 to faculty 33 on Tuesday 09:15-10:00 (room=102)
+2025-11-30 20:11:07,083 - app - INFO - Assigned subject 202 to faculty 33 on Tuesday 10:20-11:05 (room=202)
+2025-11-30 20:11:07,083 - app - INFO - Assigned subject 302 to faculty 35 on Tuesday 11:05-11:50 (room=101)
+2025-11-30 20:11:07,091 - app - INFO - Assigned subject 302 to faculty 35 on Tuesday 11:50-12:35 (room=103)
+2025-11-30 20:11:07,093 - app - INFO - Scheduling for day Wednesday (2025-12-03)
+2025-11-30 20:11:07,094 - app - INFO - Assigned subject 201 to faculty 38 on Wednesday 07:45-08:30 (room=102)
+2025-11-30 20:11:07,097 - app - INFO - Assigned subject 202 to faculty 33 on Wednesday 08:30-09:15 (room=101)
+2025-11-30 20:11:07,097 - app - INFO - Assigned subject 102 to faculty 31 on Wednesday 09:15-10:00 (room=102)
+2025-11-30 20:11:07,097 - app - INFO - Assigned subject 102 to faculty 31 on Wednesday 10:20-11:05 (room=202)
+2025-11-30 20:11:07,101 - app - INFO - Assigned subject 302 to faculty 35 on Wednesday 11:05-11:50 (room=101)
+2025-11-30 20:11:07,107 - app - INFO - Assigned subject 102 to faculty 31 on Wednesday 11:50-12:35 (room=101)
+2025-11-30 20:11:07,109 - app - INFO - Scheduling for day Thursday (2025-12-04)
+2025-11-30 20:11:07,110 - app - INFO - Assigned subject 102 to faculty 31 on Thursday 07:45-08:30 (room=102)
+2025-11-30 20:11:07,112 - app - INFO - Assigned subject 102 to faculty 31 on Thursday 08:30-09:15 (room=202)
+2025-11-30 20:11:07,112 - app - INFO - Assigned subject 201 to faculty 38 on Thursday 09:15-10:00 (room=102)
+2025-11-30 20:11:07,115 - app - INFO - Assigned subject 202 to faculty 33 on Thursday 10:20-11:05 (room=101)
+2025-11-30 20:11:07,116 - app - INFO - Assigned subject 102 to faculty 31 on Thursday 11:05-11:50 (room=101)
+2025-11-30 20:11:07,116 - app - INFO - Assigned subject 302 to faculty 35 on Thursday 11:50-12:35 (room=101)
+2025-11-30 20:11:07,123 - app - INFO - Scheduling for day Friday (2025-12-05)
+2025-11-30 20:11:07,124 - app - INFO - Scheduling for day Saturday (2025-12-06)
+2025-11-30 20:11:07,131 - app - INFO - Archived 24 old timetable entries to history
+2025-11-30 20:11:07,192 - app - INFO - Timetable generation finished in 0.19s; status=success

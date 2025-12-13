@@ -1,0 +1,204 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Proxy Log{% endblock %}
+{% block header_title %}Faculty Absence & Proxy Log{% endblock %}
+
+{% block content %}
+<!-- Summary Statistics -->
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+    <div class="bg-blue-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-blue-600">{{ summary_stats.total_records }}</div>
+        <div class="text-sm text-blue-800">Total Records</div>
+    </div>
+    <div class="bg-green-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-green-600">{{ summary_stats.assigned_count }}</div>
+        <div class="text-sm text-green-800">Assigned</div>
+    </div>
+    <div class="bg-red-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-red-600">{{ summary_stats.unassigned_count }}</div>
+        <div class="text-sm text-red-800">Unassigned</div>
+    </div>
+    <div class="bg-yellow-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-yellow-600">{{ summary_stats.pending_approval }}</div>
+        <div class="text-sm text-yellow-800">Pending Approval</div>
+    </div>
+    <div class="bg-emerald-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-emerald-600">{{ summary_stats.approved_count }}</div>
+        <div class="text-sm text-emerald-800">Approved</div>
+    </div>
+    <div class="bg-gray-100 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-gray-600">{{ summary_stats.rejected_count }}</div>
+        <div class="text-sm text-gray-800">Rejected</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+    <h3 class="text-lg font-semibold text-gray-700 mb-4">Filters</h3>
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select name="status" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                <option value="">All Statuses</option>
+                <option value="ASSIGNED" {{ 'selected' if status_filter == 'ASSIGNED' }}>Assigned</option>
+                <option value="UNASSIGNED" {{ 'selected' if status_filter == 'UNASSIGNED' }}>Unassigned</option>
+                <option value="PENDING" {{ 'selected' if status_filter == 'PENDING' }}>Pending</option>
+                <option value="REJECTED" {{ 'selected' if status_filter == 'REJECTED' }}>Rejected</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Approval Status</label>
+            <select name="approval_status" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                <option value="">All Approval Status</option>
+                <option value="PENDING" {{ 'selected' if approval_filter == 'PENDING' }}>Pending</option>
+                <option value="APPROVED" {{ 'selected' if approval_filter == 'APPROVED' }}>Approved</option>
+                <option value="REJECTED" {{ 'selected' if approval_filter == 'REJECTED' }}>Rejected</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Date From</label>
+            <input type="date" name="date_from" value="{{ date_from }}" class="w-full border border-gray-300 rounded-md px-3 py-2">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Date To</label>
+            <input type="date" name="date_to" value="{{ date_to }}" class="w-full border border-gray-300 rounded-md px-3 py-2">
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                Apply Filters
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Proxy Log Table -->
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold text-gray-700">Proxy Assignment Records</h3>
+        <div class="text-sm text-gray-500">
+            Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} to 
+            {{ pagination.page * pagination.per_page if pagination.page * pagination.per_page < pagination.total else pagination.total }} 
+            of {{ pagination.total }} entries
+        </div>
+    </div>
+    
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white">
+            <thead class="bg-gray-200">
+                <tr>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Date</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Original Faculty</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Assigned Proxy</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Subject</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Class</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Time</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Status</th>
+                    <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Approval</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for log in proxy_logs %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-3 px-4">
+                        <div class="text-sm font-medium text-gray-900">{{ log.absence_date.strftime('%Y-%m-%d') }}</div>
+                        <div class="text-xs text-gray-500">{{ log.day_of_week }}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="text-sm font-medium text-gray-900">{{ log.original_faculty_name }}</div>
+                        <div class="text-xs text-gray-500">{{ log.original_employee_id }}</div>
+                        {% if log.department_name %}
+                        <div class="text-xs text-blue-600">{{ log.department_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4">
+                        {% if log.proxy_faculty_name %}
+                            <div class="text-sm font-medium text-gray-900">{{ log.proxy_faculty_name }}</div>
+                            <div class="text-xs text-gray-500">{{ log.proxy_employee_id }}</div>
+                        {% else %}
+                            <span class="text-gray-400 italic">No proxy assigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="text-sm font-medium text-gray-900">{{ log.subject_name }}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="text-sm text-gray-900">{{ log.class_name }}</div>
+                        <div class="text-xs text-gray-500">{{ log.division_name }}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="text-sm text-gray-900">
+                            {% if log.start_time is string %}
+                                {{ log.start_time }} - {{ log.end_time }}
+                            {% else %}
+                                {{ log.start_time | format_time_12hr }} - {{ log.end_time | format_time_12hr }}
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="py-3 px-4">
+                        {% if log.status == 'ASSIGNED' %}
+                            <span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded-full">{{ log.status }}</span>
+                        {% elif log.status == 'UNASSIGNED' %}
+                            <span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-200 rounded-full">{{ log.status }}</span>
+                        {% else %}
+                            <span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full">{{ log.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4">
+                        {% if log.approval_status == 'APPROVED' %}
+                            <span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">{{ log.approval_status }}</span>
+                            {% if log.approval_date %}
+                            <div class="text-xs text-gray-500 mt-1">{{ log.approval_date.strftime('%Y-%m-%d') }}</div>
+                            {% endif %}
+                            {% if log.approved_by_username %}
+                            <div class="text-xs text-blue-600">by {{ log.approved_by_username }}</div>
+                            {% endif %}
+                        {% elif log.approval_status == 'REJECTED' %}
+                            <span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">{{ log.approval_status }}</span>
+                            {% if log.approval_notes %}
+                            <div class="text-xs text-gray-500 mt-1" title="{{ log.approval_notes }}">{{ log.approval_notes[:30] }}...</div>
+                            {% endif %}
+                        {% else %}
+                            <span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full">{{ log.approval_status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-gray-500">No proxy records found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if pagination.total_pages > 1 %}
+    <div class="flex justify-between items-center mt-6">
+        <div class="text-sm text-gray-700">
+            Page {{ pagination.page }} of {{ pagination.total_pages }}
+        </div>
+        <div class="flex space-x-2">
+            {% if pagination.has_prev %}
+                <a href="{{ url_for('admin.proxy_log', page=pagination.prev_num, status=status_filter, approval_status=approval_filter, date_from=date_from, date_to=date_to) }}" 
+                   class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Previous</a>
+            {% endif %}
+            
+            {% for page_num in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
+                {% if page_num == pagination.page %}
+                    <span class="px-3 py-2 text-sm bg-blue-600 text-white rounded">{{ page_num }}</span>
+                {% else %}
+                    <a href="{{ url_for('admin.proxy_log', page=page_num, status=status_filter, approval_status=approval_filter, date_from=date_from, date_to=date_to) }}" 
+                       class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">{{ page_num }}</a>
+                {% endif %}
+            {% endfor %}
+            
+            {% if pagination.has_next %}
+                <a href="{{ url_for('admin.proxy_log', page=pagination.next_num, status=status_filter, approval_status=approval_filter, date_from=date_from, date_to=date_to) }}" 
+                   class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

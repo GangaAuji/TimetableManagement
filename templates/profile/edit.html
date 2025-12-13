@@ -1,0 +1,131 @@
+{% if session.role == 'Student' %}
+{% extends "student/_layout.html" %}
+{% elif session.role == 'Teacher' %}
+{% extends "teacher/_layout.html" %}
+{% else %}
+{% extends "admin/_layout.html" %}
+{% endif %}
+
+{% block title %}Edit Profile{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-6">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-between items-center">
+                    <h5 class="mb-0"><i class="fas fa-user-edit"></i> Edit Profile</h5>
+                    <a href="{{ url_for('profile.view_profile') }}" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Profile
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <!-- Profile Photo -->
+                        <div class="mb-4 text-center">
+                            <div class="mb-3">
+                                <img id="profile-preview" 
+                                     src="{{ url_for('static', filename=user.profile_photo) }}" 
+                                     alt="Profile Photo" 
+                                     class="rounded-circle"
+                                     style="width: 120px; height: 120px; object-fit: cover;"
+                                     onerror="this.src='{{ url_for('static', filename='default-avatar.png') }}'">
+                            </div>
+                            <div>
+                                <label for="profile_photo" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-camera"></i> Change Photo
+                                </label>
+                                <input type="file" 
+                                       id="profile_photo" 
+                                       name="profile_photo" 
+                                       accept="image/*" 
+                                       class="d-none"
+                                       onchange="previewImage(this)">
+                                <p class="text-muted small mt-2">Allowed: JPG, PNG, GIF. Max 5MB</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Basic Information -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" value="{{ user.username }}" disabled>
+                                <small class="text-muted">Username cannot be changed</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Role</label>
+                                <input type="text" class="form-control" value="{{ user.role }}" disabled>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Email *</label>
+                                <input type="email" 
+                                       name="email" 
+                                       class="form-control" 
+                                       value="{{ user.email or '' }}" 
+                                       required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Phone</label>
+                                <input type="tel" 
+                                       name="phone" 
+                                       class="form-control" 
+                                       value="{{ user.phone or '' }}"
+                                       placeholder="+91 1234567890">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Date of Birth</label>
+                            <input type="date" 
+                                   name="date_of_birth" 
+                                   class="form-control" 
+                                   value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Address</label>
+                            <textarea name="address" 
+                                      class="form-control" 
+                                      rows="3" 
+                                      placeholder="Enter your full address">{{ user.address or '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label">Bio</label>
+                            <textarea name="bio" 
+                                      class="form-control" 
+                                      rows="4" 
+                                      placeholder="Tell us about yourself...">{{ user.bio or '' }}</textarea>
+                            <small class="text-muted">Max 500 characters</small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('profile.view_profile') }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('profile-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+{% endblock %}

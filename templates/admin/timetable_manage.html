@@ -1,0 +1,613 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Manage Timetable{% endblock %}
+{% block header_title %}Timetable Management{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Row hover effect */
+.data-row {
+    transition: all 0.3s ease;
+}
+.data-row:hover {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.03) 0%, rgba(59, 130, 246, 0.03) 100%);
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 0 #10b981;
+}
+
+/* Action button hover */
+.action-btn {
+    transition: all 0.2s ease;
+}
+.action-btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Grid cell colors */
+.grid-cell {
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    min-height: 60px;
+    background: white;
+    transition: all 0.2s;
+}
+
+.grid-cell:hover {
+    background: #f9fafb;
+    box-shadow: inset 0 0 0 2px #10b981;
+}
+
+.session-card {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* View toggle buttons */
+.view-toggle {
+    display: inline-flex;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.view-toggle button {
+    padding: 8px 16px;
+    background: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.view-toggle button.active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.view-toggle button:not(.active):hover {
+    background: #f3f4f6;
+}
+
+/* Loading spinner */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in max-w-7xl mx-auto">
+
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 rounded-lg shadow-lg p-4 text-white">
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <div class="mb-4 md:mb-0">
+                <h2 class="text-2xl font-bold mb-1 flex items-center">
+                    <i class="fas fa-calendar-alt mr-2"></i>
+                    Timetable Management
+                </h2>
+                <p class="text-emerald-100 text-sm">Manage class schedules and room assignments</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button onclick="downloadTimetableCsv()" class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-4 py-2 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center text-sm">
+                    <i class="fas fa-download mr-2"></i>Download CSV
+                </button>
+                <a href="{{ url_for('admin.rooms_utilization_csv') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-4 py-2 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center text-sm">
+                    <i class="fas fa-chart-bar mr-2"></i>Room Utilization
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
+        <div class="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                <i class="fas fa-filter text-emerald-600 mr-2"></i>
+                Select Class & Division
+            </h3>
+        </div>
+        <div class="p-5">
+            <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4" id="filterForm">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Course <span class="text-red-500">*</span>
+                    </label>
+                    <select name="course" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm">
+                        <option value="">Select course</option>
+                        {% for c in courses %}
+                        <option value="{{ c[0] }}" {% if selected_course and selected_course|string == c[0]|string %}selected{% endif %}>{{ c[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Class <span class="text-red-500">*</span>
+                    </label>
+                    <select name="class" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm">
+                        <option value="">Select class</option>
+                        {% for cl in classes %}
+                        <option value="{{ cl[0] }}" {% if selected_class and selected_class|string == cl[0]|string %}selected{% endif %}>{{ cl[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Division <span class="text-red-500">*</span>
+                    </label>
+                    <select name="division" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm">
+                        <option value="">Select division</option>
+                        {% for d in divisions %}
+                        <option value="{{ d[0] }}" {% if selected_division and selected_division|string == d[0]|string %}selected{% endif %}>{{ d[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-md hover:shadow-lg font-medium text-sm transition-all">
+                        <i class="fas fa-search mr-1"></i>Load Timetable
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if selected_course and selected_class and selected_division %}
+    
+    <!-- Add Session Card -->
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
+        <div class="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                <i class="fas fa-plus-circle text-emerald-600 mr-2"></i>
+                Add New Session
+            </h3>
+        </div>
+        <div class="p-5">
+            <form method="POST" class="grid grid-cols-1 md:grid-cols-6 gap-4" id="addSessionForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="course" value="{{ selected_course }}" />
+                <input type="hidden" name="class" value="{{ selected_class }}" />
+                <input type="hidden" name="division" value="{{ selected_division }}" />
+                <input type="hidden" name="action" value="add" />
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Day</label>
+                    <select name="day_of_week" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm">
+                        {% for d in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] %}
+                        <option value="{{ d }}">{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Start Time</label>
+                    <input type="time" name="start_time" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm" required />
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">End Time</label>
+                    <input type="time" name="end_time" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm" required />
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Subject</label>
+                    <select name="subject_id" id="subject-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm" required>
+                        <option value="">Select subject</option>
+                        {% for s in subjects %}
+                        <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Faculty</label>
+                    <select name="faculty_id" id="faculty-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm">
+                        <option value="">Auto-assign</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-end">
+                    <button type="submit" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg font-medium text-sm transition-all">
+                        <i class="fas fa-plus mr-1"></i>Add
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Toggle and Sessions -->
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
+        <div class="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border-b border-gray-200">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-clock text-emerald-600 mr-2"></i>
+                    Timetable Sessions
+                </h3>
+                <div class="view-toggle">
+                    <button type="button" onclick="switchView('list')" id="listViewBtn" class="active">
+                        <i class="fas fa-list mr-1"></i>List View
+                    </button>
+                    <button type="button" onclick="switchView('grid')" id="gridViewBtn">
+                        <i class="fas fa-th mr-1"></i>Grid View
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- List View -->
+        <div id="listView" class="p-4">
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                        <tr>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Day</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Time</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Subject</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Faculty</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Room</th>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for r in sessions %}
+                        <tr class="data-row">
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    <i class="fas fa-calendar-day mr-1"></i>{{ r.day }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap text-sm text-gray-600">
+                                <i class="fas fa-clock text-gray-400 mr-1 text-xs"></i>
+                                {{ r.start_time }} - {{ r.end_time }}
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                <span class="font-medium text-gray-800 text-sm">{{ r.subject }}</span>
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap text-sm text-gray-600">
+                                <i class="fas fa-chalkboard-teacher text-gray-400 mr-1 text-xs"></i>
+                                {{ r.faculty }}
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                {% if r.room %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-door-open mr-1"></i>{{ r.room }}
+                                </span>
+                                {% else %}
+                                <span class="text-xs text-gray-400 italic">Not assigned</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 px-3 whitespace-nowrap">
+                                <div class="flex items-center gap-1">
+                                    <button onclick="openAssignRoomModal({{ r.id }}, '{{ r.subject }}', '{{ r.day }}', '{{ r.start_time }}', '{{ r.end_time }}')"
+                                            class="action-btn inline-flex items-center px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium shadow-sm">
+                                        <i class="fas fa-door-open mr-1"></i>Room
+                                    </button>
+                                    <form method="POST" onsubmit="return confirm('Delete this session?')" class="inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="action" value="delete" />
+                                        <input type="hidden" name="timetable_id" value="{{ r.id }}" />
+                                        <button type="submit" class="action-btn inline-flex items-center px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-medium shadow-sm">
+                                            <i class="fas fa-trash mr-1"></i>Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-10 text-gray-500">
+                                <i class="fas fa-calendar-times text-5xl text-gray-300 mb-3"></i>
+                                <p class="text-base font-medium">No sessions found</p>
+                                <p class="text-gray-400 text-sm">Add your first session above</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Grid View -->
+        {% if time_columns and time_columns|length > 0 %}
+        <div id="gridView" class="p-4 hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full border-collapse">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                        <tr>
+                            <th class="py-2 px-3 text-left text-xs font-bold text-gray-600 uppercase border">Day</th>
+                            {% for col in time_columns %}
+                            <th class="py-2 px-3 text-center text-xs font-bold text-gray-600 uppercase border">{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in grid_rows %}
+                        <tr>
+                            <td class="py-2 px-3 font-semibold text-gray-800 border bg-gray-50">{{ row.day }}</td>
+                            {% for cell in row.cells %}
+                            <td class="grid-cell text-center text-xs">
+                                {% if cell and cell != '-' %}
+                                <div class="session-card">
+                                    <div class="font-semibold">{{ cell }}</div>
+                                </div>
+                                {% else %}
+                                <span class="text-gray-300">—</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
+        <div class="p-12 text-center">
+            <i class="fas fa-calendar-alt text-6xl text-gray-300 mb-4"></i>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">No Selection Made</h3>
+            <p class="text-gray-600">Please select course, class, and division to view and manage the timetable.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Room Assignment Modal -->
+<div id="assignRoomModal" class="modal hidden fixed z-50 inset-0 bg-gray-900 bg-opacity-50 items-center justify-center">
+    <div class="modal-content bg-white rounded-lg shadow-2xl border-0 w-full max-w-md mx-4">
+        <div class="modal-header bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-t-lg p-4">
+            <h3 class="modal-title font-bold text-lg flex items-center">
+                <i class="fas fa-door-open mr-2"></i>Assign Room
+            </h3>
+            <button type="button" onclick="closeAssignRoomModal()" class="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        <form id="assignRoomForm" method="POST">
+            <div class="modal-body p-5 space-y-4">
+                <input type="hidden" id="timetableId" name="timetable_id">
+                <input type="hidden" name="action" value="assign_room">
+                
+                <div class="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p id="assignRoomDetails" class="text-sm text-blue-800 font-medium"></p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Select Room <span class="text-red-500">*</span>
+                    </label>
+                    <select id="roomId" name="room_id" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                        <option value="">Choose a room</option>
+                        {% for room in rooms %}
+                        <option value="{{ room.id }}">
+                            {{ room.room_type }} {{ room.room_number or room.room_name or room.name or room.room_no or room.number }} (Capacity: {{ room.capacity }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer bg-gray-50 rounded-b-lg p-4 flex gap-2">
+                <button type="button" onclick="closeAssignRoomModal()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium text-sm transition-all">
+                    Cancel
+                </button>
+                <button type="submit" class="flex-1 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg font-medium text-sm transition-all">
+                    <i class="fas fa-check mr-1"></i>Assign
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Timetable sessions data
+const TIMETABLE_SESSIONS = {{ sessions|tojson|default("[]")|safe }};
+
+// View switching
+function switchView(view) {
+    const listView = document.getElementById('listView');
+    const gridView = document.getElementById('gridView');
+    const listBtn = document.getElementById('listViewBtn');
+    const gridBtn = document.getElementById('gridViewBtn');
+    
+    if (view === 'list') {
+        listView.classList.remove('hidden');
+        gridView.classList.add('hidden');
+        listBtn.classList.add('active');
+        gridBtn.classList.remove('active');
+    } else {
+        listView.classList.add('hidden');
+        gridView.classList.remove('hidden');
+        listBtn.classList.remove('active');
+        gridBtn.classList.add('active');
+    }
+}
+
+// Cascading selects
+document.addEventListener('DOMContentLoaded', function() {
+    const courseSel = document.querySelector('select[name="course"]');
+    const classSel = document.querySelector('select[name="class"]');
+    const divisionSel = document.querySelector('select[name="division"]');
+
+    async function loadClasses() {
+        const cid = courseSel.value;
+        classSel.innerHTML = '<option value="">Loading...</option>';
+        divisionSel.innerHTML = '<option value="">Select division</option>';
+        
+        if (!cid) {
+            classSel.innerHTML = '<option value="">Select class</option>';
+            return;
+        }
+        
+        try {
+            const resp = await fetch(`{{ url_for('admin.api_classes') }}?course_id=${cid}`);
+            const items = await resp.json();
+            classSel.innerHTML = '<option value="">Select class</option>';
+            items.forEach(i => {
+                const opt = document.createElement('option');
+                opt.value = i.id;
+                opt.textContent = i.name;
+                classSel.appendChild(opt);
+            });
+        } catch (e) {
+            classSel.innerHTML = '<option value="">Error loading classes</option>';
+        }
+    }
+
+    async function loadDivisions() {
+        const clid = classSel.value;
+        divisionSel.innerHTML = '<option value="">Loading...</option>';
+        
+        if (!clid) {
+            divisionSel.innerHTML = '<option value="">Select division</option>';
+            return;
+        }
+        
+        try {
+            const resp = await fetch(`{{ url_for('admin.api_divisions') }}?class_id=${clid}`);
+            const items = await resp.json();
+            divisionSel.innerHTML = '<option value="">Select division</option>';
+            items.forEach(i => {
+                const opt = document.createElement('option');
+                opt.value = i.id;
+                opt.textContent = i.name;
+                divisionSel.appendChild(opt);
+            });
+        } catch (e) {
+            divisionSel.innerHTML = '<option value="">Error loading divisions</option>';
+        }
+    }
+
+    courseSel?.addEventListener('change', loadClasses);
+    classSel?.addEventListener('change', loadDivisions);
+});
+
+// Load faculty by subject
+document.addEventListener('DOMContentLoaded', function() {
+    const subjectSel = document.getElementById('subject-select');
+    const facultySel = document.getElementById('faculty-select');
+    
+    if (subjectSel) {
+        subjectSel.addEventListener('change', async function() {
+            const sid = this.value;
+            facultySel.innerHTML = '<option value="">Loading...</option>';
+            
+            if (!sid) {
+                facultySel.innerHTML = '<option value="">Auto-assign</option>';
+                return;
+            }
+            
+            try {
+                const resp = await fetch(`{{ url_for('admin.api_faculty_by_subject') }}?subject_id=${sid}`);
+                const items = await resp.json();
+                facultySel.innerHTML = '<option value="">Auto-assign</option>';
+                items.forEach(i => {
+                    const opt = document.createElement('option');
+                    opt.value = i.id;
+                    opt.textContent = i.name;
+                    facultySel.appendChild(opt);
+                });
+            } catch (e) {
+                facultySel.innerHTML = '<option value="">Error loading faculty</option>';
+            }
+        });
+    }
+});
+
+// CSV download
+function downloadTimetableCsv() {
+    if (!TIMETABLE_SESSIONS || TIMETABLE_SESSIONS.length === 0) {
+        alert('No sessions to export');
+        return;
+    }
+    
+    const rows = [['Day', 'Start Time', 'End Time', 'Subject', 'Faculty', 'Room']];
+    TIMETABLE_SESSIONS.forEach(s => {
+        rows.push([
+            s.day || '',
+            s.start_time || '',
+            s.end_time || '',
+            s.subject || '',
+            s.faculty || '',
+            s.room || ''
+        ]);
+    });
+    
+    const csv = rows.map(r => r.map(v => {
+        const val = (v ?? '').toString().replace(/"/g, '""');
+        return `"${val}"`;
+    }).join(',')).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'timetable_' + new Date().toISOString().split('T')[0] + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Room assignment modal
+function openAssignRoomModal(id, subject, day, start, end) {
+    document.getElementById('timetableId').value = id;
+    document.getElementById('assignRoomDetails').innerHTML = `
+        <i class="fas fa-book mr-2"></i><strong>${subject}</strong><br>
+        <i class="fas fa-calendar mr-2"></i>${day} | ${start} - ${end}
+    `;
+    
+    const modal = document.getElementById('assignRoomModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeAssignRoomModal() {
+    const modal = document.getElementById('assignRoomModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// Close modal on backdrop click
+document.getElementById('assignRoomModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeAssignRoomModal();
+    }
+});
+
+// Close modal on ESC key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('assignRoomModal');
+        if (!modal.classList.contains('hidden')) {
+            closeAssignRoomModal();
+        }
+    }
+});
+
+// Form validation
+document.getElementById('addSessionForm')?.addEventListener('submit', function(e) {
+    const startTime = this.querySelector('[name="start_time"]').value;
+    const endTime = this.querySelector('[name="end_time"]').value;
+    
+    if (startTime && endTime && startTime >= endTime) {
+        e.preventDefault();
+        alert('End time must be after start time');
+        return false;
+    }
+});
+</script>
+{% endblock %}

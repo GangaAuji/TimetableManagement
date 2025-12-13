@@ -1,0 +1,578 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Manage Subjects{% endblock %}
+{% block header_title %}Subjects Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-6">
+    <div class="bg-white shadow-md rounded-lg">
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-900">Subjects</h2>
+                <p class="text-gray-600 mt-1">Manage curriculum subjects, credits, and workload</p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <a href="{{ url_for('admin.manage_academics') }}"
+                    class="bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    <span>Back</span>
+                </a>
+                <button onclick="showAddModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center">
+                    <i class="fas fa-plus mr-2"></i> Add Subject
+                </button>
+            </div>
+        </div>
+
+        <!-- Class-Based Filters -->
+        <div class="p-6 border-b border-gray-200 bg-gray-50">
+            <form method="GET" action="{{ url_for('academic.manage_subjects') }}" class="flex items-end gap-4">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Class</label>
+                    <select name="class_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">All Classes</option>
+                        {% for cls in classes %}
+                        <option value="{{ cls.id }}" {% if filter_class_id == cls.id %}selected{% endif %}>
+                            {{ cls.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Course</label>
+                    <select name="course_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">All Courses</option>
+                        {% for course in courses %}
+                        <option value="{{ course.id }}" {% if filter_course_id == course.id %}selected{% endif %}>
+                            {{ course.name }} ({{ course.program }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md">
+                        <i class="fas fa-filter mr-2"></i>Apply Filters
+                    </button>
+                    <a href="{{ url_for('academic.manage_subjects') }}" class="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md">
+                        <i class="fas fa-times mr-2"></i>Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Table -->
+        <div class="p-6">
+            <div class="overflow-x-auto">
+                <table id="subjectsTable" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Semester</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Credits</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lec/Wk</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prac Hrs/Wk</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Faculty</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for subj in subjects %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-medium text-gray-900">{{ subj.name }}</div>
+                                {% if subj.is_elective %}
+                                <span class="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">Elective</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ subj.course_code or '-' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.course_name }} <span class="text-xs text-gray-400">({{ subj.program }})</span></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.class_name or '-' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.semester_name or '-' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.credits }} <span class="text-xs text-gray-400">(T {{ subj.theory_credits }}, P {{ subj.practical_credits }})</span></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.course_type }} / {{ subj.theory_practical }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.lectures_per_week }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ subj.practical_hours_per_week }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate" title="{{ subj.faculty_names or '-' }}">{{ subj.faculty_names or '-' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button data-subject='{{ subj|tojson }}' onclick="editSubjectFromDataset(this)" class="text-blue-600 hover:text-blue-900 mr-3"><i class="fas fa-edit"></i></button>
+                                <button data-id="{{ subj.id }}" data-name="{{ subj.name }}" onclick="deleteSubjectFromDataset(this)" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="11" class="px-6 py-4 text-center text-gray-500">No subjects found. Click "Add Subject" to create one.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div id="addModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-8 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center pb-3 border-b">
+            <h3 class="text-lg font-bold text-gray-900">Add Subject</h3>
+            <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+        </div>
+        <form method="POST" action="{{ url_for('academic.add_subject') }}" class="mt-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject Name *</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject Code</label>
+                    <input type="text" name="course_code" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Course *</label>
+                    <select name="course_id" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="">Select Course</option>
+                        {% for c in courses %}
+                        <option value="{{ c.id }}" data-program="{{ c.program }}" data-total-semesters="{{ c.total_semesters }}" data-name="{{ c.name }}">{{ c.name }} ({{ c.program }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-span-3 -mt-2">
+                    <p class="text-xs text-gray-500">Total Credits = Theory + Practical = <span id="addCreditsSum">0.0</span></p>
+                    <p class="text-xs text-gray-500">Total Marks = Theory + Practical = <span id="addMarksSum">0</span></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                    <select name="class_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="">None</option>
+                        {% for cls in classes %}
+                        <option value="{{ cls.id }}">{{ cls.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                    <select name="semester_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="">None</option>
+                        {% for sem in semesters %}
+                        <option value="{{ sem.id }}" data-semester-number="{{ sem.semester_number }}">{{ sem.semester_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Course Type *</label>
+                    <select name="course_type" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="Core">Core</option>
+                        <option value="Elective">Elective</option>
+                        <option value="Core Practical">Core Practical</option>
+                        <option value="Elective Practical">Elective Practical</option>
+                        <option value="Project">Project</option>
+                        <option value="Internship">Internship</option>
+                        <option value="Dissertation">Dissertation</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mode *</label>
+                    <select name="theory_practical" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="Theory">Theory</option>
+                        <option value="Practical">Practical</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Credits *</label>
+                    <input type="number" step="0.5" name="credits" value="3" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Theory Credits</label>
+                    <input type="number" step="0.5" name="theory_credits" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Credits</label>
+                    <input type="number" step="0.5" name="practical_credits" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
+                    <input type="number" name="marks" value="100" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Theory Marks</label>
+                    <input type="number" name="theory_marks" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Marks</label>
+                    <input type="number" name="practical_marks" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Lectures / Week</label>
+                    <input type="number" name="lectures_per_week" value="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Hours / Week</label>
+                    <input type="number" name="practical_hours_per_week" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div class="col-span-3">
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" name="is_elective" class="h-4 w-4 text-purple-600 rounded">
+                        <span class="ml-2 text-sm text-gray-700">Mark as elective</span>
+                    </label>
+                </div>
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Syllabus URL</label>
+                    <input type="url" name="syllabus_url" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500" placeholder="https://...">
+                </div>
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeAddModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Add Subject</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-8 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center pb-3 border-b">
+            <h3 class="text-lg font-bold text-gray-900">Edit Subject</h3>
+            <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="editForm" method="POST" class="mt-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject Name *</label>
+                    <input type="text" name="name" id="edit_name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject Code</label>
+                    <input type="text" name="course_code" id="edit_course_code" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Course *</label>
+                    <select name="course_id" id="edit_course_id" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        {% for c in courses %}
+                        <option value="{{ c.id }}" data-program="{{ c.program }}" data-total-semesters="{{ c.total_semesters }}" data-name="{{ c.name }}">{{ c.name }} ({{ c.program }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-span-3 -mt-2">
+                    <p class="text-xs text-gray-500">Total Credits = Theory + Practical = <span id="editCreditsSum">0.0</span></p>
+                    <p class="text-xs text-gray-500">Total Marks = Theory + Practical = <span id="editMarksSum">0</span></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                    <select name="class_id" id="edit_class_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="">None</option>
+                        {% for cls in classes %}
+                        <option value="{{ cls.id }}">{{ cls.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                    <select name="semester_id" id="edit_semester_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="">None</option>
+                        {% for sem in semesters %}
+                        <option value="{{ sem.id }}" data-semester-number="{{ sem.semester_number }}">{{ sem.semester_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Course Type *</label>
+                    <select name="course_type" id="edit_course_type" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="Core">Core</option>
+                        <option value="Elective">Elective</option>
+                        <option value="Core Practical">Core Practical</option>
+                        <option value="Elective Practical">Elective Practical</option>
+                        <option value="Project">Project</option>
+                        <option value="Internship">Internship</option>
+                        <option value="Dissertation">Dissertation</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mode *</label>
+                    <select name="theory_practical" id="edit_theory_practical" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                        <option value="Theory">Theory</option>
+                        <option value="Practical">Practical</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Credits *</label>
+                    <input type="number" step="0.5" name="credits" id="edit_credits" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Theory Credits</label>
+                    <input type="number" step="0.5" name="theory_credits" id="edit_theory_credits" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Credits</label>
+                    <input type="number" step="0.5" name="practical_credits" id="edit_practical_credits" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
+                    <input type="number" name="marks" id="edit_marks" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Theory Marks</label>
+                    <input type="number" name="theory_marks" id="edit_theory_marks" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Marks</label>
+                    <input type="number" name="practical_marks" id="edit_practical_marks" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Lectures / Week</label>
+                    <input type="number" name="lectures_per_week" id="edit_lectures_per_week" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Practical Hours / Week</label>
+                    <input type="number" name="practical_hours_per_week" id="edit_practical_hours_per_week" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div class="col-span-3">
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" name="is_elective" id="edit_is_elective" class="h-4 w-4 text-purple-600 rounded">
+                        <span class="ml-2 text-sm text-gray-700">Mark as elective</span>
+                    </label>
+                </div>
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Syllabus URL</label>
+                    <input type="url" name="syllabus_url" id="edit_syllabus_url" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500" placeholder="https://...">
+                </div>
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea name="description" id="edit_description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Update Subject</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center pb-3 border-b">
+            <h3 class="text-lg font-bold text-gray-900">Confirm Delete</h3>
+            <button onclick="closeDeleteModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="mt-4">
+            <p class="text-gray-700">Are you sure you want to delete subject <strong id="delete_subject_name"></strong>?</p>
+        </div>
+        <form id="deleteForm" method="POST" class="mt-6">
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('#subjectsTable').DataTable({
+        order: [[2, 'asc'], [0, 'asc']],
+        pageLength: 25
+    });
+
+    // Mode and credits/marks sync helpers
+    function toFloat(v, def=0) { const n = parseFloat(v); return isNaN(n) ? def : n; }
+    function toInt(v, def=0) { const n = parseInt(v, 10); return isNaN(n) ? def : n; }
+
+    function applyModeAndRecalc(formEl, prefix='') {
+        const modeSel = formEl.querySelector(`${prefix} select[name="theory_practical"]`) || formEl.querySelector(`${prefix} #edit_theory_practical`);
+        const tCred = formEl.querySelector(`${prefix} input[name="theory_credits"]`) || formEl.querySelector('#edit_theory_credits');
+        const pCred = formEl.querySelector(`${prefix} input[name="practical_credits"]`) || formEl.querySelector('#edit_practical_credits');
+        const tMarks = formEl.querySelector(`${prefix} input[name="theory_marks"]`) || formEl.querySelector('#edit_theory_marks');
+        const pMarks = formEl.querySelector(`${prefix} input[name="practical_marks"]`) || formEl.querySelector('#edit_practical_marks');
+        const totCred = formEl.querySelector(`${prefix} input[name="credits"]`) || formEl.querySelector('#edit_credits');
+        const totMarks = formEl.querySelector(`${prefix} input[name="marks"]`) || formEl.querySelector('#edit_marks');
+        const creditsPreview = formEl.querySelector('#addCreditsSum') || formEl.querySelector('#editCreditsSum');
+        const marksPreview = formEl.querySelector('#addMarksSum') || formEl.querySelector('#editMarksSum');
+
+        if (!modeSel) return;
+        const mode = modeSel.value;
+        // Enable all first
+        if (tCred) tCred.disabled = false;
+        if (pCred) pCred.disabled = false;
+        if (tMarks) tMarks.disabled = false;
+        if (pMarks) pMarks.disabled = false;
+
+        if (mode === 'Theory') {
+            if (pCred) { pCred.value = '0'; pCred.disabled = true; }
+            if (pMarks) { pMarks.value = '0'; pMarks.disabled = true; }
+        } else if (mode === 'Practical') {
+            if (tCred) { tCred.value = '0'; tCred.disabled = true; }
+            if (tMarks) { tMarks.value = '0'; tMarks.disabled = true; }
+        }
+
+        const cT = tCred ? toFloat(tCred.value, 0) : 0;
+        const cP = pCred ? toFloat(pCred.value, 0) : 0;
+        const sumCred = (cT + cP);
+        if (totCred) totCred.value = sumCred.toFixed(1);
+        if (creditsPreview) creditsPreview.textContent = sumCred.toFixed(1);
+
+        const mT = tMarks ? toInt(tMarks.value, 0) : 0;
+        const mP = pMarks ? toInt(pMarks.value, 0) : 0;
+        const sumMarks = mT + mP;
+        if (totMarks) totMarks.value = sumMarks.toString();
+        if (marksPreview) marksPreview.textContent = sumMarks.toString();
+    }
+
+    function wireForm(formEl, prefix='') {
+        if (!formEl) return;
+        const modeSel = formEl.querySelector(`${prefix} select[name="theory_practical"]`) || formEl.querySelector('#edit_theory_practical');
+        const inputs = [
+            formEl.querySelector(`${prefix} input[name="theory_credits"]`) || formEl.querySelector('#edit_theory_credits'),
+            formEl.querySelector(`${prefix} input[name="practical_credits"]`) || formEl.querySelector('#edit_practical_credits'),
+            formEl.querySelector(`${prefix} input[name="theory_marks"]`) || formEl.querySelector('#edit_theory_marks'),
+            formEl.querySelector(`${prefix} input[name="practical_marks"]`) || formEl.querySelector('#edit_practical_marks')
+        ].filter(Boolean);
+
+        if (modeSel) modeSel.addEventListener('change', () => applyModeAndRecalc(formEl, prefix));
+        inputs.forEach(inp => inp && inp.addEventListener('input', () => applyModeAndRecalc(formEl, prefix)));
+        // Initial apply on load
+        applyModeAndRecalc(formEl, prefix);
+    }
+
+    // Wire Add modal and Edit modal forms
+    wireForm(document.getElementById('addModal'));
+    wireForm(document.getElementById('editModal'));
+
+    // Filter semesters based on selected course's total semesters
+    function filterSemesters(courseSelect, semesterSelect) {
+        const sel = courseSelect.options[courseSelect.selectedIndex];
+        let total = parseInt(sel?.dataset?.totalSemesters || '0', 10);
+        const program = (sel?.dataset?.program || '').toUpperCase();
+        const nameLower = (sel?.dataset?.name || '').toLowerCase();
+        if (!total) {
+            if (program === 'PG') total = 4;
+            else if (program === 'UG') total = 6;
+        }
+        if (nameLower.includes('engineer')) {
+            total = Math.max(total || 0, 8);
+        }
+        if (!semesterSelect) return;
+        let hasValidSelected = false;
+        for (const opt of semesterSelect.options) {
+            if (!opt.value) continue; // skip None
+            const semNum = parseInt(opt.dataset.semesterNumber || '0', 10);
+            const valid = total ? (semNum <= total) : true;
+            opt.hidden = !valid;
+            if (opt.selected && !valid) {
+                hasValidSelected = false;
+            }
+            if (opt.selected && valid) {
+                hasValidSelected = true;
+            }
+        }
+        if (!hasValidSelected) {
+            semesterSelect.value = '';
+        }
+    }
+
+    const addCourseSel = document.querySelector('#addModal select[name="course_id"]');
+    const addSemSel = document.querySelector('#addModal select[name="semester_id"]');
+    if (addCourseSel) {
+        addCourseSel.addEventListener('change', function() { filterSemesters(addCourseSel, addSemSel); });
+        // Initial filter when modal opens
+        filterSemesters(addCourseSel, addSemSel);
+    }
+
+    const editCourseSel = document.getElementById('edit_course_id');
+    const editSemSel = document.getElementById('edit_semester_id');
+    if (editCourseSel) {
+        editCourseSel.addEventListener('change', function() { filterSemesters(editCourseSel, editSemSel); });
+    }
+});
+
+function showAddModal() { document.getElementById('addModal').classList.remove('hidden'); }
+function closeAddModal() { document.getElementById('addModal').classList.add('hidden'); }
+
+function editSubject(subj) {
+    document.getElementById('edit_name').value = subj.name || '';
+    document.getElementById('edit_course_code').value = subj.course_code || '';
+    document.getElementById('edit_course_id').value = subj.course_id;
+    document.getElementById('edit_class_id').value = subj.class_id || '';
+    document.getElementById('edit_semester_id').value = subj.semester_id || '';
+    document.getElementById('edit_course_type').value = subj.course_type || 'Core';
+    document.getElementById('edit_theory_practical').value = subj.theory_practical || 'Theory';
+    document.getElementById('edit_credits').value = subj.credits || 3;
+    document.getElementById('edit_theory_credits').value = subj.theory_credits || 0;
+    document.getElementById('edit_practical_credits').value = subj.practical_credits || 0;
+    document.getElementById('edit_marks').value = subj.marks || 100;
+    document.getElementById('edit_theory_marks').value = subj.theory_marks || 0;
+    document.getElementById('edit_practical_marks').value = subj.practical_marks || 0;
+    document.getElementById('edit_lectures_per_week').value = subj.lectures_per_week || 3;
+    document.getElementById('edit_practical_hours_per_week').value = subj.practical_hours_per_week || 0;
+    document.getElementById('edit_is_elective').checked = !!subj.is_elective;
+    document.getElementById('edit_syllabus_url').value = subj.syllabus_url || '';
+    document.getElementById('edit_description').value = subj.description || '';
+    document.getElementById('editForm').action = `/admin/academic/subjects/edit/${subj.id}`;
+    document.getElementById('editModal').classList.remove('hidden');
+    // After values set, apply semester filtering for the selected course
+    const editCourseSel = document.getElementById('edit_course_id');
+    const editSemSel = document.getElementById('edit_semester_id');
+    if (editCourseSel && editSemSel) {
+        const selOptIdx = Array.from(editCourseSel.options).findIndex(o => o.value == subj.course_id);
+        if (selOptIdx >= 0) editCourseSel.selectedIndex = selOptIdx;
+        // trigger filter now that selection is set
+        const total = parseInt(editCourseSel.options[editCourseSel.selectedIndex]?.dataset?.totalSemesters || '0', 10);
+        for (const opt of editSemSel.options) {
+            if (!opt.value) continue;
+            const semNum = parseInt(opt.dataset.semesterNumber || '0', 10);
+            opt.hidden = total ? (semNum > total) : false;
+        }
+        // ensure currently selected semester is valid
+        const currSelOpt = editSemSel.options[editSemSel.selectedIndex];
+        if (currSelOpt && currSelOpt.hidden) {
+            editSemSel.value = '';
+        }
+    }
+    // Re-apply mode/credits/marks sync after populating values
+    applyModeAndRecalc(document.getElementById('editModal'));
+}
+function editSubjectFromDataset(btn) {
+    try {
+        const subj = JSON.parse(btn.getAttribute('data-subject'));
+        editSubject(subj);
+    } catch (err) {
+        console.error('Failed to parse subject data:', err);
+    }
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
+
+function deleteSubject(id, name) {
+    document.getElementById('delete_subject_name').textContent = name;
+    document.getElementById('deleteForm').action = `/admin/academic/subjects/delete/${id}`;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+function deleteSubjectFromDataset(btn) {
+    const id = btn.getAttribute('data-id');
+    const name = btn.getAttribute('data-name');
+    deleteSubject(id, name);
+}
+function closeDeleteModal() { document.getElementById('deleteModal').classList.add('hidden'); }
+
+// Close modals on Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeAddModal();
+        closeEditModal();
+        closeDeleteModal();
+    }
+});
+</script>
+{% endblock %}

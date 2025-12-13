@@ -1,0 +1,43 @@
+{% extends "teacher/_layout.html" %}
+{% block title %}My Assignments{% endblock %}
+{% block header_title %}My Assignments{% endblock %}
+
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+  <h3 class="text-xl font-semibold mb-4">Assigned Classes and Subjects</h3>
+  <div class="overflow-x-auto">
+    <table class="min-w-full bg-white border border-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="py-2 px-3 text-left">Department</th>
+          <th class="py-2 px-3 text-left">Course</th>
+          <th class="py-2 px-3 text-left">Class</th>
+          <th class="py-2 px-3 text-left">Division</th>
+          <th class="py-2 px-3 text-left">Subject</th>
+          <th class="py-2 px-3 text-left">Syllabus</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assignments %}
+        <tr class="border-t">
+          <td class="py-2 px-3">{{ a.department }}</td>
+          <td class="py-2 px-3">{{ a.course }}</td>
+          <td class="py-2 px-3">{{ a.class }}</td>
+          <td class="py-2 px-3">{{ a.division }}</td>
+          <td class="py-2 px-3">{{ a.subject }}</td>
+          <td class="py-2 px-3">
+            {% if a.syllabus_url %}
+              <a href="{{ a.syllabus_url }}" target="_blank" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-file-alt mr-1"></i>View</a>
+            {% else %}
+              <span class="text-gray-400">Not provided</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="py-6 text-center text-gray-500">No assignments found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

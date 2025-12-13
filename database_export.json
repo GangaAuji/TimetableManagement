@@ -1,0 +1,4484 @@
+{
+  "export_date": "2025-11-30T11:51:51.447395",
+  "database": "college_timetable_db",
+  "tables": {
+    "academic_years": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_current",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 2
+    },
+    "classes": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "display_order",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "course_batches": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "batch_name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "academic_year_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_year",
+          "type": "year",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_year",
+          "type": "year",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_students",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "current_semester",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "course_batches_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "course_batches_ibfk_2",
+          "column": "academic_year_id",
+          "ref_table": "academic_years",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 1
+    },
+    "courses": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "program",
+          "type": "enum('UG','PG')",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "duration_years",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "3",
+          "extra": ""
+        },
+        {
+          "name": "total_semesters",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "6",
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "lecture_duration_minutes",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "60",
+          "extra": ""
+        },
+        {
+          "name": "max_sessions_per_day",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "4",
+          "extra": ""
+        },
+        {
+          "name": "course_level",
+          "type": "enum('UG','PG','Diploma','Certificate')",
+          "null": "YES",
+          "key": "",
+          "default": "PG",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "courses_ibfk_1",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 5
+    },
+    "departments": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "head_of_department",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 5
+    },
+    "divisions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(10)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "capacity",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "60",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "elective_group_subjects": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "elective_group_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "elective_group_subjects_ibfk_1",
+          "column": "elective_group_id",
+          "ref_table": "elective_groups",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "elective_group_subjects_ibfk_2",
+          "column": "subject_id",
+          "ref_table": "subjects",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "elective_groups": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "group_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "min_subjects_to_choose",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "max_subjects_to_choose",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "total_credits",
+          "type": "decimal(4,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_mandatory",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "elective_groups_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "elective_groups_ibfk_2",
+          "column": "semester_id",
+          "ref_table": "semesters",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "faculty": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "phone",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "designation",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "qualification",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "specialization",
+          "type": "varchar(200)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "max_hours_per_week",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "24",
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "employee_id",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "faculty_ibfk_1",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "fk_faculty_user",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "faculty_absences": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "absence_date",
+          "type": "date",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('PROCESSED','UNPROCESSED')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "UNPROCESSED",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_faculty_absences_faculty_id",
+          "column": "faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 2
+    },
+    "faculty_allocations": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_batch_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "allocated_hours",
+          "type": "decimal(4,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "workload_percentage",
+          "type": "decimal(5,2)",
+          "null": "YES",
+          "key": "",
+          "default": "100.00",
+          "extra": ""
+        },
+        {
+          "name": "is_primary",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "allocation_type",
+          "type": "enum('Regular','Guest','Visiting','Part-time')",
+          "null": "YES",
+          "key": "",
+          "default": "Regular",
+          "extra": ""
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "faculty_allocations_ibfk_2",
+          "column": "subject_id",
+          "ref_table": "subjects",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "faculty_allocations_ibfk_3",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "faculty_allocations_ibfk_4",
+          "column": "division_id",
+          "ref_table": "divisions",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "faculty_allocations_ibfk_5",
+          "column": "semester_id",
+          "ref_table": "semesters",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "faculty_allocations_ibfk_6",
+          "column": "course_batch_id",
+          "ref_table": "course_batches",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "fk_faculty_allocations_faculty_id",
+          "column": "faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "faculty_availability": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "enum('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_available",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "teaching_hours_per_day",
+          "type": "decimal(4,2)",
+          "null": "YES",
+          "key": "",
+          "default": "6.00",
+          "extra": ""
+        },
+        {
+          "name": "shift_name",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "",
+          "default": "General",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_faculty_availability_faculty_id",
+          "column": "faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "institution_holidays": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "holiday_date",
+          "type": "date",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "enum('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(120)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "applies_to_program",
+          "type": "enum('UG','PG','Both')",
+          "null": "YES",
+          "key": "",
+          "default": "Both",
+          "extra": ""
+        },
+        {
+          "name": "is_recurring",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 2
+    },
+    "password_reset_requests": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "token",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "used",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "password_reset_requests_ibfk_1",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "permission_group_permissions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "group_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "permission_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "permission_group_permissions_ibfk_1",
+          "column": "group_id",
+          "ref_table": "permission_groups",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "permission_group_permissions_ibfk_2",
+          "column": "permission_id",
+          "ref_table": "permissions",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 64
+    },
+    "permission_groups": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "module",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 10
+    },
+    "permissions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "module",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 30
+    },
+    "proxy_assignments": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "original_faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "proxy_faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "assignment_date",
+          "type": "date",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "reason",
+          "type": "enum('absence','workload','expertise','manual')",
+          "null": "YES",
+          "key": "",
+          "default": "absence",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('pending','confirmed','rejected','completed')",
+          "null": "YES",
+          "key": "",
+          "default": "pending",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "created_by",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "proxy_assignments_ibfk_1",
+          "column": "original_faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        },
+        {
+          "constraint": "proxy_assignments_ibfk_2",
+          "column": "proxy_faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        },
+        {
+          "constraint": "proxy_assignments_ibfk_3",
+          "column": "subject_id",
+          "ref_table": "subjects",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "proxy_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "original_faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "proxy_faculty_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "timetable_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "absence_date",
+          "type": "date",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('ASSIGNED','UNASSIGNED')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "approval_status",
+          "type": "enum('PENDING','APPROVED','REJECTED')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "PENDING",
+          "extra": ""
+        },
+        {
+          "name": "approval_date",
+          "type": "datetime",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "approved_by",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "approval_notes",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_proxy_log_approved_by",
+          "column": "approved_by",
+          "ref_table": "users",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "fk_proxy_log_original_faculty_id",
+          "column": "original_faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        },
+        {
+          "constraint": "fk_proxy_log_proxy_faculty_id",
+          "column": "proxy_faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        },
+        {
+          "constraint": "proxy_log_ibfk_3",
+          "column": "timetable_id",
+          "ref_table": "timetable",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 3
+    },
+    "registration_invitations": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "token",
+          "type": "varchar(64)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "role",
+          "type": "enum('Teacher','Student')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "used_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('pending','used','expired')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "pending",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "registration_invitations_ibfk_1",
+          "column": "created_by",
+          "ref_table": "users",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "registration_invitations_ibfk_2",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "registration_invitations_ibfk_3",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "registration_invitations_ibfk_4",
+          "column": "division_id",
+          "ref_table": "divisions",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "registration_invitations_ibfk_5",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 7
+    },
+    "role_permissions": {
+      "columns": [
+        {
+          "name": "role_id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "permission_id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "role_permissions_ibfk_1",
+          "column": "role_id",
+          "ref_table": "roles",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "role_permissions_ibfk_2",
+          "column": "permission_id",
+          "ref_table": "permissions",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 42
+    },
+    "roles": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "rooms": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "room_number",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "room_type",
+          "type": "enum('Classroom','Laboratory','Auditorium','Seminar Hall')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "Classroom",
+          "extra": ""
+        },
+        {
+          "name": "capacity",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "60",
+          "extra": ""
+        },
+        {
+          "name": "floor",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "building",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "has_projector",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "has_ac",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "is_available",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 6
+    },
+    "semesters": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "academic_year_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_number",
+          "type": "tinyint",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_current",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "min_credits",
+          "type": "decimal(4,1)",
+          "null": "YES",
+          "key": "",
+          "default": "18.0",
+          "extra": ""
+        },
+        {
+          "name": "max_credits",
+          "type": "decimal(4,1)",
+          "null": "YES",
+          "key": "",
+          "default": "30.0",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_semesters_class",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "semesters_ibfk_1",
+          "column": "academic_year_id",
+          "ref_table": "academic_years",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "student_subject_selections": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "student_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "elective_group_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "academic_year_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "selection_date",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "is_confirmed",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "grade",
+          "type": "varchar(2)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "marks_obtained",
+          "type": "decimal(5,2)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "credits_earned",
+          "type": "decimal(3,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('Enrolled','Completed','Failed','Withdrawn')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "Enrolled",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "student_subject_selections_ibfk_2",
+          "column": "subject_id",
+          "ref_table": "subjects",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "student_subject_selections_ibfk_3",
+          "column": "elective_group_id",
+          "ref_table": "elective_groups",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "student_subject_selections_ibfk_4",
+          "column": "semester_id",
+          "ref_table": "semesters",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "student_subject_selections_ibfk_5",
+          "column": "academic_year_id",
+          "ref_table": "academic_years",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "students": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "phone",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "roll_number",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_batch_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "admission_year",
+          "type": "year",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "admission_id",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_students_user",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "students_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "students_ibfk_2",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "students_ibfk_3",
+          "column": "division_id",
+          "ref_table": "divisions",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "students_ibfk_4",
+          "column": "course_batch_id",
+          "ref_table": "course_batches",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 2
+    },
+    "subjects": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_code",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_type",
+          "type": "enum('Core','Elective','Core Practical','Elective Practical','Project','Internship','Dissertation')",
+          "null": "YES",
+          "key": "MUL",
+          "default": "Core",
+          "extra": ""
+        },
+        {
+          "name": "theory_practical",
+          "type": "enum('Theory','Practical','Both')",
+          "null": "YES",
+          "key": "",
+          "default": "Theory",
+          "extra": ""
+        },
+        {
+          "name": "credits",
+          "type": "decimal(3,1)",
+          "null": "NO",
+          "key": "MUL",
+          "default": "3.0",
+          "extra": ""
+        },
+        {
+          "name": "theory_credits",
+          "type": "decimal(3,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "practical_credits",
+          "type": "decimal(3,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "marks",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "100",
+          "extra": ""
+        },
+        {
+          "name": "theory_marks",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "practical_marks",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "lectures_per_week",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "3",
+          "extra": ""
+        },
+        {
+          "name": "practical_hours_per_week",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "is_elective",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "syllabus_url",
+          "type": "varchar(255)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "subjects_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "subjects_ibfk_2",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "subjects_ibfk_3",
+          "column": "semester_id",
+          "ref_table": "semesters",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "timetable": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "enum('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "room_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "academic_year_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_batch_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "room_number",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "timetable_type",
+          "type": "enum('Regular','Exam','Special','Makeup')",
+          "null": "YES",
+          "key": "",
+          "default": "Regular",
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_timetable_faculty_id",
+          "column": "faculty_id",
+          "ref_table": "faculty",
+          "ref_column": "user_id"
+        },
+        {
+          "constraint": "timetable_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_2",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_3",
+          "column": "division_id",
+          "ref_table": "divisions",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_4",
+          "column": "subject_id",
+          "ref_table": "subjects",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_6",
+          "column": "room_id",
+          "ref_table": "rooms",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_7",
+          "column": "academic_year_id",
+          "ref_table": "academic_years",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_8",
+          "column": "semester_id",
+          "ref_table": "semesters",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_ibfk_9",
+          "column": "course_batch_id",
+          "ref_table": "course_batches",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 27
+    },
+    "timetable_conflicts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "generation_timestamp",
+          "type": "datetime",
+          "null": "NO",
+          "key": "MUL",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "conflict_type",
+          "type": "enum('faculty_collision','room_unavailable','faculty_unavailable','exceed_hours','no_slot')",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "resolution_status",
+          "type": "enum('unresolved','resolved','ignored')",
+          "null": "YES",
+          "key": "",
+          "default": "unresolved",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "timetable_generation_settings": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "setting_key",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "setting_value",
+          "type": "varchar(255)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "timetable_generation_settings_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 8
+    },
+    "timetable_history": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "room_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "week_start_date",
+          "type": "date",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "archived_at",
+          "type": "datetime",
+          "null": "NO",
+          "key": "MUL",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 221
+    },
+    "timetable_session_targets": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "week_start_date",
+          "type": "date",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "target_sessions",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "24",
+          "extra": ""
+        },
+        {
+          "name": "minimum_sessions",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "20",
+          "extra": ""
+        },
+        {
+          "name": "actual_sessions",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "generation_status",
+          "type": "enum('pending','in_progress','completed','failed')",
+          "null": "YES",
+          "key": "",
+          "default": "pending",
+          "extra": ""
+        },
+        {
+          "name": "generation_timestamp",
+          "type": "datetime",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "generation_notes",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "timetable_session_targets_ibfk_1",
+          "column": "course_id",
+          "ref_table": "courses",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_session_targets_ibfk_2",
+          "column": "class_id",
+          "ref_table": "classes",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "timetable_session_targets_ibfk_3",
+          "column": "division_id",
+          "ref_table": "divisions",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "unscheduled_sessions_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "generation_timestamp",
+          "type": "datetime",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "subject_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "session_type",
+          "type": "enum('Theory','Practical','Both')",
+          "null": "YES",
+          "key": "",
+          "default": "Theory",
+          "extra": ""
+        },
+        {
+          "name": "required_slots",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "reason",
+          "type": "varchar(255)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "suggested_day",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "suggested_time_start",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "suggested_time_end",
+          "type": "time",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "resolved",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "resolution_notes",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "user_activity_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "activity_type",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "ip_address",
+          "type": "varchar(45)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "user_activity_log_ibfk_1",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 31
+    },
+    "user_permission_groups": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "group_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "granted_by",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "granted_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "user_permission_groups_ibfk_1",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permission_groups_ibfk_2",
+          "column": "group_id",
+          "ref_table": "permission_groups",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permission_groups_ibfk_3",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permission_groups_ibfk_4",
+          "column": "granted_by",
+          "ref_table": "users",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "user_permissions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "permission_id",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "granted_by",
+          "type": "int",
+          "null": "NO",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "granted_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_active",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "user_permissions_ibfk_1",
+          "column": "user_id",
+          "ref_table": "users",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permissions_ibfk_2",
+          "column": "permission_id",
+          "ref_table": "permissions",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permissions_ibfk_3",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        },
+        {
+          "constraint": "user_permissions_ibfk_4",
+          "column": "granted_by",
+          "ref_table": "users",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "users": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "username",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "password",
+          "type": "varchar(255)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "role",
+          "type": "enum('Admin','Super Admin','Teacher','Student')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "int",
+          "null": "YES",
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "is_hod",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "enum('active','inactive','locked')",
+          "null": "YES",
+          "key": "",
+          "default": "active",
+          "extra": ""
+        },
+        {
+          "name": "last_login",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "failed_attempts",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "password_changed_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "default_course_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "default_class_id",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "profile_photo",
+          "type": "varchar(255)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "phone",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "address",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "date_of_birth",
+          "type": "date",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint": "fk_users_department",
+          "column": "department_id",
+          "ref_table": "departments",
+          "ref_column": "id"
+        }
+      ],
+      "indexes": [],
+      "sample_count": 8
+    },
+    "v_consecutive_slot_opportunities": {
+      "columns": [
+        {
+          "name": "course_code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "division_name",
+          "type": "varchar(10)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_name",
+          "type": "varchar(9)",
+          "null": "NO",
+          "key": "",
+          "default": "",
+          "extra": ""
+        },
+        {
+          "name": "slot_start",
+          "type": "time(6)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "slot_end",
+          "type": "time(6)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "available_hours",
+          "type": "bigint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "occupied_hours",
+          "type": "decimal(42,0)",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "free_hours",
+          "type": "decimal(43,0)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "max_consecutive_sessions",
+          "type": "decimal(48,0)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 6
+    },
+    "v_curriculum_overview": {
+      "columns": [
+        {
+          "name": "course_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "course_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "program",
+          "type": "enum('UG','PG')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "duration_years",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "3",
+          "extra": ""
+        },
+        {
+          "name": "total_semesters",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "6",
+          "extra": ""
+        },
+        {
+          "name": "semester_number",
+          "type": "tinyint",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_subjects",
+          "type": "bigint",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "total_credits",
+          "type": "decimal(25,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "core_credits",
+          "type": "decimal(25,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "elective_credits",
+          "type": "decimal(25,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "practical_credits",
+          "type": "decimal(25,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 20
+    },
+    "v_faculty_daily_workload": {
+      "columns": [
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "enum('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_sessions",
+          "type": "bigint",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "total_hours",
+          "type": "decimal(35,4)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "courses_taught",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 14
+    },
+    "v_faculty_schedule_conflicts": {
+      "columns": [
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "day_of_week",
+          "type": "enum('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "start_time",
+          "type": "time",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "end_time",
+          "type": "time",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course1_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course1_code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course1_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class1_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course2_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course2_code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course2_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class2_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "conflict_reason",
+          "type": "varchar(12)",
+          "null": "NO",
+          "key": "",
+          "default": "",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 0
+    },
+    "v_faculty_workload": {
+      "columns": [
+        {
+          "name": "faculty_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "faculty_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_name",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_subjects",
+          "type": "bigint",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "total_credits",
+          "type": "decimal(25,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_hours",
+          "type": "decimal(26,1)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "avg_workload_percentage",
+          "type": "decimal(9,6)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "max_hours_per_week",
+          "type": "int",
+          "null": "YES",
+          "key": "",
+          "default": "24",
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "v_scheduling_flexibility": {
+      "columns": [
+        {
+          "name": "course_code",
+          "type": "varchar(20)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_subjects",
+          "type": "bigint",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "total_theory_lectures",
+          "type": "decimal(25,0)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_practical_sessions",
+          "type": "decimal(42,0)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "total_required_sessions",
+          "type": "decimal(43,0)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "min_acceptable_sessions",
+          "type": "varchar(255)",
+          "null": "NO",
+          "key": "",
+          "default": "",
+          "extra": ""
+        },
+        {
+          "name": "target_sessions",
+          "type": "varchar(255)",
+          "null": "NO",
+          "key": "",
+          "default": "",
+          "extra": ""
+        },
+        {
+          "name": "total_faculty_allocations",
+          "type": "bigint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 5
+    },
+    "v_subjects_detailed": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_code",
+          "type": "varchar(20)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_type",
+          "type": "enum('Core','Elective','Core Practical','Elective Practical','Project','Internship','Dissertation')",
+          "null": "YES",
+          "key": "",
+          "default": "Core",
+          "extra": ""
+        },
+        {
+          "name": "theory_practical",
+          "type": "enum('Theory','Practical','Both')",
+          "null": "YES",
+          "key": "",
+          "default": "Theory",
+          "extra": ""
+        },
+        {
+          "name": "credits",
+          "type": "decimal(3,1)",
+          "null": "NO",
+          "key": "",
+          "default": "3.0",
+          "extra": ""
+        },
+        {
+          "name": "theory_credits",
+          "type": "decimal(3,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "practical_credits",
+          "type": "decimal(3,1)",
+          "null": "YES",
+          "key": "",
+          "default": "0.0",
+          "extra": ""
+        },
+        {
+          "name": "lectures_per_week",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": "3",
+          "extra": ""
+        },
+        {
+          "name": "is_elective",
+          "type": "tinyint(1)",
+          "null": "YES",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "course_name",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "program",
+          "type": "enum('UG','PG')",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_name",
+          "type": "varchar(100)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_name",
+          "type": "varchar(50)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "semester_number",
+          "type": "tinyint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 4
+    },
+    "v_user_all_permissions": {
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "username",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "role",
+          "type": "enum('Admin','Super Admin','Teacher','Student')",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "permission_id",
+          "type": "int",
+          "null": "NO",
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "permission_name",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "permission_module",
+          "type": "varchar(50)",
+          "null": "NO",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "source",
+          "type": "varchar(10)",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "department_id",
+          "type": "bigint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "course_id",
+          "type": "bigint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_id",
+          "type": "bigint",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "null": "YES",
+          "key": "",
+          "default": null,
+          "extra": ""
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "sample_count": 49
+    }
+  }
+}
