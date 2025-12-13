@@ -147,11 +147,6 @@ def create_app():
     app.logger.info("College Timetable Management System application created.")
     return app
 
-# if __name__ == '__main__':
-#     app = create_app()
-#     app.run(debug=True)
-#     app.logger.info("Application started in debug mode.")
-
 if __name__ == '__main__':
     app = create_app()
     # Make the app accessible on the local network and change port to 8080
