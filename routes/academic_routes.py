@@ -1,7 +1,3 @@
-"""
-Complete Academic Management Routes
-All CRUD operations for Academic Management System
-"""
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from functools import wraps
 import mysql.connector
@@ -78,7 +74,7 @@ def manage_academics():
         """)
         current_semester = cursor.fetchone()
         
-        return render_template('admin/academic_simple.html',
+        return render_template('admin/academic.html',
                              academic_years_count=academic_years_count,
                              semesters_count=semesters_count,
                              courses_count=courses_count,

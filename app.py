@@ -150,6 +150,6 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     # Make the app accessible on the local network and change port to 8080
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    app.run(host='0.0.0.0', port=8080, debug=True)
     app.logger.info("Application started on port 8080.")
 

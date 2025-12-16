@@ -29,7 +29,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- Utility function for time formatting ---
+# --- Utility functions ---
 def format_time(time_obj):
     """Convert time/timedelta to HH:MM string format"""
     if time_obj is None:
@@ -43,6 +43,28 @@ def format_time(time_obj):
         return time_obj.strftime('%H:%M')
     else:
         return str(time_obj)
+
+def get_time_ago(timestamp):
+    """Convert timestamp to human-readable time ago format"""
+    if timestamp is None:
+        return 'Unknown'
+    now = datetime.now()
+    diff = now - timestamp
+    seconds = diff.total_seconds()
+    
+    if seconds < 60:
+        return 'Just now'
+    elif seconds < 3600:
+        minutes = int(seconds / 60)
+        return f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+    elif seconds < 86400:
+        hours = int(seconds / 3600)
+        return f'{hours} hour{"s" if hours != 1 else ""} ago'
+    elif seconds < 604800:
+        days = int(seconds / 86400)
+        return f'{days} day{"s" if days != 1 else ""} ago'
+    else:
+        return timestamp.strftime('%b %d, %Y')
 
 # --- Helper for Pagination ---
 def paginate(query, params, page, per_page=10):
@@ -1615,17 +1637,127 @@ def holidays_edit(holiday_id):
 @admin_required
 def dashboard():
     cursor = mysql.connection.cursor()
-    # Fetch stats for dashboard cards
-    cursor.execute("SELECT COUNT(id) FROM students"); stats_students = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(id) FROM faculty"); stats_faculty = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(id) FROM courses"); stats_courses = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(id) FROM departments"); stats_departments = cursor.fetchone()[0]
+    
+    # Basic stats
+    cursor.execute("SELECT COUNT(id) FROM students WHERE is_active = 1"); total_students = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM faculty WHERE is_active = 1"); total_faculty = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM courses WHERE is_active = 1"); total_courses = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM departments WHERE is_active = 1"); total_departments = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM rooms"); total_rooms = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM course_batches WHERE is_active = 1"); total_batches = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM subjects"); total_subjects = int(cursor.fetchone()[0])
+    cursor.execute("SELECT COUNT(id) FROM faculty_allocations"); total_allocations = int(cursor.fetchone()[0])
+    
+    # Room breakdown
+    cursor.execute("SELECT room_type, COUNT(*) FROM rooms GROUP BY room_type")
+    room_breakdown = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    
+    # Weekly schedule load (classes per day)
+    cursor.execute("""
+        SELECT day_of_week, COUNT(*) as class_count
+        FROM timetable
+        GROUP BY day_of_week
+        ORDER BY FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')
+    """)
+    weekly_load = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    
+    # Session type distribution
+    cursor.execute("""
+        SELECT s.theory_practical, COUNT(t.id) as count
+        FROM timetable t
+        JOIN subjects s ON t.subject_id = s.id
+        GROUP BY s.theory_practical
+    """)
+    session_types = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    total_sessions = sum(session_types.values()) or 1
+    session_percentages = {k: float(round((int(v)/total_sessions)*100, 1)) for k, v in session_types.items()}
+    
+    # Today's active classes
+    today = datetime.now().strftime('%A')
+    cursor.execute("""
+        SELECT t.start_time, t.end_time, s.name as subject_name, 
+               f.name as faculty_name, r.room_number,
+               c.name as class_name, d.name as division_name,
+               s.theory_practical
+        FROM timetable t
+        JOIN subjects s ON t.subject_id = s.id
+        JOIN faculty f ON t.faculty_id = f.user_id
+        JOIN rooms r ON t.room_id = r.id
+        JOIN classes c ON t.class_id = c.id
+        JOIN divisions d ON t.division_id = d.id
+        WHERE t.day_of_week = %s
+        ORDER BY t.start_time
+        LIMIT 10
+    """, (today,))
+    today_classes = []
+    for row in cursor.fetchall():
+        today_classes.append({
+            'start_time': format_time(row[0]),
+            'end_time': format_time(row[1]),
+            'subject_name': row[2],
+            'faculty_name': row[3],
+            'room_number': row[4],
+            'class_name': row[5],
+            'division_name': row[6],
+            'type': row[7]
+        })
+    
+    # Recent activity log
+    cursor.execute("""
+        SELECT ual.activity_type, ual.description, ual.created_at, u.username
+        FROM user_activity_log ual
+        JOIN users u ON ual.user_id = u.id
+        ORDER BY ual.created_at DESC
+        LIMIT 10
+    """)
+    recent_updates = []
+    for row in cursor.fetchall():
+        recent_updates.append({
+            'activity': row[0],
+            'description': row[1],
+            'time_ago': get_time_ago(row[2]),
+            'username': row[3]
+        })
+    
+    # Faculty workload summary
+    cursor.execute("""
+        SELECT f.name, COUNT(t.id) as class_count, 
+               SUM(TIMESTAMPDIFF(MINUTE, t.start_time, t.end_time)) as total_minutes
+        FROM faculty f
+        LEFT JOIN timetable t ON f.user_id = t.faculty_id
+        WHERE f.is_active = 1
+        GROUP BY f.id, f.name
+        ORDER BY class_count DESC
+        LIMIT 5
+    """)
+    top_faculty = []
+    for row in cursor.fetchall():
+        top_faculty.append({
+            'name': row[0],
+            'class_count': int(row[1] or 0),
+            'hours': float(round((float(row[2] or 0)) / 60, 1))
+        })
+    
     stats = {
-        'total_students': stats_students, 'total_faculty': stats_faculty,
-        'total_courses': stats_courses, 'total_departments': stats_departments
+        'total_students': total_students,
+        'total_faculty': total_faculty,
+        'total_courses': total_courses,
+        'total_departments': total_departments,
+        'total_rooms': total_rooms,
+        'total_batches': total_batches,
+        'total_subjects': total_subjects,
+        'total_allocations': total_allocations,
+        'room_breakdown': room_breakdown,
+        'weekly_load': weekly_load,
+        'session_types': session_types,
+        'session_percentages': session_percentages,
+        'today_classes': today_classes,
+        'recent_updates': recent_updates,
+        'top_faculty': top_faculty,
+        'today_day': today
     }
     
-    # Fetch data needed for the "Add" modals
+    # Data for modals
     cursor.execute("SELECT id, name FROM courses ORDER BY name"); courses = cursor.fetchall()
     cursor.execute("SELECT id, name FROM classes ORDER BY name"); classes = cursor.fetchall()
     cursor.execute("SELECT id, name FROM divisions ORDER BY name"); divisions = cursor.fetchall()
@@ -2063,10 +2195,17 @@ def timetable_manage():
 def rooms_index():
     """List rooms and show add/edit modal."""
     cursor = mysql.connection.cursor()
+    
+    # Get all departments for filters
+    cursor.execute("SELECT id, name FROM departments ORDER BY name")
+    departments = [{'id': row[0], 'name': row[1]} for row in cursor.fetchall()]
+    
+    # Get all rooms with department info
     cursor.execute("""
-        SELECT r.id, r.room_number, r.room_type, r.capacity, r.building, r.floor,
-               r.has_projector, r.has_ac, r.is_available
+        SELECT r.id, r.room_number, r.room_type, r.capacity, r.department_id,
+               d.name AS department_name
         FROM rooms r
+        LEFT JOIN departments d ON r.department_id = d.id
         ORDER BY r.room_type, r.room_number
     """)
     rooms = []
@@ -2076,15 +2215,12 @@ def rooms_index():
             'room_number': row[1],
             'room_type': row[2],
             'capacity': row[3],
-            'building': row[4] or '',
-            'floor': row[5],
-            'has_projector': row[6],
-            'has_ac': row[7],
-            'is_available': row[8],
+            'department_id': row[4],
+            'department_name': row[5],
         })
 
     cursor.close()
-    return render_template('admin/rooms/index.html', rooms=rooms)
+    return render_template('admin/manage_rooms.html', rooms=rooms, departments=departments)
 
 
 @admin_bp.route('/rooms/<int:room_id>')
@@ -2093,7 +2229,7 @@ def get_room(room_id):
     """Get room details for editing."""
     cursor = mysql.connection.cursor()
     cursor.execute("""
-        SELECT id, room_number, room_type, capacity, building, floor
+        SELECT id, room_number, room_type, capacity, department_id
         FROM rooms WHERE id = %s
     """, (room_id,))
     row = cursor.fetchone()
@@ -2105,8 +2241,7 @@ def get_room(room_id):
         'room_number': row[1],
         'room_type': row[2],
         'capacity': row[3],
-        'building': row[4] or '',
-        'floor': row[5],
+        'department_id': row[4],
     })
 
 
@@ -2117,8 +2252,7 @@ def create_room():
     room_number = request.form.get('room_number', '').strip()
     room_type = request.form.get('room_type', '').strip()
     capacity = request.form.get('capacity')
-    building = request.form.get('building', '').strip() or None
-    floor = request.form.get('floor') or None
+    department_id = request.form.get('department_id') or None
 
     if not room_number or not room_type or not capacity:
         return jsonify({'ok': False, 'error': 'Room number, type, and capacity are required.'}), 400
@@ -2136,8 +2270,8 @@ def create_room():
             return jsonify({'ok': False, 'error': 'Room number already exists.'}), 400
 
         cursor.execute(
-            "INSERT INTO rooms (room_number, room_type, capacity, building, floor) VALUES (%s, %s, %s, %s, %s)",
-            (room_number, room_type, capacity, building, floor)
+            "INSERT INTO rooms (room_number, room_type, capacity, department_id) VALUES (%s, %s, %s, %s)",
+            (room_number, room_type, capacity, department_id)
         )
         mysql.connection.commit()
         flash('Room added successfully.', 'success')
@@ -2157,8 +2291,7 @@ def update_room(room_id):
     room_number = request.form.get('room_number', '').strip()
     room_type = request.form.get('room_type', '').strip()
     capacity = request.form.get('capacity')
-    building = request.form.get('building', '').strip() or None
-    floor = request.form.get('floor') or None
+    department_id = request.form.get('department_id') or None
 
     if not room_number or not room_type or not capacity:
         return jsonify({'ok': False, 'error': 'Room number, type, and capacity are required.'}), 400
@@ -2177,8 +2310,8 @@ def update_room(room_id):
             return jsonify({'ok': False, 'error': 'Room number already exists.'}), 400
 
         cursor.execute(
-            "UPDATE rooms SET room_number = %s, room_type = %s, capacity = %s, building = %s, floor = %s WHERE id = %s",
-            (room_number, room_type, capacity, building, floor, room_id)
+            "UPDATE rooms SET room_number = %s, room_type = %s, capacity = %s, department_id = %s WHERE id = %s",
+            (room_number, room_type, capacity, department_id, room_id)
         )
         mysql.connection.commit()
         flash('Room updated successfully.', 'success')
@@ -2439,6 +2572,7 @@ def my_permissions():
 def manage_students():
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '', type=str)
+    course_filter = request.args.get('course_filter', '', type=str)
     per_page = 10
     offset = (page - 1) * per_page
     
@@ -2448,25 +2582,35 @@ def manage_students():
     count_query = f"SELECT COUNT(s.id) {query_base}"
     data_query = f"SELECT s.id, s.name, s.email, c.name, cl.name, d.name {query_base}"
     
+    # Build WHERE clause
+    where_conditions = []
+    params = []
+    
     if search:
         search_term = f"%{search}%"
-        count_query += " WHERE s.name LIKE %s OR s.email LIKE %s"
-        data_query += " WHERE s.name LIKE %s OR s.email LIKE %s"
-        params = (search_term, search_term)
-    else:
-        params = ()
+        where_conditions.append("(s.name LIKE %s OR s.email LIKE %s OR s.admission_id LIKE %s)")
+        params.extend([search_term, search_term, search_term])
+    
+    if course_filter:
+        where_conditions.append("s.course_id = %s")
+        params.append(course_filter)
+    
+    if where_conditions:
+        where_clause = " WHERE " + " AND ".join(where_conditions)
+        count_query += where_clause
+        data_query += where_clause
 
-    cursor.execute(count_query, params)
+    cursor.execute(count_query, tuple(params))
     total = cursor.fetchone()[0]
     total_pages = math.ceil(total / per_page)
     
     data_query += " ORDER BY s.name LIMIT %s OFFSET %s"
-    cursor.execute(data_query, params + (per_page, offset))
+    cursor.execute(data_query, tuple(params) + (per_page, offset))
     students = cursor.fetchall()
     
-    cursor.execute("SELECT id, name FROM courses"); courses = cursor.fetchall()
-    cursor.execute("SELECT id, name FROM classes"); classes = cursor.fetchall()
-    cursor.execute("SELECT id, name FROM divisions"); divisions = cursor.fetchall()
+    cursor.execute("SELECT id, name FROM courses ORDER BY name"); courses = cursor.fetchall()
+    cursor.execute("SELECT id, name FROM classes ORDER BY display_order, name"); classes = cursor.fetchall()
+    cursor.execute("SELECT id, name FROM divisions ORDER BY name"); divisions = cursor.fetchall()
     cursor.close()
     
     return render_template('admin/manage_students.html', students=students, courses=courses, classes=classes, divisions=divisions, page=page, total_pages=total_pages, search=search)
@@ -2475,14 +2619,19 @@ def manage_students():
 @admin_required
 def get_student(student_id):
     cursor = mysql.connection.cursor()
-    # Without user_id FK, we can't join to users table, so just return student data
-    cursor.execute("SELECT s.name, s.email, s.course_id, s.class_id, s.division_id FROM students s WHERE s.id = %s", [student_id])
+    # Join with users table to get username
+    cursor.execute("""
+        SELECT s.name, s.email, s.course_id, s.class_id, s.division_id, u.username
+        FROM students s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.id = %s
+    """, [student_id])
     student = cursor.fetchone()
     cursor.close()
     if student:
         return jsonify({
             'name': student[0], 'email': student[1], 'course_id': student[2],
-            'class_id': student[3], 'division_id': student[4], 'username': ''
+            'class_id': student[3], 'division_id': student[4], 'username': student[5]
         })
     return jsonify({'error': 'Student not found'}), 404
 
@@ -2502,13 +2651,28 @@ def bulk_delete_students():
         return redirect(url_for('admin.manage_students'))
     
     cursor = mysql.connection.cursor()
-    # Without user_id FK, we just delete the students directly
-    # Note: This will leave orphaned user accounts; need proper cleanup later
-    format_strings = ','.join(['%s'] * len(ids_to_delete))
-    cursor.execute(f"DELETE FROM students WHERE id IN ({format_strings})", tuple(ids_to_delete))
-    mysql.connection.commit()
-    flash(f'{len(ids_to_delete)} students deleted successfully.', 'success')
-    cursor.close()
+    try:
+        # Get user_ids for the students to be deleted
+        format_strings = ','.join(['%s'] * len(ids_to_delete))
+        cursor.execute(f"SELECT user_id FROM students WHERE id IN ({format_strings})", tuple(ids_to_delete))
+        user_ids = [row[0] for row in cursor.fetchall()]
+        
+        # Delete students first (FK constraint)
+        cursor.execute(f"DELETE FROM students WHERE id IN ({format_strings})", tuple(ids_to_delete))
+        
+        # Delete corresponding user accounts
+        if user_ids:
+            user_format_strings = ','.join(['%s'] * len(user_ids))
+            cursor.execute(f"DELETE FROM users WHERE id IN ({user_format_strings})", tuple(user_ids))
+        
+        mysql.connection.commit()
+        flash(f'{len(ids_to_delete)} students deleted successfully.', 'success')
+    except Exception as e:
+        mysql.connection.rollback()
+        current_app.logger.error(f"Error deleting students: {str(e)}")
+        flash('Error deleting students. Please try again.', 'danger')
+    finally:
+        cursor.close()
     return redirect(url_for('admin.manage_students'))
 
 
@@ -2518,18 +2682,30 @@ def bulk_delete_students():
 def manage_faculty():
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '', type=str)
+    department_filter = request.args.get('department_filter', '', type=str)
     
     query_base = "FROM faculty f LEFT JOIN departments d ON f.department_id = d.id"
-    params = ()
+    
+    # Build WHERE clause
+    where_conditions = []
+    params = []
+    
     if search:
         search_term = f"%{search}%"
-        query_base += " WHERE f.name LIKE %s OR f.email LIKE %s"
-        params = (search_term, search_term)
+        where_conditions.append("(f.name LIKE %s OR f.email LIKE %s OR f.employee_id LIKE %s)")
+        params.extend([search_term, search_term, search_term])
+    
+    if department_filter:
+        where_conditions.append("f.department_id = %s")
+        params.append(department_filter)
+    
+    if where_conditions:
+        query_base += " WHERE " + " AND ".join(where_conditions)
 
-    faculty, total_pages = paginate(f"SELECT f.id, f.name, f.email, d.name {query_base}", params, page)
+    faculty, total_pages = paginate(f"SELECT f.id, f.name, f.email, d.name {query_base}", tuple(params), page)
     
     cursor = mysql.connection.cursor()
-    cursor.execute("SELECT id, name FROM departments")
+    cursor.execute("SELECT id, name FROM departments ORDER BY name")
     departments = cursor.fetchall()
     cursor.close()
     return render_template('admin/manage_faculty.html', faculty=faculty, departments=departments, page=page, total_pages=total_pages, search=search)
@@ -2562,9 +2738,14 @@ def add_faculty():
         hashed = generate_password_hash(password)
         cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, 'Teacher')", (username, hashed))
         user_id = cursor.lastrowid
+        
+        # Generate unique employee_id (e.g., EMP202500001)
+        from datetime import datetime
+        employee_id = f"EMP{datetime.now().year}{user_id:06d}"
+        
         cursor.execute(
-            "INSERT INTO faculty (name, email, department_id) VALUES (%s, %s, %s)",
-            (name, email, department_id)
+            "INSERT INTO faculty (id, user_id, name, email, department_id, employee_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (user_id, user_id, name, email, department_id, employee_id)
         )
         mysql.connection.commit()
         flash('Faculty member added successfully.', 'success')
@@ -2608,9 +2789,14 @@ def add_student():
         hashed = generate_password_hash(password)
         cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, 'Student')", (username, hashed))
         user_id = cursor.lastrowid
+        
+        # Generate unique admission_id (e.g., ADM202500001)
+        from datetime import datetime
+        admission_id = f"ADM{datetime.now().year}{user_id:06d}"
+        
         cursor.execute(
-            "INSERT INTO students (name, email, course_id, class_id, division_id) VALUES (%s, %s, %s, %s, %s)",
-            (name, email, course_id, class_id, division_id)
+            "INSERT INTO students (id, user_id, name, email, course_id, class_id, division_id, admission_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (user_id, user_id, name, email, course_id, class_id, division_id, admission_id)
         )
         mysql.connection.commit()
         flash('Student added successfully.', 'success')
@@ -2651,8 +2837,8 @@ def bulk_invite_students():
                     flash('Invalid file format. Please upload CSV or Excel file.', 'danger')
                     return redirect(url_for('admin.bulk_invite_students'))
                 
-                # Expected columns: name, email, username, course_id, class_id, division_id
-                required_cols = ['name', 'email', 'username']
+                # Expected columns: name, email, username, course_id (required)
+                required_cols = ['name', 'email', 'username', 'course_id']
                 if not all(col in df.columns for col in required_cols):
                     flash(f'CSV must contain columns: {", ".join(required_cols)}', 'danger')
                     return redirect(url_for('admin.bulk_invite_students'))
@@ -2666,10 +2852,16 @@ def bulk_invite_students():
                         email = str(row['email']).strip()
                         username = str(row['username']).strip()
                         
+                        # course_id is required (NOT NULL in database)
+                        course_id = int(row['course_id']) if pd.notna(row.get('course_id')) else None
+                        if not course_id:
+                            errors.append(f"Row {idx+2}: course_id is required")
+                            error_count += 1
+                            continue
+                        
                         # Optional fields
-                        course_id = row.get('course_id') if pd.notna(row.get('course_id')) else None
-                        class_id = row.get('class_id') if pd.notna(row.get('class_id')) else None
-                        division_id = row.get('division_id') if pd.notna(row.get('division_id')) else None
+                        class_id = int(row['class_id']) if pd.notna(row.get('class_id')) else None
+                        division_id = int(row['division_id']) if pd.notna(row.get('division_id')) else None
                         password = row.get('password', default_password) if pd.notna(row.get('password')) else default_password
                         
                         # Check if username exists
@@ -2694,10 +2886,14 @@ def bulk_invite_students():
                         )
                         user_id = cursor.lastrowid
                         
-                        # Create student record
+                        # Generate unique admission_id
+                        from datetime import datetime
+                        admission_id = f"ADM{datetime.now().year}{user_id:06d}"
+                        
+                        # Create student record (id must match user_id)
                         cursor.execute(
-                            "INSERT INTO students (name, email, course_id, class_id, division_id) VALUES (%s, %s, %s, %s, %s)",
-                            (name, email, course_id, class_id, division_id)
+                            "INSERT INTO students (id, user_id, name, email, course_id, class_id, division_id, admission_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            (user_id, user_id, name, email, course_id, class_id, division_id, admission_id)
                         )
                         
                         success_count += 1
@@ -2719,6 +2915,10 @@ def bulk_invite_students():
                 
                 if not students_data:
                     flash('Please provide student data', 'warning')
+                    return redirect(url_for('admin.bulk_invite_students'))
+                
+                if not default_course:
+                    flash('Please select a default course (course_id is required)', 'danger')
                     return redirect(url_for('admin.bulk_invite_students'))
                 
                 # Parse students data (format: name, email, username per line)
@@ -2756,11 +2956,16 @@ def bulk_invite_students():
                             "INSERT INTO users (username, password, role, email, status) VALUES (%s, %s, 'Student', %s, 'active')",
                             (username, hashed, email)
                         )
+                        user_id = cursor.lastrowid
                         
-                        # Create student
+                        # Generate unique admission_id
+                        from datetime import datetime
+                        admission_id = f"ADM{datetime.now().year}{user_id:06d}"
+                        
+                        # Create student (id must match user_id)
                         cursor.execute(
-                            "INSERT INTO students (name, email, course_id, class_id, division_id) VALUES (%s, %s, %s, %s, %s)",
-                            (name, email, default_course, default_class, default_division)
+                            "INSERT INTO students (id, user_id, name, email, course_id, class_id, division_id, admission_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            (user_id, user_id, name, email, default_course, default_class, default_division, admission_id)
                         )
                         
                         success_count += 1

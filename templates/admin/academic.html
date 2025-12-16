@@ -212,8 +212,7 @@
                     <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Staff</span>
                 </div>
                 <div>
-                    <h3 class="text-3xl font-bold text-gray-800">{{ allocations|length if faculty_allocations
-                        else 0 }}</h3>
+                    <h3 class="text-3xl font-bold text-gray-800">{{ allocations_count }}</h3>
                     <p class="text-sm font-medium text-gray-500 group-hover:text-red-600 transition-colors mt-1">Faculty
                         Allocations</p>
                 </div>
@@ -232,7 +231,7 @@
                         <i class="fas fa-university"></i>
                     </div>
                     <div>
-                        <h3 class="text-3xl font-bold">{{ departments|length if departments else 0 }}</h3>
+                        <h3 class="text-3xl font-bold">{{ departments_count }}</h3>
                         <p class="text-blue-100 font-medium">Departments</p>
                     </div>
                 </div>

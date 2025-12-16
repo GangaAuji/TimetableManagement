@@ -11,437 +11,368 @@
 
 {% block extra_css %}
 <style>
-    /* Fix for dropdown arrow alignment */
-    .form-select-custom {
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-        background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E');
-        background-repeat: no-repeat;
-        background-position: right 0.75rem center;
-        background-size: 1.25em 1.25em;
-        padding-right: 2.5rem;
-        /* Make space for the arrow */
+    /* Profile Cover Gradient */
+    .profile-cover {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        height: 200px; /* Increased height slightly for better proportions */
+        position: relative;
     }
-
-    /* Style for action buttons */
-    .action-btn-enhanced {
-        transition: all 0.2s ease;
+    
+    /* Avatar Styling */
+    .profile-avatar-image {
+        border: 4px solid white;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        background-color: #f3f4f6;
     }
 
-    .action-btn-enhanced:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    /* Hover overlay for upload */
+    .avatar-overlay {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    .group:hover .avatar-overlay {
+        opacity: 1;
     }
 
-    /* Collapsible section transition */
-    /* #passwordSection {
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  max-height: 0;
-  overflow: hidden;
-}
-#passwordSection.open {
-  max-height: 500px;
-} */
+    /* Transition for View/Edit modes */
+    .fade-transition {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-8 fade-in max-w-7xl mx-auto"> <!-- Added max-w-7xl to constrain width -->
-
-    <!-- Header Banner -->
-    <div class="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-lg shadow-lg p-6 text-white">
-        <div class="flex flex-col md:flex-row items-center justify-between">
-            <div class="mb-6 md:mb-0">
-                <h2 class="text-3xl font-bold mb-2 flex items-center">
-                    <i class="fas fa-user-circle mr-3"></i>
-                    My Profile
-                </h2>
-                <p class="text-blue-100 text-base">View and edit your personal information</p>
+<div class="max-w-7xl mx-auto pb-12 fade-in space-y-6">
+    
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        
+        <div class="profile-cover w-full">
+            <div class="absolute top-6 right-6 z-10">
+                <button type="button" onclick="openPasswordModal()" 
+                    class="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm border border-white/20 flex items-center">
+                    <i class="fas fa-key mr-2"></i> Change Password
+                </button>
             </div>
-            <div class="flex flex-col sm:flex-row gap-3">
-                <button type="button" id="toggleEditBtn" onclick="toggleEditMode()"
-                    class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-5 py-2.5 rounded-lg font-semibold transition-all shadow-lg flex items-center justify-center">
-                    <i class="fas fa-edit mr-2"></i>Edit Profile
-                </button>
-                <button type="button" onclick="openPasswordModal()"
-                    class="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-5 py-2.5 rounded-lg font-semibold transition-all shadow-lg flex items-center justify-center">
-                    <i class="fas fa-key mr-2"></i>Change Password
-                </button>
+        </div>
+
+        <div class="px-6 pb-8">
+            <div class="relative flex flex-col md:flex-row items-start md:items-end -mt-16 mb-4">
+                
+                <div class="relative z-10 flex-shrink-0 mx-auto md:mx-0">
+                    <div class="group relative h-32 w-32 md:h-40 md:w-40 rounded-full overflow-hidden profile-avatar-image">
+                        <img id="profile-preview" 
+                             src="{{ url_for('static', filename=user.profile_photo) }}"
+                             alt="Profile Photo" 
+                             class="h-full w-full object-cover"
+                             onerror="this.src='{{ url_for('static', filename='default-avatar.svg') }}'">
+                        
+                        <label for="profile_photo" id="photoUploadBtn" 
+                               class="avatar-overlay absolute inset-0 flex items-center justify-center cursor-pointer text-white hidden">
+                            <i class="fas fa-camera text-2xl"></i>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex-1 mt-4 md:mt-0 md:ml-6 w-full text-center md:text-left flex flex-col md:flex-row md:justify-between md:items-end">
+                    
+                    <div class="mb-4 md:mb-0">
+                        <h1 class="text-3xl font-bold text-gray-900">{{ user.username }}</h1>
+                        <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-2 text-sm text-gray-600">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-700">
+                                <i class="fas fa-user-tag mr-1.5"></i>
+                                {{ user.role | title }}
+                            </span>
+                            
+                            {% if user.department_name %}
+                            <span class="inline-flex items-center text-gray-500">
+                                <i class="fas fa-building mr-1.5"></i>
+                                {{ user.department_name }}
+                                {% if user.is_hod %}
+                                <span class="ml-2 bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded-full font-bold">HOD</span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="h-2 w-2 rounded-full {% if user.status == 'active' %}bg-green-500{% else %}bg-red-500{% endif %}"></span>
+                                <span class="font-medium {% if user.status == 'active' %}text-green-700{% else %}text-red-700{% endif %}">{{ user.status | title }}</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="flex-shrink-0 mb-1">
+                        <button type="button" id="toggleEditBtn" onclick="toggleEditMode()"
+                            class="inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <i class="fas fa-pen mr-2"></i> Edit Profile
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Change Password Section (Collapsible) -->
-    <div id="passwordModal"
-        class="modal hidden fixed z-50 inset-0 bg-gray-900 bg-opacity-50 items-center justify-center">
-        <div class="modal-content bg-white rounded-lg shadow-2xl border-0 w-full max-w-md mx-4">
-            <div class="modal-header bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-t-lg p-5">
-                <h3 class="modal-title font-bold text-xl flex items-center">
-                    <i class="fas fa-key mr-2"></i>Change Password
-                </h3>
-                <button type="button" class="btn-close btn-close-white close-modal-btn"
-                    onclick="App.hideModal(document.getElementById('passwordModal'))"></button>
-            </div>
-            <form method="POST" action="{{ url_for('profile.change_password') }}" data-loading>
-                <div class="modal-body p-6 space-y-6">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                    <div>
-                        <label for="current_password_modal" class="block text-sm font-bold text-gray-700 mb-2">Current
-                            Password *</label>
-                        <input type="password" name="current_password" id="current_password_modal"
-                            class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            required>
-                    </div>
-                    <div>
-                        <label for="new_password_modal" class="block text-sm font-bold text-gray-700 mb-2">New Password
-                            *</label>
-                        <input type="password" name="new_password" id="new_password_modal"
-                            class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            required minlength="8">
-                        <small class="text-gray-500">Minimum 8 characters</small>
-                    </div>
-                    <div>
-                        <label for="confirm_password_modal" class="block text-sm font-bold text-gray-700 mb-2">Confirm
-                            New Password *</label>
-                        <input type="password" name="confirm_password" id="confirm_password_modal"
-                            class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            required minlength="8">
-                        <div id="password-match-msg-modal" class="text-sm text-red-600 mt-1"></div>
-                    </div>
-                </div>
-                <div class="modal-footer bg-gray-50 rounded-b-lg p-5 flex justify-end gap-3">
-                    <button type="button"
-                        class="px-5 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-all cancel-btn"
-                        onclick="App.hideModal(document.getElementById('passwordModal'))">
-                        Cancel
-                    </button>
-                    <button type="submit" id="submit-pwd-btn-modal"
-                        class="btn-primary px-6 py-2.5 rounded-lg shadow-md hover:shadow-lg font-semibold">
-                        <i class="fas fa-save mr-2"></i> Change Password
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Profile Content -->
     <form method="POST" action="{{ url_for('profile.edit_profile') }}" enctype="multipart/form-data" id="profileForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Left Column - Profile Photo & Account Info -->
-            <div class="lg:col-span-1 space-y-8">
-                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
-                    <div class="p-6 text-center">
-                        <!-- Profile Photo -->
-                        <div class="mb-4 relative inline-block">
-                            <img id="profile-preview" src="{{ url_for('static', filename=user.profile_photo) }}"
-                                alt="Profile Photo" class="rounded-full"
-                                style="width: 150px; height: 150px; object-fit: cover; border: 4px solid #e5e7eb;"
-                                onerror="this.src='{{ url_for('static', filename='default-avatar.svg') }}'">
+        <input type="file" id="profile_photo" name="profile_photo" accept="image/*" class="hidden" onchange="previewImage(this)">
 
-                            <label for="profile_photo"
-                                class="action-btn-enhanced absolute bottom-2 right-2 h-12 w-12 rounded-full bg-indigo-600 text-white flex items-center justify-center cursor-pointer"
-                                style="display: none;" id="photoUploadBtn" data-tooltip="Change Photo">
-                                <i class="fas fa-camera text-lg"></i>
-                            </label>
-                            <input type="file" id="profile_photo" name="profile_photo" accept="image/*" class="hidden"
-                                data-upload-type="image" onchange="previewImage(this)">
-                        </div>
-
-                        <h4 class="text-2xl font-bold text-gray-800 mb-1">{{ user.username }}</h4>
-                        <p class="text-gray-500 mb-3">{{ user.role | title }}</p>
-                        {% if user.department_name %}
-                        <p class="text-indigo-600 font-semibold mb-2">
-                            <i class="fas fa-building"></i> {{ user.department_name }}
-                            {% if user.is_hod %}
-                            <span class="badge badge-warning ml-1">HOD</span>
-                            {% endif %}
-                        </p>
-                        {% endif %}
-                        <span
-                            class="badge {% if user.status == 'active' %}badge-success{% else %}badge-danger{% endif %}">
-                            {{ user.status | title }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Account Information -->
-                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
-                    <div class="p-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-100">
-                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                            <i class="fas fa-info-circle text-indigo-600 mr-2"></i> Account Information
-                        </h3>
-                    </div>
-                    <div class="p-6 space-y-4">
-                        <div>
-                            <span class="block text-sm font-bold text-gray-500 mb-1">Member Since</span>
-                            <p class="text-gray-800 font-semibold">{{ user.created_at.strftime('%B %d, %Y') if
-                                user.created_at else 'N/A' }}</p>
-                        </div>
-                        <div>
-                            <span class="block text-sm font-bold text-gray-500 mb-1">Last Login</span>
-                            <p class="text-gray-800 font-semibold">{{ user.last_login.strftime('%B %d, %Y %I:%M %p') if
-                                user.last_login else 'Never' }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column - Profile Details & Edit Form -->
-            <div class="lg:col-span-2">
-                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
-                    <div class="p-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-100">
-                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                            <i class="fas fa-user-edit text-indigo-600 mr-2"></i> Profile Details
-                        </h3>
-                    </div>
-                    <div class="p-6">
-                        <!-- View Mode -->
-                        <div id="viewMode" class="space-y-6">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <span class="block text-sm font-bold text-gray-500 mb-1">Username</span>
-                                    <p class="text-gray-800 font-semibold">{{ user.username }}</p>
-                                </div>
-                                <div>
-                                    <span class="block text-sm font-bold text-gray-500 mb-1">Email</span>
-                                    <p class="text-gray-800 font-semibold">{{ user.email or 'Not provided' }}</p>
-                                </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Account Metadata</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
+                                <i class="far fa-calendar-alt"></i>
                             </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <span class="block text-sm font-bold text-gray-500 mb-1">Phone</span>
-                                    <p class="text-gray-800 font-semibold">{{ user.phone or 'Not provided' }}</p>
-                                </div>
-                                <div>
-                                    <span class="block text-sm font-bold text-gray-500 mb-1">Date of Birth</span>
-                                    <p class="text-gray-800 font-semibold">
-                                        {{ user.date_of_birth.strftime('%B %d, %Y') if user.date_of_birth else 'Not
-                                        provided' }}
-                                    </p>
-                                </div>
-                            </div>
-
                             <div>
-                                <span class="block text-sm font-bold text-gray-500 mb-1">Address</span>
-                                <p class="text-gray-800 font-semibold">{{ user.address or 'Not provided' }}</p>
-                            </div>
-
-                            <div>
-                                <span class="block text-sm font-bold text-gray-500 mb-1">Bio</span>
-                                <p class="text-gray-800 font-semibold whitespace-pre-wrap">{{ user.bio or 'No bio
-                                    provided' }}</p>
+                                <p class="text-xs text-gray-500">Member Since</p>
+                                <p class="text-sm font-semibold text-gray-900">{{ user.created_at.strftime('%B %d, %Y') if user.created_at else 'N/A' }}</p>
                             </div>
                         </div>
-
-                        <!-- Edit Mode (Hidden by default) -->
-                        <div id="editMode" style="display: none;" class="space-y-6">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-2">Username</label>
-                                    <input type="text"
-                                        class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg bg-gray-100"
-                                        value="{{ user.username }}" disabled>
-                                    <small class="text-gray-500">Username cannot be changed</small>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-2">Role</label>
-                                    <input type="text"
-                                        class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg bg-gray-100"
-                                        value="{{ user.role | title }}" disabled>
-                                </div>
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 mr-3">
+                                <i class="far fa-clock"></i>
                             </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label for="email" class="block text-sm font-bold text-gray-700 mb-2">Email
-                                        *</label>
-                                    <input type="email" id="email" name="email"
-                                        class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                        value="{{ user.email or '' }}" required>
-                                </div>
-                                <div>
-                                    <label for="phone" class="block text-sm font-bold text-gray-700 mb-2">Phone</label>
-                                    <input type="tel" id="phone" name="phone"
-                                        class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                        value="{{ user.phone or '' }}" placeholder="+91 1234567890">
-                                </div>
-                            </div>
-
                             <div>
-                                <label for="date_of_birth" class="block text-sm font-bold text-gray-700 mb-2">Date of
-                                    Birth</label>
-                                <input type="date" id="date_of_birth" name="date_of_birth"
-                                    class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                    value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}">
-                            </div>
-
-                            <div>
-                                <label for="address" class="block text-sm font-bold text-gray-700 mb-2">Address</label>
-                                <textarea id="address" name="address"
-                                    class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                    rows="3" placeholder="Enter your full address">{{ user.address or '' }}</textarea>
-                            </div>
-
-                            <div>
-                                <label for="bio" class="block text-sm font-bold text-gray-700 mb-2">Bio</label>
-                                <textarea id="bio" name="bio"
-                                    class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                    rows="4" placeholder="Tell us about yourself...">{{ user.bio or '' }}</textarea>
-                                <small class="text-gray-500">Max 500 characters</small>
-                            </div>
-
-                            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                                <button type="button"
-                                    class="px-5 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-all"
-                                    onclick="toggleEditMode()">
-                                    <i class="fas fa-times mr-2"></i> Cancel
-                                </button>
-                                <button type="submit"
-                                    class="btn-primary px-6 py-2.5 rounded-lg shadow-md hover:shadow-lg font-semibold">
-                                    <i class="fas fa-save mr-2"></i> Save Changes
-                                </button>
+                                <p class="text-xs text-gray-500">Last Login</p>
+                                <p class="text-sm font-semibold text-gray-900">{{ user.last_login.strftime('%b %d, %I:%M %p') if user.last_login else 'Never' }}</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Additional Information based on Role -->
                 {% if session.role == 'Teacher' %}
-                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 mt-8">
-                    <div class="p-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-100">
-                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                            <i class="fas fa-chalkboard-teacher text-indigo-600 mr-2"></i> Teaching Information
-                        </h3>
-                    </div>
-                    <div class="p-6">
-                        <p class="text-gray-600 mb-4">View your teaching schedule, assigned subjects, and classes from
-                            the dashboard.</p>
-                        <a href="{{ url_for('teacher.dashboard') }}"
-                            class="btn-primary inline-flex items-center px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg font-semibold">
-                            Go to Dashboard
-                        </a>
-                    </div>
+                <div class="bg-white rounded-xl shadow-sm border border-indigo-100 p-6 border-l-4 border-l-indigo-500">
+                    <h3 class="font-bold text-gray-800">Teacher Dashboard</h3>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">Manage classes and schedule.</p>
+                    <a href="{{ url_for('teacher.dashboard') }}" class="text-indigo-600 font-medium text-sm hover:underline">Go to Dashboard &rarr;</a>
                 </div>
                 {% elif session.role == 'Student' %}
-                <div class="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 mt-8">
-                    <div class="p-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-100">
-                        <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                            <i class="fas fa-graduation-cap text-indigo-600 mr-2"></i> Student Information
-                        </h3>
-                    </div>
-                    <div class="p-6">
-                        <p class="text-gray-600 mb-4">View your timetable, subjects, and academic information from the
-                            dashboard.</p>
-                        <a href="{{ url_for('student.dashboard') }}"
-                            class="btn-primary inline-flex items-center px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg font-semibold">
-                            Go to Dashboard
-                        </a>
-                    </div>
+                <div class="bg-white rounded-xl shadow-sm border border-emerald-100 p-6 border-l-4 border-l-emerald-500">
+                    <h3 class="font-bold text-gray-800">Student Portal</h3>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">View timetable and status.</p>
+                    <a href="{{ url_for('student.dashboard') }}" class="text-emerald-600 font-medium text-sm hover:underline">Go to Dashboard &rarr;</a>
                 </div>
                 {% endif %}
+            </div>
+
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full">
+                    <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2 bg-gray-50/50">
+                        <span class="h-2 w-2 rounded-full bg-indigo-500"></span>
+                        <h3 class="font-bold text-gray-800">Personal Information</h3>
+                    </div>
+                    
+                    <div class="p-6 md:p-8">
+                        <div id="viewMode" class="fade-transition">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-8">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Email</label>
+                                    <div class="flex items-center text-gray-900 font-medium">
+                                        <i class="far fa-envelope text-gray-400 w-5 mr-2"></i>
+                                        {{ user.email or 'Not provided' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Phone</label>
+                                    <div class="flex items-center text-gray-900 font-medium">
+                                        <i class="fas fa-phone-alt text-gray-400 w-5 mr-2"></i>
+                                        {{ user.phone or 'Not provided' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Date of Birth</label>
+                                    <div class="flex items-center text-gray-900 font-medium">
+                                        <i class="fas fa-birthday-cake text-gray-400 w-5 mr-2"></i>
+                                        {{ user.date_of_birth.strftime('%B %d, %Y') if user.date_of_birth else 'Not provided' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Address</label>
+                                    <div class="flex items-start text-gray-900 font-medium">
+                                        <i class="fas fa-map-marker-alt text-gray-400 w-5 mr-2 mt-1"></i>
+                                        <span>{{ user.address or 'Not provided' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-8 pt-6 border-t border-gray-100">
+                                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Bio / About</label>
+                                <p class="text-gray-700 text-sm leading-relaxed">{{ user.bio or 'No bio provided.' }}</p>
+                            </div>
+                        </div>
+
+                        <div id="editMode" style="display: none;" class="fade-transition space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
+                                    <input type="text" value="{{ user.username }}" disabled class="w-full bg-transparent border-none p-0 text-gray-500 font-semibold focus:ring-0">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Role</label>
+                                    <input type="text" value="{{ user.role | title }}" disabled class="w-full bg-transparent border-none p-0 text-gray-500 font-semibold focus:ring-0">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                                    <input type="email" name="email" value="{{ user.email or '' }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Phone</label>
+                                    <input type="tel" name="phone" value="{{ user.phone or '' }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Date of Birth</label>
+                                <input type="date" name="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Address</label>
+                                <textarea name="address" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">{{ user.address or '' }}</textarea>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Bio</label>
+                                <textarea name="bio" rows="4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">{{ user.bio or '' }}</textarea>
+                            </div>
+
+                            <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                                <button type="button" onclick="toggleEditMode()" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
+                                <button type="submit" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium shadow-sm">Save Changes</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </form>
 </div>
+
+<div id="passwordModal" class="modal hidden fixed z-50 inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <h3 class="text-lg font-bold text-gray-800">Change Password</h3>
+            <button type="button" class="text-gray-400 hover:text-gray-600" onclick="App.hideModal(document.getElementById('passwordModal'))">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('profile.change_password') }}">
+            <div class="p-6 space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Current Password</label>
+                    <input type="password" name="current_password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">New Password</label>
+                    <input type="password" name="new_password" id="new_password_modal" required minlength="8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Confirm New Password</label>
+                    <input type="password" name="confirm_password" id="confirm_password_modal" required minlength="8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <p id="password-match-msg-modal" class="text-xs mt-1 h-4"></p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
+                <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg" onclick="App.hideModal(document.getElementById('passwordModal'))">Cancel</button>
+                <button type="submit" id="submit-pwd-btn-modal" class="px-6 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700">Update Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Logic to switch between View and Edit modes
     function toggleEditMode() {
         const viewMode = document.getElementById('viewMode');
         const editMode = document.getElementById('editMode');
         const toggleBtn = document.getElementById('toggleEditBtn');
         const photoUploadBtn = document.getElementById('photoUploadBtn');
-
+        const toggleBtnIcon = toggleBtn.querySelector('i');
+        
         if (viewMode.style.display === 'none') {
-            // Switch to view mode
+            // Switch back to View Mode
             viewMode.style.display = 'block';
             editMode.style.display = 'none';
-            photoUploadBtn.style.display = 'none';
-            toggleBtn.innerHTML = '<i class="fas fa-edit mr-2"></i> Edit Profile';
+            photoUploadBtn.classList.add('hidden');
+            
+            toggleBtn.className = 'inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+            toggleBtn.innerHTML = '<i class="fas fa-pen mr-2"></i> Edit Profile';
         } else {
-            // Switch to edit mode
+            // Switch to Edit Mode
             viewMode.style.display = 'none';
             editMode.style.display = 'block';
-            photoUploadBtn.style.display = 'block';
-            toggleBtn.innerHTML = '<i class="fas fa-eye mr-2"></i> View Mode';
+            photoUploadBtn.classList.remove('hidden');
+            
+            toggleBtn.className = 'inline-flex items-center px-5 py-2.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium rounded-lg shadow-sm transition-colors';
+            toggleBtn.innerHTML = '<i class="fas fa-times mr-2"></i> Cancel Editing';
         }
     }
 
+    // Modal Handler
     function openPasswordModal() {
         const modal = document.getElementById('passwordModal');
-        if (modal && window.App) {
-            App.showModal(modal);
+        if (modal) {
+            if (window.App && typeof App.showModal === 'function') {
+                App.showModal(modal);
+            } else {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
         }
     }
 
+    // Image Preview
     function previewImage(input) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
-            const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
-
-            // Validate file type
-            if (!allowedTypes.includes(file.type)) {
-                // Using App.showError if available, otherwise alert
-                if (window.API && window.API.showError) {
-                    window.API.showError('Invalid file type! Please upload PNG, JPG, or GIF.');
-                } else {
-                    alert('Invalid file type! Please upload PNG, JPG, JPEG, or GIF images only.');
-                }
-                input.value = ''; // Clear the input
-                return;
-            }
-
-            // Validate file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                if (window.API && window.API.showError) {
-                    window.API.showError('File is too large! Max 5MB.');
-                } else {
-                    alert('File is too large! Please upload an image smaller than 5MB.');
-                }
-                input.value = ''; // Clear the input
-                return;
-            }
-
             const reader = new FileReader();
-            reader.onload = function (e) {
+            reader.onload = function(e) {
                 document.getElementById('profile-preview').src = e.target.result;
-            };
+            }
             reader.readAsDataURL(file);
         }
     }
 
-    // Password validation for change password form
-    document.addEventListener('DOMContentLoaded', function () {
-        const newPassword = document.getElementById('new_password_modal');
-        const confirmPassword = document.getElementById('confirm_password_modal');
-        const passwordMsg = document.getElementById('password-match-msg-modal');
-        const submitPwdBtn = document.getElementById('submit-pwd-btn-modal');
+    // Password Validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const newPwd = document.getElementById('new_password_modal');
+        const confirmPwd = document.getElementById('confirm_password_modal');
+        const msg = document.getElementById('password-match-msg-modal');
+        const btn = document.getElementById('submit-pwd-btn-modal');
 
-        if (newPassword && confirmPassword && passwordMsg && submitPwdBtn) {
-            function validatePasswords() {
-                if (newPassword.value && confirmPassword.value) {
-                    if (newPassword.value === confirmPassword.value) {
-                        passwordMsg.textContent = '';
-                        confirmPassword.setCustomValidity('');
-                        submitPwdBtn.disabled = false;
-                    } else {
-                        passwordMsg.textContent = 'Passwords do not match';
-                        confirmPassword.setCustomValidity('Passwords do not match');
-                        submitPwdBtn.disabled = true;
-                    }
+        function checkMatch() {
+            if (newPwd.value && confirmPwd.value) {
+                if (newPwd.value === confirmPwd.value) {
+                    msg.textContent = 'Passwords match';
+                    msg.className = 'text-xs mt-1 h-4 text-green-600';
+                    btn.disabled = false;
                 } else {
-                    passwordMsg.textContent = '';
-                    submitPwdBtn.disabled = false;
+                    msg.textContent = 'Passwords do not match';
+                    msg.className = 'text-xs mt-1 h-4 text-red-600';
+                    btn.disabled = true;
                 }
+            } else {
+                msg.textContent = '';
+                btn.disabled = false;
             }
-            newPassword.addEventListener('input', validatePasswords);
-            confirmPassword.addEventListener('input', validatePasswords);
+        }
+
+        if (newPwd && confirmPwd) {
+            newPwd.addEventListener('input', checkMatch);
+            confirmPwd.addEventListener('input', checkMatch);
         }
     });
 </script>
