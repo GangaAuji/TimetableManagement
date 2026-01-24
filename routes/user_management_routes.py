@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app
 from forms import UserForm, EmptyForm, RoleForm, PermissionForm, UserFilterForm
-from app import mysql
+from database import get_db_connection
 from security import has_permission, log_activity, get_user_permissions, check_user_permission, grant_user_permission, revoke_user_permission, get_accessible_departments
 from werkzeug.security import generate_password_hash
 from datetime import datetime
@@ -16,13 +16,15 @@ def update_forms():
     """Update dynamic form choices before each request"""
     if 'role' in request.form:
         form = RoleForm()
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        cursor = connection.cursor(dictionary=True)
         cursor.execute('SELECT id, name FROM permissions ORDER BY module, name')
-        form.permissions.choices = [(p[0], p[1]) for p in cursor.fetchall()]
+        form.permissions.choices = [(p['id'], p['name']) for p in cursor.fetchall()]
         cursor.close()
 
 @user_mgmt_bp.route('/')
-@has_permission('view_users')
+@has_permission('users_view_user')
 def manage_users():
     form = UserForm()
     empty_form = EmptyForm()
@@ -58,13 +60,16 @@ def manage_users():
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY u.username"
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     cursor.execute('SELECT name FROM roles ORDER BY name')
     roles = cursor.fetchall()
     
     # Update filter form choices
-    filter_form.role.choices = [('', 'All')] + [(r[0], r[0]) for r in roles]
-    form.role.choices = [(r[0], r[0]) for r in roles]
+    filter_form.role.choices = [('', 'All')] + [(r['name'], r['name']) for r in roles]
+    form.role.choices = [(r['name'], r['name']) for r in roles]
     
     cursor.execute(query, params)
     users = cursor.fetchall()
@@ -83,7 +88,7 @@ def manage_users():
     )
 
 @user_mgmt_bp.route('/add', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_add_user')
 def add_user():
     form = UserForm()
     if form.validate_on_submit():
@@ -93,7 +98,10 @@ def add_user():
         status = form.status.data or 'active'
         email = form.email.data
         
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        
+        cursor = connection.cursor(dictionary=True)
         try:
             # Check if username exists
             cursor.execute('SELECT id FROM users WHERE username = %s', [username])
@@ -116,15 +124,18 @@ def add_user():
                 f'Created new user: {username} with role {role}'
             )
             
-            mysql.connection.commit()
+            connection.commit()
             flash('User created successfully.', 'success')
             
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             current_app.logger.error(f"Error creating user: {str(e)}")
             flash('Error creating user. Please try again.', 'danger')
         finally:
+
             cursor.close()
+
+            connection.close()
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -133,42 +144,79 @@ def add_user():
     return redirect(url_for('user_mgmt_bp.manage_users'))
 
 @user_mgmt_bp.route('/get/<int:user_id>')
-@has_permission('view_users')
+@has_permission('users_view_user')
 def get_user(user_id):
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, username, role, status, last_login FROM users WHERE id = %s",
+            "SELECT id, username, role, status, last_login, is_hod, department_id FROM users WHERE id = %s",
             [user_id]
         )
         user = cursor.fetchone()
 
         if user:
-            # Without profile linkage, display_name defaults to username; email unknown
+            # Get all available roles
+            cursor.execute("SELECT name FROM roles ORDER BY name")
+            available_roles = [r['name'] for r in cursor.fetchall()]
+            
             return jsonify({
-                'id': user[0],
-                'username': user[1],
-                'role': user[2],
-                'status': user[3],
-                'display_name': user[1],
-                'email': None
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role'],
+                'status': user['status'],
+                'display_name': user['username'],
+                'email': None,
+                'is_hod': user['is_hod'],
+                'department_id': user['department_id'],
+                'available_roles': available_roles
             })
         return jsonify({'error': 'User not found'}), 404
     finally:
+
         cursor.close()
 
+        connection.close()
+
 @user_mgmt_bp.route('/edit/<int:user_id>', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def edit_user(user_id):
-    form = UserForm()
-    if form.validate_on_submit():
-        username = form.username.data.strip()
-        password = form.password.data
-        role = form.role.data
-        status = form.status.data
-        email = form.email.data
+    # Get form data directly from request to handle extra fields not in UserForm
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    role = request.form.get('role', '')
+    status = request.form.get('status', 'active')
+    email = request.form.get('email', '')
+    department_id = request.form.get('department_id')
+    is_hod = request.form.get('is_hod') == 'on'
+    
+    # Validate required fields
+    if not username or len(username) < 3:
+        flash('Username must be at least 3 characters.', 'danger')
+        return redirect(url_for('user_mgmt_bp.manage_users'))
+    
+    if not role:
+        flash('Role is required.', 'danger')
+        return redirect(url_for('user_mgmt_bp.manage_users'))
+    
+    if password and len(password) < 8:
+        flash('Password must be at least 8 characters.', 'danger')
+        return redirect(url_for('user_mgmt_bp.manage_users'))
+    
+    if True:  # Replace form.validate_on_submit() block
+        username = username
+        password = password
+        role = role
+        status = status
+        email = email
+        department_id = department_id
+        is_hod = is_hod
         
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        
+        cursor = connection.cursor(dictionary=True)
         try:
             # Check if username exists for other users
             cursor.execute('SELECT id FROM users WHERE username = %s AND id != %s', 
@@ -177,20 +225,23 @@ def edit_user(user_id):
                 flash('Username already exists.', 'danger')
                 return redirect(url_for('user_mgmt_bp.manage_users'))
             
+            # Prepare department_id (None if empty string)
+            dept_id = int(department_id) if department_id and department_id != '' else None
+            
             # Update user
             if password:
                 hashed = generate_password_hash(password)
                 cursor.execute('''
                     UPDATE users 
-                    SET username=%s, password=%s, role=%s, status=%s 
+                    SET username=%s, password=%s, role=%s, status=%s, department_id=%s, is_hod=%s
                     WHERE id=%s
-                ''', [username, hashed, role, status, user_id])
+                ''', [username, hashed, role, status, dept_id, is_hod, user_id])
             else:
                 cursor.execute('''
                     UPDATE users 
-                    SET username=%s, role=%s, status=%s 
+                    SET username=%s, role=%s, status=%s, department_id=%s, is_hod=%s
                     WHERE id=%s
-                ''', [username, role, status, user_id])
+                ''', [username, role, status, dept_id, is_hod, user_id])
             
             # Log activity
             log_activity(
@@ -199,30 +250,32 @@ def edit_user(user_id):
                 f'Updated user {username} (ID: {user_id})'
             )
             
-            mysql.connection.commit()
+            connection.commit()
             flash('User updated successfully.', 'success')
             
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             current_app.logger.error(f"Error updating user: {str(e)}")
             flash('Error updating user. Please try again.', 'danger')
         finally:
+
             cursor.close()
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f'{getattr(form, field).label.text}: {error}', 'danger')
+
+            connection.close()
     
     return redirect(url_for('user_mgmt_bp.manage_users'))
 
 @user_mgmt_bp.route('/delete/<int:user_id>', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_delete_user')
 def delete_user(user_id):
     form = EmptyForm()
     if not form.validate_on_submit():
         return jsonify({'error': 'CSRF token missing or invalid'}), 400
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         # Get user info before deletion
         cursor.execute('SELECT username, role FROM users WHERE id = %s', [user_id])
@@ -244,66 +297,94 @@ def delete_user(user_id):
             f'Deleted user {username} (ID: {user_id})'
         )
         
-        mysql.connection.commit()
+        connection.commit()
         return jsonify({'message': 'User deleted successfully'})
         
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Error deleting user: {str(e)}")
         return jsonify({'error': 'Error deleting user'}), 500
     finally:
+
         cursor.close()
 
+        connection.close()
+
 @user_mgmt_bp.route('/roles')
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def manage_roles():
     form = RoleForm()
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     
     # Get all permissions for form choices
     cursor.execute('SELECT id, name, module FROM permissions ORDER BY module, name')
     permissions = cursor.fetchall()
-    form.permissions.choices = [(p[0], f"{p[2]} - {p[1]}") for p in permissions]
+    form.permissions.choices = [(p['id'], f"{p['module']} - {p['name']}") for p in permissions]
     
-    # Get roles with their permissions
+    # Get roles with their permissions and user count
     cursor.execute("""
         SELECT r.id, r.name, r.description, r.created_at, r.updated_at,
-               GROUP_CONCAT(p.name) as permissions
+               GROUP_CONCAT(DISTINCT p.name) as permissions,
+               COUNT(DISTINCT u.id) as user_count
         FROM roles r
         LEFT JOIN role_permissions rp ON r.id = rp.role_id
         LEFT JOIN permissions p ON rp.permission_id = p.id
+        LEFT JOIN users u ON u.role = r.name
         GROUP BY r.id, r.name, r.description, r.created_at, r.updated_at
         ORDER BY r.name
     """)
     roles = cursor.fetchall()
+    
+    # Get users for each role
+    role_users = {}
+    for role in roles:
+        cursor.execute("""
+            SELECT id, username, status, department_id
+            FROM users
+            WHERE role = %s
+            ORDER BY username
+        """, [role['name']])
+        role_users[role['name']] = cursor.fetchall()
+    
     cursor.close()
     
     return render_template(
         'admin/manage_roles.html',
         roles=roles,
+        role_users=role_users,
         form=form,
         permissions=permissions
     )
 
 @user_mgmt_bp.route('/roles/add', methods=['POST'])
-@has_permission('manage_roles')
+@has_permission('roles_add_role')
 def add_role():
     form = RoleForm()
     # Ensure permissions choices are populated so WTForms can coerce incoming values
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute('SELECT id, name, module FROM permissions ORDER BY module, name')
         perms = cursor.fetchall()
-        form.permissions.choices = [(p[0], f"{p[2]} - {p[1]}") for p in perms]
+        form.permissions.choices = [(p['id'], f"{p['module']} - {p['name']}") for p in perms]
     finally:
+
         cursor.close()
+
+        connection.close()
 
     if form.validate_on_submit():
         name = form.name.data.strip()
         description = form.description.data
         permissions = form.permissions.data or []
         
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        
+        cursor = connection.cursor(dictionary=True)
         try:
             # Check if role exists
             cursor.execute('SELECT id FROM roles WHERE name = %s', [name])
@@ -335,15 +416,18 @@ def add_role():
                 f'Created new role: {name}'
             )
             
-            mysql.connection.commit()
+            connection.commit()
             flash('Role created successfully.', 'success')
             
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             current_app.logger.error(f"Error creating role: {str(e)}")
             flash('Error creating role. Please try again.', 'danger')
         finally:
+
             cursor.close()
+
+            connection.close()
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -353,14 +437,17 @@ def add_role():
 
 
 @user_mgmt_bp.route('/roles/delete/<int:role_id>', methods=['POST'])
-@has_permission('manage_roles')
+@has_permission('roles_delete_role')
 def delete_role(role_id):
     form = EmptyForm()
     if not form.validate_on_submit():
         flash('Invalid request (CSRF).', 'danger')
         return redirect(url_for('user_mgmt_bp.manage_roles'))
 
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+
+    cursor = connection.cursor(dictionary=True)
     try:
         # Ensure role exists and is not Super Admin
         cursor.execute('SELECT name FROM roles WHERE id = %s', [role_id])
@@ -368,7 +455,7 @@ def delete_role(role_id):
         if not row:
             flash('Role not found.', 'danger')
             return redirect(url_for('user_mgmt_bp.manage_roles'))
-        role_name = row[0]
+        role_name = row['name']
         if role_name == 'Super Admin':
             flash('Cannot delete Super Admin role.', 'danger')
             return redirect(url_for('user_mgmt_bp.manage_roles'))
@@ -384,37 +471,48 @@ def delete_role(role_id):
             f'Deleted role {role_name} (ID: {role_id})'
         )
 
-        mysql.connection.commit()
+        connection.commit()
         flash('Role deleted successfully.', 'success')
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Error deleting role: {str(e)}")
         flash('Error deleting role. Please try again.', 'danger')
     finally:
+
         cursor.close()
+
+        connection.close()
 
     return redirect(url_for('user_mgmt_bp.manage_roles'))
 
 
 @user_mgmt_bp.route('/roles/edit/<int:role_id>', methods=['POST'])
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def edit_role(role_id):
     form = RoleForm()
     # populate permissions choices so form can validate
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute('SELECT id, name, module FROM permissions ORDER BY module, name')
         perms = cursor.fetchall()
-        form.permissions.choices = [(p[0], f"{p[2]} - {p[1]}") for p in perms]
+        form.permissions.choices = [(p['id'], f"{p['module']} - {p['name']}") for p in perms]
     finally:
+
         cursor.close()
+
+        connection.close()
 
     if form.validate_on_submit():
         name = form.name.data.strip()
         description = form.description.data
         permissions = form.permissions.data or []
 
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+
+        cursor = connection.cursor(dictionary=True)
         try:
             # Prevent renaming to Super Admin if attempting to modify special role
             cursor.execute('SELECT name FROM roles WHERE id = %s', [role_id])
@@ -422,7 +520,7 @@ def edit_role(role_id):
             if not row:
                 flash('Role not found.', 'danger')
                 return redirect(url_for('user_mgmt_bp.manage_roles'))
-            old_name = row[0]
+            old_name = row['name']
             if old_name == 'Super Admin' and name != 'Super Admin':
                 flash('Cannot rename Super Admin role.', 'danger')
                 return redirect(url_for('user_mgmt_bp.manage_roles'))
@@ -439,14 +537,17 @@ def edit_role(role_id):
                 cursor.execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (%s, %s)', [role_id, pid])
 
             log_activity(session['user_id'], 'edit_role', f'Edited role {name} (ID: {role_id})')
-            mysql.connection.commit()
+            connection.commit()
             flash('Role updated successfully.', 'success')
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             current_app.logger.error(f"Error editing role: {str(e)}")
             flash('Error editing role. Please try again.', 'danger')
         finally:
+
             cursor.close()
+
+            connection.close()
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -456,9 +557,11 @@ def edit_role(role_id):
 
 
 @user_mgmt_bp.route('/roles/get/<int:role_id>')
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def get_role(role_id):
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute('SELECT id, name, description FROM roles WHERE id = %s', [role_id])
         role = cursor.fetchone()
@@ -477,29 +580,152 @@ def get_role(role_id):
             'permissions': perm_ids
         })
     finally:
+
         cursor.close()
 
-@user_mgmt_bp.route('/activity-log')
-@has_permission('view_users')
-def activity_log():
-    cursor = mysql.connection.cursor()
+        connection.close()
+
+@user_mgmt_bp.route('/roles/users/<int:role_id>')
+@has_permission('users_view_user')
+def get_role_users(role_id):
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
-        cursor.execute(
-            """
-            SELECT l.id, l.user_id, l.activity_type, l.description,
-                   l.ip_address, l.user_agent, l.created_at,
-                   u.username,
-                   u.username as display_name
-            FROM user_activity_log l
-            JOIN users u ON l.user_id = u.id
-            ORDER BY l.created_at DESC
-            LIMIT 1000
-            """
-        )
-        logs = cursor.fetchall()
-        return render_template('admin/activity_log.html', logs=logs)
+        cursor.execute("""
+            SELECT u.id, u.username, u.email
+            FROM users u
+            WHERE u.role = (SELECT name FROM roles WHERE id = %s)
+            ORDER BY u.username
+        """, [role_id])
+        users = cursor.fetchall()
+        
+        return jsonify([
+            {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2]
+            }
+            for user in users
+        ])
     finally:
+
         cursor.close()
+
+        connection.close()
+
+@user_mgmt_bp.route('/roles/<int:role_id>/permissions')
+@has_permission('roles_change_role')
+def manage_role_permissions(role_id):
+    """Manage permissions for a specific role"""
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
+    try:
+        # Get role info
+        cursor.execute("SELECT id, name, description FROM roles WHERE id = %s", [role_id])
+        role_tuple = cursor.fetchone()
+        if not role_tuple:
+            flash('Role not found.', 'danger')
+            return redirect(url_for('user_mgmt_bp.manage_roles'))
+        
+        role = {
+            'id': role_tuple[0],
+            'name': role_tuple[1],
+            'description': role_tuple[2]
+        }
+        
+        # Get all permissions grouped by module
+        cursor.execute("""
+            SELECT id, name, description, module 
+            FROM permissions 
+            ORDER BY module, name
+        """)
+        all_permissions = cursor.fetchall()
+        
+        permissions_by_module = {}
+        for perm in all_permissions:
+            module = perm[3] or 'General'
+            if module not in permissions_by_module:
+                permissions_by_module[module] = []
+            permissions_by_module[module].append({
+                'id': perm[0],
+                'name': perm[1],
+                'description': perm[2]
+            })
+        
+        # Get current role permissions
+        cursor.execute("""
+            SELECT p.id, p.name, p.description, p.module
+            FROM role_permissions rp
+            JOIN permissions p ON rp.permission_id = p.id
+            WHERE rp.role_id = %s
+            ORDER BY p.module, p.name
+        """, [role_id])
+        role_permissions = cursor.fetchall()
+        
+        role_permission_ids = [p[0] for p in role_permissions]
+        
+        return render_template(
+            'admin/manage_role_permissions.html',
+            role=role,
+            permissions_by_module=permissions_by_module,
+            role_permission_ids=role_permission_ids
+        )
+    finally:
+
+        cursor.close()
+
+        connection.close()
+
+@user_mgmt_bp.route('/roles/<int:role_id>/permissions/update', methods=['POST'])
+@has_permission('roles_change_role')
+def update_role_permissions(role_id):
+    """Update permissions for a role"""
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
+    try:
+        # Get selected permission IDs
+        permission_ids = request.form.getlist('permission_ids')
+        
+        # Delete existing role permissions
+        cursor.execute("DELETE FROM role_permissions WHERE role_id = %s", [role_id])
+        
+        # Insert new role permissions
+        if permission_ids:
+            for perm_id in permission_ids:
+                cursor.execute("""
+                    INSERT INTO role_permissions (role_id, permission_id)
+                    VALUES (%s, %s)
+                """, [role_id, perm_id])
+        
+        connection.commit()
+        
+        log_activity(
+            session['user_id'],
+            'update_role_permissions',
+            f'Updated permissions for role ID {role_id}'
+        )
+        
+        flash('Role permissions updated successfully.', 'success')
+        return redirect(url_for('user_mgmt_bp.manage_role_permissions', role_id=role_id))
+    except Exception as e:
+        connection.rollback()
+        current_app.logger.error(f"Error updating role permissions: {e}")
+        flash('Error updating role permissions.', 'danger')
+        return redirect(url_for('user_mgmt_bp.manage_roles'))
+    finally:
+
+        cursor.close()
+
+        connection.close()
+
+@user_mgmt_bp.route('/activity-log')
+@has_permission('users_view_activity_log')
+def activity_log():
+    """Redirect to the new audit logs page with better filtering and security features"""
+    return redirect(url_for('audit_logs.audit_logs_view'))
 
 
 # -------- Enhancements: Bulk actions, status toggle, reset password, export --------
@@ -509,7 +735,7 @@ def _gen_temp_password(length: int = 12) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 @user_mgmt_bp.route('/bulk', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def bulk_users_action():
     form = EmptyForm()
     if not form.validate_on_submit():
@@ -521,20 +747,22 @@ def bulk_users_action():
         return jsonify({'error': 'No users selected.'}), 400
 
     # Prevent operating on Super Admin by ID
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         if action in ('activate', 'deactivate'):
             new_status = 'active' if action == 'activate' else 'inactive'
             format_str = ','.join(['%s'] * len(ids))
             cursor.execute(f"UPDATE users SET status = %s WHERE id IN ({format_str}) AND role != 'Super Admin'", [new_status, *ids])
-            mysql.connection.commit()
+            connection.commit()
             log_activity(session['user_id'], f'bulk_{action}_users', f"Affected IDs: {','.join(ids)}")
             return jsonify({'message': f"Users {action}d successfully."})
         elif action == 'delete':
             format_str = ','.join(['%s'] * len(ids))
             # Avoid deleting Super Admins
             cursor.execute(f"DELETE FROM users WHERE id IN ({format_str}) AND role != 'Super Admin'", ids)
-            mysql.connection.commit()
+            connection.commit()
             log_activity(session['user_id'], 'bulk_delete_users', f"Deleted IDs: {','.join(ids)}")
             return jsonify({'message': 'Users deleted successfully.'})
         elif action == 'reset_password':
@@ -547,20 +775,23 @@ def bulk_users_action():
             hashed = generate_password_hash(new_pwd)
             format_str = ','.join(['%s'] * len(ids))
             cursor.execute(f"UPDATE users SET password = %s WHERE id IN ({format_str}) AND role != 'Super Admin'", [hashed, *ids])
-            mysql.connection.commit()
+            connection.commit()
             log_activity(session['user_id'], 'bulk_reset_password', f"Affected IDs: {','.join(ids)}")
             return jsonify({'message': 'Passwords reset successfully.', 'temp_password': new_pwd})
         else:
             return jsonify({'error': 'Unknown action.'}), 400
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Bulk users action error: {e}")
         return jsonify({'error': 'Operation failed.'}), 500
     finally:
+
         cursor.close()
 
+        connection.close()
+
 @user_mgmt_bp.route('/reset_password/<int:user_id>', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def reset_password(user_id):
     form = EmptyForm()
     if not form.validate_on_submit():
@@ -571,54 +802,64 @@ def reset_password(user_id):
     if not new_pwd:
         new_pwd = _gen_temp_password()
     hashed = generate_password_hash(new_pwd)
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         # Do not allow password reset for Super Admin via this endpoint
         cursor.execute("SELECT role FROM users WHERE id = %s", [user_id])
         row = cursor.fetchone()
         if not row:
             return jsonify({'error': 'User not found.'}), 404
-        if row[0] == 'Super Admin':
+        if row['role'] == 'Super Admin':
             return jsonify({'error': 'Cannot reset password for Super Admin.'}), 403
         cursor.execute("UPDATE users SET password = %s WHERE id = %s", [hashed, user_id])
-        mysql.connection.commit()
+        connection.commit()
         log_activity(session['user_id'], 'reset_password', f'Reset password for user ID {user_id}')
         return jsonify({'message': 'Password reset successfully.', 'temp_password': new_pwd})
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Reset password error: {e}")
         return jsonify({'error': 'Operation failed.'}), 500
     finally:
+
         cursor.close()
 
+        connection.close()
+
 @user_mgmt_bp.route('/toggle_status/<int:user_id>', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def toggle_status(user_id):
     form = EmptyForm()
     if not form.validate_on_submit():
         return jsonify({'error': 'Invalid request (CSRF).'}), 400
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute("SELECT status, role FROM users WHERE id = %s", [user_id])
         row = cursor.fetchone()
         if not row:
             return jsonify({'error': 'User not found.'}), 404
-        if row[1] == 'Super Admin':
+        if row['role'] == 'Super Admin':
             return jsonify({'error': 'Cannot change status for Super Admin.'}), 403
-        new_status = 'inactive' if row[0] == 'active' else 'active'
+        new_status = 'inactive' if row['status'] == 'active' else 'active'
         cursor.execute("UPDATE users SET status = %s WHERE id = %s", [new_status, user_id])
-        mysql.connection.commit()
+        connection.commit()
         log_activity(session['user_id'], 'toggle_status', f'User ID {user_id} -> {new_status}')
         return jsonify({'message': 'Status updated.', 'status': new_status})
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Toggle status error: {e}")
         return jsonify({'error': 'Operation failed.'}), 500
     finally:
+
         cursor.close()
 
+        connection.close()
+
 @user_mgmt_bp.route('/export')
-@has_permission('view_users')
+@has_permission('users_view_user')
 def export_users():
     # Reuse the same filters as manage_users
     role_filter = request.args.get('role', '')
@@ -645,7 +886,10 @@ def export_users():
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY u.username"
 
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+
+    cursor = connection.cursor(dictionary=True)
     cursor.execute(query, params)
     rows = cursor.fetchall()
     cursor.close()
@@ -666,9 +910,11 @@ def export_users():
     )
 
 @user_mgmt_bp.route('/activity-log/export')
-@has_permission('view_users')
+@has_permission('users_view_user')
 def export_activity_log():
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(
             """
@@ -681,7 +927,10 @@ def export_activity_log():
         )
         rows = cursor.fetchall()
     finally:
+
         cursor.close()
+
+        connection.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -699,9 +948,11 @@ def export_activity_log():
     )
 
 @user_mgmt_bp.route('/roles/export')
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def export_roles():
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(
             """
@@ -716,7 +967,10 @@ def export_roles():
         )
         rows = cursor.fetchall()
     finally:
+
         cursor.close()
+
+        connection.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -737,10 +991,12 @@ def export_roles():
 # -------- User Permissions Management --------
 
 @user_mgmt_bp.route('/permissions/<int:user_id>')
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def manage_user_permissions(user_id):
     """Manage individual permissions for a specific user"""
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         # Get user info
         cursor.execute("""
@@ -775,10 +1031,13 @@ def manage_user_permissions(user_id):
         # Convert permissions tuples to dictionaries for easier template handling
         user_permissions = []
         for perm in user_permissions_raw:
+            # Normalize module name: capitalize first letter, rest lowercase
+            module = perm[2] or 'General'
+            module = module.capitalize() if module else 'General'
             user_permissions.append({
                 'name': perm[0],
                 'description': perm[1],
-                'module': perm[2] or 'General',
+                'module': module,
                 'source': perm[3],
                 'department_id': perm[4],
                 'expires_at': perm[5] if len(perm) > 5 else None
@@ -871,11 +1130,14 @@ def manage_user_permissions(user_id):
             user_groups=user_groups
         )
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/grant', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def grant_permission(user_id):
     """Grant a permission to a user"""
     permission_name = request.form.get('permission_name')
@@ -912,7 +1174,7 @@ def grant_permission(user_id):
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/revoke', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def revoke_permission(user_id):
     """Revoke a permission from a user"""
     permission_name = request.form.get('permission_name')
@@ -937,7 +1199,7 @@ def revoke_permission(user_id):
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/grant_group', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def grant_permission_group(user_id):
     """Grant a permission group to a user"""
     group_id = request.form.get('group_id')
@@ -946,7 +1208,10 @@ def grant_permission_group(user_id):
     if not group_id:
         return jsonify({'error': 'Permission group is required'}), 400
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         # Convert empty strings to None
         department_id = int(department_id) if department_id else None
@@ -970,11 +1235,11 @@ def grant_permission_group(user_id):
             VALUES (%s, %s, %s, %s)
         """, [user_id, group_id, department_id, session.get('user_id')])
         
-        mysql.connection.commit()
+        connection.commit()
         
         # Get group name for logging
         cursor.execute("SELECT name FROM permission_groups WHERE id = %s", [group_id])
-        group_name = cursor.fetchone()[0]
+        group_name = cursor.fetchone()['name']
         
         log_activity(
             session['user_id'],
@@ -986,15 +1251,18 @@ def grant_permission_group(user_id):
         return jsonify({'message': 'Permission group granted successfully'})
         
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Error granting permission group: {str(e)}")
         return jsonify({'error': 'Failed to grant permission group'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/revoke_group', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def revoke_permission_group(user_id):
     """Revoke a permission group from a user"""
     group_id = request.form.get('group_id')
@@ -1003,7 +1271,10 @@ def revoke_permission_group(user_id):
     if not group_id:
         return jsonify({'error': 'Permission group is required'}), 400
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         department_id = int(department_id) if department_id else None
         group_id = int(group_id)
@@ -1026,7 +1297,7 @@ def revoke_permission_group(user_id):
         if cursor.rowcount == 0:
             return jsonify({'error': 'Permission group assignment not found'}), 404
         
-        mysql.connection.commit()
+        connection.commit()
         
         log_activity(
             session['user_id'],
@@ -1038,15 +1309,18 @@ def revoke_permission_group(user_id):
         return jsonify({'message': 'Permission group revoked successfully'})
         
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Error revoking permission group: {str(e)}")
         return jsonify({'error': 'Failed to revoke permission group'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/permissions/bulk_grant', methods=['POST'])
-@has_permission('manage_users')
+@has_permission('users_change_user')
 def bulk_grant_permissions():
     """Grant permissions to multiple users at once"""
     user_ids = request.form.getlist('user_ids[]') or request.form.getlist('user_ids')
@@ -1083,7 +1357,7 @@ def bulk_grant_permissions():
 
 
 @user_mgmt_bp.route('/permissions/check', methods=['POST'])
-@has_permission('view_users')
+@has_permission('users_view_user')
 def check_permission():
     """Check if a user has a specific permission"""
     user_id = request.form.get('user_id')
@@ -1109,14 +1383,17 @@ def check_permission():
 # -------- Role Management Enhancements --------
 
 @user_mgmt_bp.route('/roles/clone/<int:role_id>', methods=['POST'])
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def clone_role(role_id):
     """Clone an existing role with all its permissions"""
     form = EmptyForm()
     if not form.validate_on_submit():
         return jsonify({'error': 'Invalid request (CSRF).'}), 400
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         # Get source role
         cursor.execute('SELECT name, description FROM roles WHERE id = %s', [role_id])
@@ -1159,7 +1436,7 @@ def clone_role(role_id):
             f'Cloned role "{role[0]}" to "{new_name}" (ID: {new_role_id})'
         )
         
-        mysql.connection.commit()
+        connection.commit()
         return jsonify({
             'message': 'Role cloned successfully.',
             'new_role_id': new_role_id,
@@ -1167,15 +1444,18 @@ def clone_role(role_id):
         })
         
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Error cloning role: {str(e)}")
         return jsonify({'error': 'Failed to clone role.'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/roles/bulk_permissions', methods=['POST'])
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def bulk_permissions():
     """Add or remove permissions from multiple roles at once"""
     form = EmptyForm()
@@ -1189,7 +1469,10 @@ def bulk_permissions():
     if not role_ids or not perm_ids:
         return jsonify({'error': 'No roles or permissions selected.'}), 400
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         if action == 'add':
             for role_id in role_ids:
@@ -1211,7 +1494,7 @@ def bulk_permissions():
                             [role_id, perm_id]
                         )
             
-            mysql.connection.commit()
+            connection.commit()
             log_activity(
                 session['user_id'],
                 'bulk_add_permissions',
@@ -1233,7 +1516,7 @@ def bulk_permissions():
                         [role_id, perm_id]
                     )
             
-            mysql.connection.commit()
+            connection.commit()
             log_activity(
                 session['user_id'],
                 'bulk_remove_permissions',
@@ -1244,26 +1527,31 @@ def bulk_permissions():
             return jsonify({'error': 'Invalid action.'}), 400
             
     except Exception as e:
-        mysql.connection.rollback()
+        connection.rollback()
         current_app.logger.error(f"Bulk permissions error: {str(e)}")
         return jsonify({'error': 'Operation failed.'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/roles/stats')
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def role_stats():
     """Get statistics about roles and their usage"""
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         # Total roles
-        cursor.execute('SELECT COUNT(*) FROM roles')
-        total_roles = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) AS total FROM roles')
+        total_roles = cursor.fetchone()['total']
         
         # Total permissions
-        cursor.execute('SELECT COUNT(*) FROM permissions')
-        total_permissions = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) AS total FROM permissions')
+        total_permissions = cursor.fetchone()['total']
         
         # Roles by user count
         cursor.execute("""
@@ -1308,14 +1596,19 @@ def role_stats():
         current_app.logger.error(f"Role stats error: {str(e)}")
         return jsonify({'error': 'Failed to fetch statistics.'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()
 
 
 @user_mgmt_bp.route('/roles/permissions_by_module')
-@has_permission('manage_roles')
+@has_permission('roles_change_role')
 def permissions_by_module():
     """Get permissions grouped by module for better UI organization"""
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute("""
             SELECT module, id, name, description
@@ -1342,4 +1635,7 @@ def permissions_by_module():
         current_app.logger.error(f"Permissions by module error: {str(e)}")
         return jsonify({'error': 'Failed to fetch permissions.'}), 500
     finally:
+
         cursor.close()
+
+        connection.close()

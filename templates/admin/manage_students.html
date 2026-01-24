@@ -1,154 +1,188 @@
 {% extends "admin/_layout.html" %}
 
 {% block title %}Manage Students{% endblock %}
-{% block header_title %}Student Management{% endblock %}
+{% block header_title %}Student Directory{% endblock %}
 
 {% block extra_css %}
 <style>
-/* Custom Scrollbar for Table */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
+    /* Ultra Compact Scrollbar */
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* Custom Select Arrow Styling */
-.form-select-custom {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.5rem center;
-    background-repeat: no-repeat;
-    background-size: 1.5em 1.5em;
-    padding-right: 2.5rem;
-}
+    /* Dense Table Styling */
+    .table-dense th, .table-dense td { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+    .table-dense tr { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    
+    /* Sticky Header */
+    thead.sticky { z-index: 20; }
+    
+    /* Fade Animation */
+    .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="fade-in flex flex-col h-[calc(100vh-140px)]">
+<div class="fade-in flex flex-col h-[calc(100vh-110px)] max-w-full">
 
-    <div class="shrink-0 space-y-3 mb-3">
-        <div class="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-lg shadow-md p-3 text-white">
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-bold flex items-center">
-                        <i class="fas fa-user-graduate mr-2"></i>Student Directory
-                    </h2>
-                    <p class="text-indigo-100 text-xs hidden sm:block">Manage registered students and course enrollments</p>
-                </div>
-                <div class="flex gap-2 w-full sm:w-auto">
-                    <button type="button" id="bulk-upload-btn" class="flex-1 sm:flex-none bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1.5 rounded-lg font-medium transition-all shadow-sm flex items-center justify-center text-xs border border-white/10">
-                        <i class="fas fa-file-excel mr-1.5"></i>Upload
-                    </button>
-                    <button type="button" id="add-student-btn" class="flex-1 sm:flex-none bg-white text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg font-bold transition-all shadow-sm flex items-center justify-center text-xs">
-                        <i class="fas fa-plus mr-1.5"></i>Add Student
-                    </button>
+    <div class="bg-white border border-gray-200/80 rounded-t-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] shrink-0 z-30 relative">
+        
+        <div class="flex items-center gap-4">
+            <div class="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl border border-indigo-100 shadow-sm">
+                <i class="fas fa-user-graduate text-lg"></i>
+            </div>
+            <div>
+                <h2 class="text-sm font-bold text-gray-800 leading-tight tracking-tight">Student Directory</h2>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <p class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{{ total_active_students }} Total Students{% if search or request.args.get('course_filter') %} • {{ total }} Filtered{% endif %}</p>
                 </div>
             </div>
+            
+            <form id="bulk-delete-form" action="{{ url_for('students.bulk_delete_students') }}" method="POST" class="ml-2 border-l pl-4 border-gray-200" onsubmit="return confirm('Delete selected students?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="bulk-action-btn hidden items-center px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 hover:shadow-sm transition-all text-xs font-bold disabled:opacity-50 group">
+                    <i class="fas fa-trash-alt mr-1.5 text-red-500 group-hover:text-red-700"></i>Delete Selected
+                </button>
+            </form>
         </div>
-    </div>
 
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-3 p-2">
-        <form method="GET" action="{{ url_for('admin.manage_students') }}" class="flex flex-col sm:flex-row gap-2">
-            <div class="relative flex-grow sm:max-w-xs">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <i class="fas fa-search text-xs"></i>
-                </span>
-                <input type="text" name="search" value="{{ search }}" placeholder="Search students..." 
-                       class="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+        <form method="GET" action="{{ url_for('students.manage_students') }}" class="flex flex-wrap items-center gap-2.5">
+            
+            <div class="relative group">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-xs group-focus-within:text-indigo-500 transition-colors"></i>
+                <input type="text" name="search" value="{{ search or '' }}" placeholder="Search by name..." 
+                       class="pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200/80 rounded-xl text-xs font-medium w-44 focus:w-60 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all outline-none shadow-sm">
             </div>
-            <select name="course_filter" class="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-sm" onchange="this.form.submit()">
-                <option value="">All Courses</option>
-                {% for course in courses %}
-                <option value="{{ course[0] }}" {% if request.args.get('course_filter') == course[0]|string %}selected{% endif %}>{{ course[1] }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-all text-xs font-medium">
-                <i class="fas fa-filter mr-1"></i>Filter
-            </button>
-            {% if search or request.args.get('course_filter') %}
-            <a href="{{ url_for('admin.manage_students') }}" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-all text-xs font-medium">
-                <i class="fas fa-times mr-1"></i>Clear
+
+            <div class="relative">
+                <select name="course_filter" onchange="this.form.submit()" 
+                        class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors">
+                    <option value="">All Courses</option>
+                    {% for course in courses %}
+                    <option value="{{ course[0] }}" {% if request.args.get('course_filter')==course[0]|string %}selected{% endif %}>{{ course[1] }}</option>
+                    {% endfor %}
+                </select>
+                <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
+            </div>
+
+            <div class="h-6 w-px bg-gray-200 mx-1"></div>
+
+            {% if user_has_perm('students_bulk_invite') %}
+            <a href="{{ url_for('students.bulk_invite_students') }}" class="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg transition-all" title="Upload CSV">
+                <i class="fas fa-file-excel text-sm"></i>
             </a>
+            {% endif %}
+
+            {% if user_has_perm('students_add_student') %}
+            <button type="button" id="add-student-btn" class="group flex items-center px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all transform active:scale-95">
+                <i class="fas fa-plus mr-2 text-[10px] group-hover:rotate-90 transition-transform"></i> Add Student
+            </button>
             {% endif %}
         </form>
     </div>
 
-    <form id="bulk-delete-form" action="{{ url_for('admin.bulk_delete_students') }}" method="POST" 
-          onsubmit="return confirm('Are you sure you want to delete all selected students?');"
-          class="bg-white rounded-lg shadow-sm border border-gray-200 flex-grow overflow-hidden flex flex-col">
-            
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <div class="p-2 border-b border-gray-200 bg-gray-50 shrink-0 flex justify-end">
-            <button type="submit" class="bulk-action-btn px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 transition-all flex items-center justify-center opacity-50 cursor-not-allowed text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                <i class="fas fa-trash-alt mr-1.5"></i>Delete Selected
-            </button>
-        </div>
-
-        <div class="overflow-auto custom-scrollbar flex-grow relative">
-            <table class="min-w-full divide-y divide-gray-200 text-sm" id="studentsTable">
-                <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+    <div class="bg-white border-x border-b border-gray-200 rounded-b-2xl flex-1 overflow-hidden flex flex-col relative shadow-[0_2px_15px_-3px_rgba(0,0,0,0.02)]">
+        <div class="overflow-auto custom-scroll flex-1">
+            <table class="w-full text-left border-collapse table-dense">
+                <thead class="bg-gray-50/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                     <tr>
-                        <th class="py-3 px-4 w-10 bg-gray-50">
-                            <input type="checkbox" id="select-all-checkbox" class="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 border-gray-300">
+                        {% if user_has_perm('students_delete_student') %}
+                        <th class="px-5 py-2.5 w-10 text-center">
+                            <input type="checkbox" id="select-all-checkbox" class="rounded text-indigo-600 w-3.5 h-3.5 border-gray-300 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer">
                         </th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Name</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50 hidden sm:table-cell">Email</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Course</th>
-                        <th class="py-3 px-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50 w-24">Actions</th>
+                        {% endif %}
+                        
+                        {% macro th_sort(label, col, class='') %}
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider {{ class }}">
+                            <a href="{{ url_for('students.manage_students', sort_by=col, sort_order='DESC' if sort_by == col and sort_order == 'ASC' else 'ASC', search=search, course_filter=request.args.get('course_filter')) }}" 
+                               class="group flex items-center gap-1 hover:text-indigo-600 transition-colors">
+                                {{ label }}
+                                <i class="fas fa-sort text-[8px] text-gray-300 group-hover:text-indigo-400 transition-colors"></i>
+                            </a>
+                        </th>
+                        {% endmacro %}
+
+                        {{ th_sort('Student Name', 's.name') }}
+                        {{ th_sort('Roll No', 's.roll_number', 'w-24') }}
+                        {{ th_sort('Course', 'course_name') }}
+                        {{ th_sort('Class/Div', 'class_name', 'hidden md:table-cell') }}
+                        {{ th_sort('Contact', 's.email') }}
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 bg-white">
+                
+                <tbody class="divide-y divide-gray-100 text-xs bg-white">
                     {% for student in students %}
-                    <tr class="group hover:bg-indigo-50/50 transition-colors">
-                        <td class="py-2.5 px-4">
-                            <input type="checkbox" name="student_ids" value="{{ student[0] }}" class="row-checkbox rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 border-gray-300">
+                    <tr class="hover:bg-indigo-50/40 group transition-colors">
+                        {% if user_has_perm('students_delete_student') %}
+                        <td class="px-5 py-2 text-center">
+                            <input type="checkbox" form="bulk-delete-form" name="student_ids" value="{{ student['user_id'] }}" class="row-checkbox rounded text-indigo-600 w-3.5 h-3.5 border-gray-300 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer">
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap">
-                            <div class="flex items-center">
-                                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-3 border border-indigo-200">
-                                    {{ student[1][0].upper() }}
+                        {% endif %}
+
+                        <td class="px-5 py-2 whitespace-nowrap">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-50 shadow-sm">
+                                    {{ student['name'][0].upper() if student['name'] else '?' }}
                                 </div>
                                 <div>
-                                    <div class="font-medium text-gray-900">{{ student[1] }}</div>
-                                    <div class="text-xs text-gray-500 sm:hidden">{{ student[2] }}</div> </div>
+                                    <p class="font-semibold text-gray-800 leading-none mb-0.5 group-hover:text-indigo-700 transition-colors">{{ student['name'] }}</p>
+                                    <p class="text-[9px] text-gray-400 font-medium md:hidden">ID: {{ student['roll_number'] }}</p>
+                                </div>
                             </div>
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-gray-600 hidden sm:table-cell">
-                            {{ student[2] }}
+
+                        <td class="px-5 py-2">
+                            <span class="font-mono text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 text-[10px]">{{ student['roll_number'] or '-' }}</span>
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                {{ student[3] }}
+
+                        <td class="px-5 py-2">
+                            {% if student['course_name'] %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100 shadow-sm">
+                                {{ student['course_name'] }}
                             </span>
+                            {% else %}
+                            <span class="text-gray-300 text-[10px]">-</span>
+                            {% endif %}
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-center">
-                            <button type="button" class="edit-student-btn text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-100 rounded transition-colors" data-id="{{ student[0] }}" title="Edit">
-                                <i class="fas fa-pencil-alt"></i>
+
+                        <td class="px-5 py-2 hidden md:table-cell">
+                            <div class="flex items-center gap-1.5">
+                                {% if student['class_name'] %}
+                                <span class="text-gray-700 font-medium">{{ student['class_name'] }}</span>
+                                {% endif %}
+                                {% if student['division_name'] %}
+                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 border border-purple-100 uppercase tracking-wide">Div {{ student['division_name'] }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <td class="px-5 py-2 text-gray-500 whitespace-nowrap" title="{{ student['email'] }}">
+                            <div class="flex items-center gap-1.5">
+                                <i class="far fa-envelope text-gray-300 text-[10px]"></i>
+                                <span class="text-gray-600 font-medium">{{ student['email'] or '' }}</span>
+                            </div>
+                        </td>
+
+                        <td class="px-5 py-2 text-right">
+                            {% if user_has_perm('students_change_student') %}
+                            <button type="button" class="edit-student-btn h-7 w-7 inline-flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-white border border-transparent hover:border-gray-200 rounded-lg transition-all shadow-none hover:shadow-sm" data-id="{{ student['user_id'] }}">
+                                <i class="fas fa-pen text-[10px]"></i>
                             </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="text-center py-12 text-gray-500">
-                            <div class="flex flex-col items-center justify-center">
-                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                                    <i class="fas fa-user-graduate text-gray-400 text-2xl"></i>
+                        <td colspan="7" class="px-6 py-16 text-center">
+                            <div class="flex flex-col items-center justify-center text-gray-400">
+                                <div class="h-12 w-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fas fa-search text-gray-300"></i>
                                 </div>
-                                <p class="text-sm font-medium">No students found</p>
-                                <p class="text-xs text-gray-400 mt-1">Try adjusting your search or add a new student.</p>
+                                <p class="text-xs font-medium">No students match your search.</p>
                             </div>
                         </td>
                     </tr>
@@ -158,82 +192,115 @@
         </div>
 
         {% if total_pages > 1 %}
-        <div class="border-t border-gray-200 bg-gray-50 px-4 py-2 shrink-0 flex items-center justify-between">
-            <span class="text-xs text-gray-500 hidden sm:inline">Page {{ page }} of {{ total_pages }}</span>
-            <div class="flex gap-1 mx-auto sm:mx-0">
+        <div class="border-t border-gray-200 bg-gray-50/80 px-5 py-2.5 shrink-0 flex items-center justify-between h-12">
+            <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Page <span class="text-gray-800">{{ page }}</span> of {{ total_pages }}</span>
+            <div class="flex gap-1.5">
                 {% if page > 1 %}
-                <a href="{{ url_for('admin.manage_students', page=page-1, search=search, course_filter=request.args.get('course_filter')) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Prev</a>
+                <a href="{{ url_for('students.manage_students', page=page-1, search=search, course_filter=request.args.get('course_filter'), sort_by=sort_by, sort_order=sort_order) }}" 
+                   class="h-7 px-3 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-100 text-[10px] font-bold transition-all shadow-sm">
+                    Prev
+                </a>
                 {% endif %}
                 
-                {% for p in range(1, total_pages + 1) %}
-                    {% if p == page or (p >= page - 1 and p <= page + 1) or p == 1 or p == total_pages %}
-                        <a href="{{ url_for('admin.manage_students', page=p, search=search, course_filter=request.args.get('course_filter')) }}" 
-                           class="px-2.5 py-1 border rounded text-xs transition-colors
-                           {% if p == page %}bg-indigo-600 text-white border-indigo-600{% else %}bg-white border-gray-300 text-gray-600 hover:bg-gray-50{% endif %}">
-                            {{ p }}
-                        </a>
-                    {% elif p == page - 2 or p == page + 2 %}
-                        <span class="px-1 text-gray-400 text-xs">..</span>
-                    {% endif %}
-                {% endfor %}
-
                 {% if page < total_pages %}
-                <a href="{{ url_for('admin.manage_students', page=page+1, search=search, course_filter=request.args.get('course_filter')) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Next</a>
+                <a href="{{ url_for('students.manage_students', page=page+1, search=search, course_filter=request.args.get('course_filter'), sort_by=sort_by, sort_order=sort_order) }}" 
+                   class="h-7 px-3 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-100 text-[10px] font-bold transition-all shadow-sm">
+                    Next
+                </a>
                 {% endif %}
             </div>
         </div>
         {% endif %}
-    </form>
+    </div>
+
 </div>
 
-<div id="student-modal" class="modal hidden fixed z-50 inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex justify-between items-center shrink-0">
-            <h3 id="modal-title" class="font-bold text-lg text-white">Add New Student</h3>
-            <button id="close-modal-btn" type="button" class="text-white/80 hover:text-white transition-colors">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+<div id="student-modal" class="hidden fixed inset-0 z-50 overflow-hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onclick="document.getElementById('close-modal-btn').click()"></div>
+    
+    <div class="absolute inset-y-0 right-0 max-w-md w-full flex">
+        <div class="h-full w-full bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0 border-l border-gray-100">
+            <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-white">
+                <div>
+                    <h3 id="modal-title" class="text-lg font-extrabold text-gray-800 tracking-tight">Add Student</h3>
+                    <p class="text-[10px] text-gray-500 font-medium mt-0.5">Fill in the details below</p>
+                </div>
+                <button id="close-modal-btn" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 custom-scroll bg-gray-50/30">
+                <form id="student-form" method="POST" class="space-y-5">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Full Name</label>
+                            <input type="text" id="name" name="name" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Username</label>
+                            <input type="text" id="username" name="username" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm bg-white">
+                        </div>
+                        <div id="password-field" class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Password</label>
+                            <input type="password" id="password" name="password" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Email Address</label>
+                        <input type="email" id="email" name="email" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Phone</label>
+                            <input type="tel" id="phone" name="phone" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Roll No</label>
+                            <input type="text" id="roll_number" name="roll_number" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm font-mono">
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm">
+                        <h4 class="text-xs font-bold text-indigo-600 uppercase border-b border-gray-100 pb-2 mb-2">Academic Details</h4>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Course</label>
+                            <select id="course_id" name="course_id" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
+                                <option value="" disabled selected>Select Course</option>
+                                {% for course in courses %}
+                                <option value="{{ course[0] }}">{{ course[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Class</label>
+                                <select id="class_id" name="class_id" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
+                                    <option value="">None</option>
+                                    {% for cls in classes %}
+                                    <option value="{{ cls[0] }}">{{ cls[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Division</label>
+                                <select id="division_id" name="division_id" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
+                                    <option value="">None</option>
+                                    {% for division in divisions %}
+                                    <option value="{{ division[0] }}">{{ division[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+                <button type="button" id="cancel-btn" class="flex-1 px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-bold text-xs hover:bg-gray-50 hover:border-gray-300 transition-all">Cancel</button>
+                <button type="submit" form="student-form" class="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black shadow-lg hover:shadow-xl transition-all transform active:scale-95">Save Details</button>
+            </div>
         </div>
-        
-        <form id="student-form" method="POST" class="overflow-y-auto p-6 space-y-4" data-loading>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
-            <div>
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Username</label>
-                <input type="text" id="username" name="username" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-            </div>
-
-            <div id="password-field">
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Password</label>
-                <input type="password" id="password" name="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-                <p class="text-xs text-gray-500 mt-1 italic">Leave blank to keep current password when editing.</p>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Full Name</label>
-                <input type="text" id="name" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Email</label>
-                <input type="email" id="email" name="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Course</label>
-                <select id="course_id" name="course_id" required class="form-select-custom w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-                    <option value="" disabled selected>Select a course</option>
-                    {% for course in courses %}
-                    <option value="{{ course[0] }}">{{ course[1] }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="pt-2 flex justify-end gap-3">
-                <button type="button" id="cancel-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">Cancel</button>
-                <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm shadow-md transition-colors">Save Student</button>
-            </div>
-        </form>
     </div>
 </div>
 
@@ -241,130 +308,76 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('student-modal');
-    const addBtn = document.getElementById('add-student-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const form = document.getElementById('student-form');
-    const modalTitle = document.getElementById('modal-title');
-    const passwordField = document.getElementById('password-field');
-    const bulkDeleteBtn = document.querySelector('.bulk-action-btn');
-    
-    // Helper to Show/Hide Modal
-    function showModal(modalEl) {
-        modalEl.classList.remove('hidden');
-        modalEl.classList.add('flex');
-    }
-    
-    function hideModal(modalEl) {
-        modalEl.classList.add('hidden');
-        modalEl.classList.remove('flex');
-    }
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('student-modal');
+        const form = document.getElementById('student-form');
+        
+        const showModal = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); };
+        const hideModal = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
 
-    // Open Add Modal
-    addBtn.addEventListener('click', () => {
-        modalTitle.textContent = 'Add New Student';
-        form.action = '/admin/students/add';
-        form.reset();
-        passwordField.style.display = 'block';
-        document.getElementById('password').required = true;
-        document.getElementById('username').readOnly = false;
-        showModal(modal);
-    });
-
-    // Open Edit Modal
-    document.querySelectorAll('.edit-student-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation(); // Stop row click
-            const studentId = btn.dataset.id;
-            
-            // Loading state for button
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            
-            try {
-                // Assuming you have a backend route for this. If using App.get, ensure App exists.
-                // Using standard fetch here for portability.
-                const response = await fetch(`/admin/student/get/${studentId}`);
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-                
-                modalTitle.textContent = 'Edit Student';
-                form.action = `/admin/student/update/${studentId}`;
-                form.reset();
-
-                document.getElementById('username').value = data.username;
-                document.getElementById('username').readOnly = true;
-                document.getElementById('name').value = data.name;
-                document.getElementById('email').value = data.email;
-                document.getElementById('course_id').value = data.course_id;
-                
-                passwordField.style.display = 'block';
-                document.getElementById('password').required = false;
-                
-                showModal(modal);
-            } catch (error) {
-                alert('Failed to fetch student data');
-            } finally {
-                btn.innerHTML = originalContent;
-            }
+        document.getElementById('add-student-btn')?.addEventListener('click', () => {
+            document.getElementById('modal-title').innerText = 'Add Student';
+            form.action = '/admin/students/add';
+            form.reset();
+            document.getElementById('password-field').style.display = 'block';
+            document.getElementById('username').readOnly = false;
+            document.getElementById('password').required = true;
+            showModal();
         });
-    });
 
-    // Close Modal Logic
-    cancelBtn.addEventListener('click', () => hideModal(modal));
-    closeModalBtn.addEventListener('click', () => hideModal(modal));
-    modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(modal); });
+        document.getElementById('close-modal-btn').addEventListener('click', hideModal);
+        document.getElementById('cancel-btn').addEventListener('click', hideModal);
 
-    // Bulk Upload Redirect
-    const bulkUploadBtn = document.getElementById('bulk-upload-btn');
-    if (bulkUploadBtn) {
-        bulkUploadBtn.addEventListener('click', () => {
-            window.location.href = '{{ url_for("admin.bulk_invite_students") }}';
-        });
-    }
-
-    // Bulk Checkbox Logic
-    const selectAllCheckbox = document.getElementById('select-all-checkbox');
-    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
-    
-    if(selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            rowCheckboxes.forEach(checkbox => {
-                checkbox.checked = this.checked;
+        document.querySelectorAll('.edit-student-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                try {
+                    const res = await fetch(`/admin/students/get/${id}`);
+                    if(res.ok) {
+                        const data = await res.json();
+                        document.getElementById('modal-title').innerText = 'Edit Student';
+                        form.action = `/admin/students/update/${id}`;
+                        document.getElementById('name').value = data.name;
+                        document.getElementById('username').value = data.username;
+                        document.getElementById('username').readOnly = true;
+                        document.getElementById('email').value = data.email;
+                        document.getElementById('phone').value = data.phone || '';
+                        document.getElementById('roll_number').value = data.roll_number || '';
+                        document.getElementById('course_id').value = data.course_id || '';
+                        document.getElementById('class_id').value = data.class_id || '';
+                        document.getElementById('division_id').value = data.division_id || '';
+                        document.getElementById('password-field').style.display = 'block';
+                        document.getElementById('password').required = false;
+                        document.getElementById('password').placeholder = "Leave empty to keep current";
+                        showModal();
+                    }
+                } catch(err) { console.error(err); }
             });
-            updateBulkDeleteButton();
         });
-    }
 
-    rowCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const allChecked = Array.from(rowCheckboxes).every(cb => cb.checked);
-            const someChecked = Array.from(rowCheckboxes).some(cb => cb.checked);
-            
-            if(selectAllCheckbox) {
-                selectAllCheckbox.checked = allChecked;
-                selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        const mainCheck = document.getElementById('select-all-checkbox');
+        const rows = document.querySelectorAll('.row-checkbox');
+        const bulkBtn = document.querySelector('.bulk-action-btn');
+
+        const updateBulkBtn = () => {
+            const count = document.querySelectorAll('.row-checkbox:checked').length;
+            if(count > 0) {
+                bulkBtn.classList.remove('hidden');
+                bulkBtn.classList.add('flex');
+                bulkBtn.innerHTML = `<i class="fas fa-trash-alt mr-1.5"></i>Delete (${count})`;
+            } else {
+                bulkBtn.classList.add('hidden');
+                bulkBtn.classList.remove('flex');
             }
-            updateBulkDeleteButton();
-        });
-    });
+        };
 
-    function updateBulkDeleteButton() {
-        const checkedCount = Array.from(rowCheckboxes).filter(cb => cb.checked).length;
-        if (checkedCount > 0) {
-            bulkDeleteBtn.disabled = false;
-            bulkDeleteBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-            bulkDeleteBtn.classList.add('hover:bg-red-700');
-            bulkDeleteBtn.innerHTML = `<i class="fas fa-trash-alt mr-1.5"></i>Delete (${checkedCount})`;
-        } else {
-            bulkDeleteBtn.disabled = true;
-            bulkDeleteBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            bulkDeleteBtn.classList.remove('hover:bg-red-700');
-            bulkDeleteBtn.innerHTML = `<i class="fas fa-trash-alt mr-1.5"></i>Delete Selected`;
-        }
-    }
-});
+        mainCheck?.addEventListener('change', (e) => {
+            rows.forEach(r => r.checked = e.target.checked);
+            updateBulkBtn();
+        });
+
+        rows.forEach(r => r.addEventListener('change', updateBulkBtn));
+    });
 </script>
 {% endblock %}

@@ -1,0 +1,214 @@
+{% extends "teacher/_layout.html" %}
+{% block title %}My Shifts{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    
+    <!-- Header -->
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-4 p-4">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">My Shift Schedule</h2>
+                <p class="text-sm text-gray-500">View your assigned shifts and working hours</p>
+            </div>
+            <div class="text-right">
+                <div class="text-sm font-semibold text-gray-700">{{ faculty_info['name'] }}</div>
+                <div class="text-xs text-gray-500">{{ faculty_info['department_name'] or 'No Department' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weekly Schedule -->
+    <div class="bg-white shadow-md rounded-lg border border-gray-200 mb-4">
+        <div class="p-4 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800">Weekly Schedule</h3>
+            <p class="text-xs text-gray-500">Your assigned shifts for each day of the week</p>
+        </div>
+        
+        <div class="p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {% for day_name in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                {% set day_info = schedule.get(day_name) %}
+                <div class="border rounded-lg p-4 {{ 'bg-green-50 border-green-300' if day_info and day_info.is_available else 'bg-gray-50 border-gray-200' }}">
+                    <div class="font-bold text-gray-800 mb-2">{{ day_name }}</div>
+                    
+                    {% if day_info %}
+                        {% if day_info.is_available %}
+                            <div class="space-y-2">
+                                {% if day_info.shift_name %}
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-clock text-green-600"></i>
+                                    <div>
+                                        <div class="font-semibold text-sm text-gray-700">{{ day_info.shift_name }}</div>
+                                        <div class="text-xs text-gray-600 font-mono">
+                                            {{ day_info.start_time }} - {{ day_info.end_time }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="inline-block px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full border border-green-300">
+                                    {{ day_info.shift_code }}
+                                </span>
+                                {% else %}
+                                <div class="text-sm text-gray-600">
+                                    <i class="fas fa-check-circle text-green-600"></i> Available (No specific shift)
+                                </div>
+                                {% endif %}
+                                
+                                {% if day_info.notes %}
+                                <div class="text-xs text-gray-500 mt-2 italic">
+                                    <i class="fas fa-info-circle"></i> {{ day_info.notes }}
+                                </div>
+                                {% endif %}
+                                
+                                <button onclick="requestChangeModal('{{ day_name }}', {{ day_info.day_num }}, '{{ day_info.shift_name or 'Not Assigned' }}')" 
+                                        class="mt-2 w-full text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors">
+                                    <i class="fas fa-exchange-alt"></i> Request Change
+                                </button>
+                            </div>
+                        {% else %}
+                            <div class="text-sm text-gray-500">
+                                <i class="fas fa-times-circle text-red-500"></i> Not Available
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">Day off</div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-sm text-gray-400">
+                            <i class="fas fa-question-circle"></i> Not Set
+                        </div>
+                        <div class="text-xs text-gray-400 mt-1">Contact admin to set schedule</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Shift Change Requests -->
+    <div class="bg-white shadow-md rounded-lg border border-gray-200">
+        <div class="p-4 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800">Shift Change Requests</h3>
+            <p class="text-xs text-gray-500">Your recent shift change requests and their status</p>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Date</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Day</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Current</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Requested</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Reason</th>
+                        <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Response</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% if change_requests %}
+                        {% for req in change_requests %}
+                        {% set day_names = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday'} %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-gray-700">{{ req['created_at'].strftime('%b %d, %Y') }}</td>
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ day_names[req['day_of_week']] }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ req['current_shift_name'] }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900 font-semibold">{{ req['requested_shift_name'] }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{{ req['reason'] or '-' }}</td>
+                            <td class="px-4 py-3 text-center">
+                                {% if req['status'] == 'pending' %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                {% elif req['status'] == 'approved' %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
+                                {% else %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ req['admin_response'] or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
+                                <p>No shift change requests yet</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Request Change Modal -->
+<div id="changeModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Request Shift Change</h3>
+            <button onclick="closeChangeModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('teacher.request_shift_change') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="day_of_week" id="change_day_num">
+            <input type="hidden" name="current_shift_name" id="change_current">
+            
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-600">Requesting change for:</div>
+                    <div class="font-bold text-gray-900" id="change_day_name"></div>
+                    <div class="text-sm text-gray-600">Current: <span id="change_current_display"></span></div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Requested Shift *</label>
+                    <input type="text" name="requested_shift_name" required 
+                           placeholder="e.g., Morning Shift, Afternoon Shift, Day Off"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                    <p class="text-xs text-gray-500 mt-1">Specify the shift you want to change to</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
+                    <textarea name="reason" required rows="3" 
+                              placeholder="Please explain why you need this shift change..."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeChangeModal()" 
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                    Submit Request
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function requestChangeModal(dayName, dayNum, currentShift) {
+    document.getElementById('change_day_name').textContent = dayName;
+    document.getElementById('change_day_num').value = dayNum;
+    document.getElementById('change_current').value = currentShift;
+    document.getElementById('change_current_display').textContent = currentShift;
+    document.getElementById('changeModal').classList.remove('hidden');
+}
+
+function closeChangeModal() {
+    document.getElementById('changeModal').classList.add('hidden');
+}
+
+// Close modal on outside click
+window.onclick = function(event) {
+    const modal = document.getElementById('changeModal');
+    if (event.target === modal) {
+        modal.classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

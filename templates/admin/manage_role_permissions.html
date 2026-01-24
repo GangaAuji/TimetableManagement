@@ -1,0 +1,188 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Manage Permissions: {{ role.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .permission-checkbox:checked + label {
+        background-color: #eef2ff;
+        border-color: #4f46e5;
+        color: #4338ca;
+    }
+    
+    .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    
+    <div class="card bg-gradient-to-r from-violet-600 to-purple-600 text-white mb-4 border-0 shadow">
+        <div class="card-body d-flex justify-content-between align-items-center p-4">
+            <div>
+                <h1 class="h4 mb-0 fw-bold">{{ role.name }} Permissions</h1>
+                <p class="mb-0 opacity-90">{{ role.description or 'Manage what users in this role can do' }}</p>
+            </div>
+            <div>
+                <a href="{{ url_for('user_mgmt_bp.manage_roles') }}" class="btn btn-light text-primary fw-semibold shadow-sm">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Roles
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('user_mgmt_bp.update_role_permissions', role_id=role.id) }}" id="rolePermissionsForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white border-bottom px-4 py-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 fw-bold">Available Permissions</h5>
+                            <div class="d-flex gap-2">
+                                <button type="button" id="selectAllPerms" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-check-double me-1"></i>Select All
+                                </button>
+                                <button type="button" id="clearAllPerms" class="btn btn-sm btn-outline-secondary">
+                                    <i class="fas fa-times me-1"></i>Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="mb-3">
+                            <input type="text" id="permissionSearch" class="form-control" placeholder="🔍 Search permissions...">
+                        </div>
+                        
+                        <div style="max-height: 600px; overflow-y: auto;" class="custom-scrollbar" id="permissionsContainer">
+                            {% for module, perms in permissions_by_module.items() %}
+                            <div class="mb-4 module-section" data-module="{{ module }}">
+                                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3 module-header">
+                                    <i class="fas fa-cube me-2"></i>{{ module | title }}
+                                </h6>
+                                <div class="row g-2">
+                                    {% for perm in perms %}
+                                    <div class="col-md-6 permission-item" data-module="{{ module }}" data-perm-name="{{ perm.name }}">
+                                        <div class="form-check">
+                                            <input 
+                                                class="form-check-input permission-checkbox" 
+                                                type="checkbox" 
+                                                name="permission_ids" 
+                                                value="{{ perm.id }}" 
+                                                id="perm_{{ perm.id }}"
+                                                {% if perm.id in role_permission_ids %}checked{% endif %}>
+                                            <label class="form-check-label w-100" for="perm_{{ perm.id }}" style="cursor: pointer; padding: 0.5rem; border-radius: 6px; border: 1px solid transparent;">
+                                                <div class="fw-medium">{{ perm.name }}</div>
+                                                {% if perm.description %}
+                                                <div class="text-xs text-muted">{{ perm.description }}</div>
+                                                {% endif %}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card shadow-sm sticky-top" style="top: 1rem;">
+                    <div class="card-body p-4">
+                        <div class="text-center mb-4">
+                            <div class="display-1 text-primary mb-2">
+                                <span id="selectedCount">{{ role_permission_ids | length }}</span>
+                            </div>
+                            <h6 class="text-muted">Permissions Selected</h6>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Role Permissions:</strong> These permissions apply to all users assigned to this role.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold">
+                            <i class="fas fa-save me-2"></i>Save Permissions
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Update counter
+    function updateSelectedCount() {
+        const count = $('input[name="permission_ids"]:checked').length;
+        $('#selectedCount').text(count);
+    }
+
+    // Permission checkbox change handler
+    $('input[name="permission_ids"]').on('change', updateSelectedCount);
+
+    // Select all permissions
+    $('#selectAllPerms').on('click', function() {
+        $('.permission-item:visible input[type="checkbox"]').prop('checked', true);
+        updateSelectedCount();
+    });
+
+    // Clear all selections
+    $('#clearAllPerms').on('click', function() {
+        $('input[name="permission_ids"]').prop('checked', false);
+        updateSelectedCount();
+    });
+
+    // Search permissions
+    $('#permissionSearch').on('input', function() {
+        const searchTerm = $(this).val().toLowerCase();
+        
+        if (searchTerm === '') {
+            $('.permission-item, .module-section').show();
+            return;
+        }
+
+        $('.permission-item').each(function() {
+            const permName = $(this).data('perm-name').toLowerCase();
+            const module = $(this).data('module').toLowerCase();
+            
+            if (permName.includes(searchTerm) || module.includes(searchTerm)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+
+        // Show/hide module sections based on visible items
+        $('.module-section').each(function() {
+            const module = $(this).data('module');
+            const hasVisibleItems = $(this).find('.permission-item:visible').length > 0;
+            $(this).toggle(hasVisibleItems);
+        });
+    });
+
+    // Initialize counter
+    updateSelectedCount();
+});
+</script>
+{% endblock %}

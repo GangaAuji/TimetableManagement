@@ -14,9 +14,11 @@
                         <h2 class="text-lg font-bold text-gray-800">Batch Registry</h2>
                         <p class="text-xs text-gray-500">Cohorts & Academic Years</p>
                     </div>
+                    {% if user_has_perm('batches_add') %}
                     <button onclick="showAddModal()" class="xl:hidden bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded shadow text-sm transition-colors">
                         <i class="fas fa-plus"></i>
                     </button>
+                    {% endif %}
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto items-end md:items-center flex-wrap">
@@ -41,9 +43,11 @@
                         <input type="text" id="customSearch" class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-orange-500" placeholder="Search batch name...">
                     </div>
 
+                    {% if user_has_perm('batches_add') %}
                     <button onclick="showAddModal()" class="hidden xl:flex bg-orange-600 hover:bg-orange-700 text-white px-4 py-1.5 rounded shadow text-xs items-center transition-colors whitespace-nowrap">
                         <i class="fas fa-plus mr-2"></i> Add Batch
                     </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -102,14 +106,18 @@
 
                         <td class="px-4 py-2 align-middle text-right whitespace-nowrap">
                             <div class="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                                {% if user_has_perm('batches_change') %}
                                 <button data-batch='{{ b|tojson }}' onclick="editBatchFromDataset(this)" 
                                     class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                {% endif %}
+                                {% if user_has_perm('batches_delete') %}
                                 <button data-id="{{ b.id }}" data-name="{{ b.batch_name }}" onclick="deleteBatchFromDataset(this)" 
                                     class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-all" title="Delete">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -274,8 +282,7 @@
             <h3 class="text-lg font-medium text-gray-900">Delete Batch?</h3>
             <p class="text-sm text-gray-500 mt-2">Are you sure you want to delete <strong id="delete_batch_name"></strong>?</p>
         </div>
-        <form id="deleteForm" method="POST" class="bg-gray-50 px-4 py-3 sm:px-6 flex flex-row-reverse gap-2 rounded-b-lg">
-            <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">Delete</button>
+        <form id="deleteForm" method="POST" class="bg-gray-50 px-4 py-3 sm:px-6 flex flex-row-reverse gap-2 rounded-b-lg">            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">            <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">Delete</button>
             <button type="button" onclick="closeDeleteModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
         </form>
     </div>

@@ -361,3 +361,64 @@ CREATE TABLE IF NOT EXISTS `faculty_absences` (
   INDEX idx_faculty_date (`faculty_id`, `absence_date`),
   INDEX idx_status (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Add the columns if they don't exist
+ALTER TABLE faculty ADD COLUMN user_id INT NULL;
+ALTER TABLE students ADD COLUMN user_id INT NULL;
+
+-- Add foreign keys (optional if you want referential integrity)
+ALTER TABLE faculty ADD CONSTRAINT fk_faculty_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE students ADD CONSTRAINT fk_student_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+-- EXAMPLE mapping (adjust to your actual data)
+-- For example, map the teacher user 'Ishaan' to some faculty row:
+-- UPDATE faculty SET user_id = (SELECT id FROM users WHERE username='Ishaan' AND role='Teacher') WHERE id = 1;
+
+-- After mapping every faculty/student to the right user, you can enforce NOT NULL:
+-- ALTER TABLE faculty MODIFY user_id INT NOT NULL;
+-- ALTER TABLE students MODIFY user_id INT NOT NULL;
+
+USE college_timetable_db;
+select * from timetable_history
+
+-- Check current configuration
+SELECT 
+    s.id,
+    s.name,
+    s.lectures_per_week,
+    s.practical_hours_per_week,
+    (s.lectures_per_week + CEIL(s.practical_hours_per_week / 2)) AS total_sessions
+FROM subjects s
+WHERE s.course_id = 3;  -- MSc Data Analytics
+
+-- If total < 24, update to make it exactly 24
+-- Example: 4 subjects × 6 lectures = 24 total
+UPDATE subjects 
+SET lectures_per_week = 6
+WHERE course_id = 3 AND lectures_per_week < 6;
+
+-- Add 2 hours practical to Subject 4
+UPDATE subjects 
+SET lectures_per_week = 6
+WHERE course_id = 3 AND name LIKE '%Digital Footprints%';
+
+-- Result: 6+6+6+6 = 24 sessions
+
+
+-- Add department_id column to rooms table
+ALTER TABLE rooms 
+ADD COLUMN department_id INT NULL AFTER capacity,
+ADD CONSTRAINT fk_rooms_department 
+    FOREIGN KEY (department_id) 
+    REFERENCES departments(id) 
+    ON DELETE SET NULL;
+
+use college_timetable_db;
+-- Add index for better query performance
+CREATE INDEX idx_rooms_department ON rooms(department_id);
+
+Describe faculty;
+show tables;
+
+SET FOREIGN_KEY_CHECKS = 1;
+truncate table rooms;

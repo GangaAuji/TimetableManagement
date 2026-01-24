@@ -14,9 +14,11 @@
                         <h2 class="text-lg font-bold text-gray-800">Departments</h2>
                         <p class="text-xs text-gray-500">Academic units configuration</p>
                     </div>
+                    {% if user_has_perm('departments_add') %}
                     <button onclick="showAddModal()" class="xl:hidden bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded shadow text-sm transition-colors">
                         <i class="fas fa-plus"></i>
                     </button>
+                    {% endif %}
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto items-end md:items-center flex-wrap">
@@ -34,9 +36,11 @@
                         <input type="text" id="customSearch" class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500" placeholder="Search departments...">
                     </div>
 
+                    {% if user_has_perm('departments_add') %}
                     <button onclick="showAddModal()" class="hidden xl:flex bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded shadow text-xs items-center whitespace-nowrap transition-colors">
                         <i class="fas fa-plus mr-2"></i> Add Department
                     </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -99,14 +103,18 @@
                                     class="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded transition-colors" title="Invite Teacher">
                                     <i class="fas fa-paper-plane"></i>
                                 </button>
+                                {% if user_has_perm('departments_change') %}
                                 <button onclick="editDepartment(this)" data-dept='{{ dept|tojson|safe }}' 
                                     class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                {% endif %}
+                                {% if user_has_perm('departments_delete') %}
                                 <button onclick="deleteDepartment(this)" data-id="{{ dept.id }}" data-name="{{ dept.name|e }}" 
                                     class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" title="Delete">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -212,7 +220,7 @@
             <h3 class="text-white font-bold text-lg">Invite Teacher</h3>
             <button onclick="closeInviteDeptModal()" class="text-white hover:text-gray-200 text-xl">&times;</button>
         </div>
-        <form method="POST" action="{{ url_for('admin.create_invitation') }}" class="p-6">
+        <form method="POST" action="{{ url_for('invitations.create_invitation') }}" class="p-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="role" value="Teacher">
             <input type="hidden" name="department_id" id="invite_dept_id">
@@ -252,8 +260,7 @@
             <h3 class="text-lg font-medium text-gray-900">Delete Department?</h3>
             <p class="text-sm text-gray-500 mt-2">Delete <strong id="delete_dept_name"></strong>? This may affect all related courses.</p>
         </div>
-        <form id="deleteForm" method="POST" class="bg-gray-50 px-4 py-3 sm:px-6 flex flex-row-reverse gap-2 rounded-b-lg">
-            <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">Delete</button>
+        <form id="deleteForm" method="POST" class="bg-gray-50 px-4 py-3 sm:px-6 flex flex-row-reverse gap-2 rounded-b-lg">            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">            <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">Delete</button>
             <button type="button" onclick="closeDeleteModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
         </form>
     </div>

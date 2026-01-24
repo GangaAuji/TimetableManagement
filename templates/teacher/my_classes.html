@@ -1,0 +1,245 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Classes{% endblock %}
+{% block header_title %}Teaching Classes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .accordion-button {
+        transition: all 0.3s ease;
+    }
+    .accordion-button:hover {
+        background-color: #f3f4f6;
+    }
+    .accordion-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .accordion-content.active {
+        max-height: 2000px;
+    }
+    .student-row:hover {
+        background-color: #f9fafb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in pb-8">
+    
+    <!-- Header Section -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-users-class text-indigo-600 mr-3"></i>
+                    My Teaching Classes
+                </h2>
+                <p class="text-gray-500 mt-2 text-sm">
+                    View all classes where you teach with enrolled students
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <i class="fas fa-chalkboard-teacher mr-2"></i>
+                    {{ classes|length }} Class{{ 'es' if classes|length != 1 else '' }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {% if classes %}
+    <!-- Classes List -->
+    <div class="space-y-4">
+        {% for class_item in classes %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <!-- Accordion Header -->
+            <button onclick="toggleAccordion({{ loop.index0 }})" 
+                    class="accordion-button w-full px-6 py-5 flex items-center justify-between text-left hover:bg-gray-50 transition-colors">
+                <div class="flex-1">
+                    <div class="flex items-center gap-4 mb-2">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shadow-lg">
+                            <i class="fas fa-graduation-cap text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800">
+                                {{ class_item.class_name }} - {{ class_item.division_name }}
+                            </h3>
+                            <p class="text-sm text-indigo-600 font-semibold">{{ class_item.course_name }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 ml-16">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                            <i class="fas fa-book mr-1.5"></i>
+                            {{ class_item.subject_name }}
+                        </span>
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+                            <i class="fas fa-users mr-1.5"></i>
+                            {{ class_item.student_count }} Student{{ 's' if class_item.student_count != 1 else '' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <i id="icon-{{ loop.index0 }}" class="fas fa-chevron-down text-gray-400 transform transition-transform duration-300"></i>
+                </div>
+            </button>
+
+            <!-- Accordion Content -->
+            <div id="content-{{ loop.index0 }}" class="accordion-content border-t border-gray-100">
+                {% if class_item.students %}
+                <!-- Students Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr class="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                                <th class="px-6 py-3 text-left">#</th>
+                                <th class="px-6 py-3 text-left">Student Name</th>
+                                <th class="px-6 py-3 text-left">Username</th>
+                                <th class="px-6 py-3 text-left">Email</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for student in class_item.students %}
+                            <tr class="student-row transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ loop.index }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold mr-3">
+                                            {{ student['name'][0]|upper }}
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-800">{{ student['name'] }}</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="text-sm text-gray-600 font-mono">{{ student['username'] }}</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <a href="mailto:{{ student['email'] }}" class="text-sm text-indigo-600 hover:text-indigo-800 hover:underline flex items-center">
+                                        <i class="far fa-envelope mr-2 text-xs"></i>
+                                        {{ student['email'] or 'N/A' }}
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Export Buttons -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <div class="text-xs text-gray-500">
+                        Total: <span class="font-semibold text-gray-700">{{ class_item.student_count }}</span> students
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="printStudentList({{ loop.index0 }})" 
+                                class="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center">
+                            <i class="fas fa-print mr-2"></i>
+                            Print
+                        </button>
+                        <button onclick="exportToCSV({{ loop.index0 }})" 
+                                class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors flex items-center">
+                            <i class="fas fa-download mr-2"></i>
+                            Export CSV
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <!-- No Students -->
+                <div class="px-6 py-12 text-center">
+                    <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-user-slash text-2xl text-gray-300"></i>
+                    </div>
+                    <p class="text-gray-600 font-medium">No students enrolled</p>
+                    <p class="text-sm text-gray-500 mt-1">This class currently has no enrolled students.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-12">
+        <div class="flex flex-col items-center justify-center text-center">
+            <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i class="fas fa-chalkboard text-3xl text-gray-300"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">No Teaching Assignments</h3>
+            <p class="text-gray-500 max-w-md">
+                You don't have any class assignments yet. Please contact the administrator to get assigned to classes.
+            </p>
+            <a href="{{ url_for('teacher.dashboard') }}" 
+               class="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAccordion(index) {
+    const content = document.getElementById(`content-${index}`);
+    const icon = document.getElementById(`icon-${index}`);
+    
+    content.classList.toggle('active');
+    icon.classList.toggle('rotate-180');
+}
+
+function printStudentList(index) {
+    const content = document.getElementById(`content-${index}`);
+    const originalContents = document.body.innerHTML;
+    const printContents = content.querySelector('table').outerHTML;
+    
+    const printWindow = window.open('', '', 'height=600,width=800');
+    printWindow.document.write('<html><head><title>Student List</title>');
+    printWindow.document.write('<style>');
+    printWindow.document.write('body { font-family: Arial, sans-serif; padding: 20px; }');
+    printWindow.document.write('table { width: 100%; border-collapse: collapse; }');
+    printWindow.document.write('th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }');
+    printWindow.document.write('th { background-color: #f3f4f6; font-weight: bold; }');
+    printWindow.document.write('tr:nth-child(even) { background-color: #f9fafb; }');
+    printWindow.document.write('</style></head><body>');
+    printWindow.document.write(printContents);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+}
+
+function exportToCSV(index) {
+    const table = document.getElementById(`content-${index}`).querySelector('table');
+    const rows = table.querySelectorAll('tbody tr');
+    
+    let csv = 'Sr. No,Student Name,Username,Email\n';
+    
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('td');
+        const srNo = cols[0].textContent.trim();
+        const name = cols[1].textContent.trim();
+        const username = cols[2].textContent.trim();
+        const email = cols[3].textContent.trim();
+        
+        csv += `"${srNo}","${name}","${username}","${email}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `student_list_${Date.now()}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+{% endblock %}

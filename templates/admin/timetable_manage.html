@@ -71,7 +71,7 @@
                     class="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
                     <i class="fas fa-file-csv text-green-600 mr-2"></i> Export CSV
                 </button>
-                <a href="{{ url_for('admin.rooms_utilization_csv') }}"
+                <a href="{{ url_for('rooms.rooms_utilization_csv') }}"
                     class="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
                     <i class="fas fa-chart-pie text-indigo-600 mr-2"></i> Room Utilization
                 </a>
@@ -536,7 +536,7 @@
             }
 
             try {
-                const resp = await fetch(`{{ url_for('admin.api_classes') }}?course_id=${cid}`);
+                const resp = await fetch(`{{ url_for('api.get_classes') }}?course_id=${cid}`);
                 const items = await resp.json();
                 classSel.innerHTML = '<option value="">Select</option>';
                 items.forEach(i => {
@@ -560,7 +560,7 @@
             }
 
             try {
-                const resp = await fetch(`{{ url_for('admin.api_divisions') }}?class_id=${clid}`);
+                const resp = await fetch(`{{ url_for('api.get_divisions') }}?class_id=${clid}`);
                 const items = await resp.json();
                 divisionSel.innerHTML = '<option value="">Select</option>';
                 items.forEach(i => {
@@ -594,7 +594,7 @@
                 }
 
                 try {
-                    const resp = await fetch(`{{ url_for('admin.api_faculty_by_subject') }}?subject_id=${sid}`);
+                    const resp = await fetch(`{{ url_for('api.get_faculty_by_subject') }}?subject_id=${sid}`);
                     const items = await resp.json();
                     facultySel.innerHTML = '<option value="">Auto-assign</option>';
                     items.forEach(i => {

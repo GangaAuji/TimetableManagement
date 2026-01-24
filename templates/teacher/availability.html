@@ -4,37 +4,246 @@
 {% block header_title %}My Availability{% endblock %}
 
 {% block content %}
-<form method="POST" action="{{ url_for('teacher.availability') }}" class="bg-white p-6 rounded-lg shadow-md">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <h3 class="text-xl font-semibold text-gray-700 mb-4">Weekly Availability</h3>
-  <p class="text-sm text-gray-600 mb-4">Set the time range you're typically available for each day. Uncheck if unavailable.</p>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    {% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] %}
-    <div class="border rounded-md p-4">
-      <div class="flex items-center justify-between mb-3">
-        <span class="font-semibold">{{ day }}</span>
-        <label class="inline-flex items-center">
-          <input type="checkbox" name="{{ day }}-available" {% if avail[day].is_available %}checked{% endif %} class="mr-2">
-          <span class="text-sm">Available</span>
-        </label>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs text-gray-500 mb-1">Start</label>
-          <input type="time" name="{{ day }}-start" value="{{ avail[day].start_time }}" class="w-full border rounded px-3 py-2">
+<!-- Show assigned shift patterns info -->
+{% if avail_all_slots %}
+{% set has_shifts = namespace(value=False) %}
+{% for day_name, slots in avail_all_slots.items() %}
+  {% if slots and slots[0].shift_pattern_id %}
+    {% set has_shifts.value = True %}
+  {% endif %}
+{% endfor %}
+{% if has_shifts.value %}
+<div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 rounded">
+  <div class="flex items-start">
+    <div class="flex-shrink-0">
+      <i class="fas fa-info-circle text-blue-400 text-xl"></i>
+    </div>
+    <div class="ml-3">
+      <h3 class="text-sm font-medium text-blue-800">Assigned Shift Patterns</h3>
+      <div class="mt-2 text-sm text-blue-700">
+        <p class="mb-2">Your administrator has assigned the following shift patterns:</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {% for day_name, slots in avail_all_slots.items() %}
+            {% if slots and slots[0].shift_pattern_id %}
+            <div class="bg-white px-3 py-2 rounded border border-blue-200">
+              <span class="font-semibold">{{ day_name }}:</span> 
+              <span class="text-blue-900">{{ slots[0].shift_name }}</span>
+              {% if slots[0].shift_start %}
+              <span class="text-xs text-gray-600">({{ slots[0].shift_start[:5] }} - {{ slots[0].shift_end[:5] }})</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          {% endfor %}
         </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1">End</label>
-          <input type="time" name="{{ day }}-end" value="{{ avail[day].end_time }}" class="w-full border rounded px-3 py-2">
-        </div>
+        <p class="mt-2 text-xs">You can add additional time slots or customize your availability below. Admin-assigned shifts will be preserved.</p>
       </div>
     </div>
-    {% endfor %}
   </div>
-  <div class="mt-6">
-    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
-      <i class="fas fa-save mr-2"></i> Save Availability
-    </button>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+  <div class="mb-4">
+    <h3 class="text-xl font-semibold text-gray-700 mb-2">Lecture Availability</h3>
+    <p class="text-sm text-gray-600">Set your available time slots for teaching. These slots will be used for timetable generation and proxy assignments.</p>
   </div>
-</form>
+
+  <form method="POST" action="{{ url_for('teacher.availability') }}" id="availability-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] %}
+      <div class="border rounded-lg p-4" id="{{ day }}-container">
+        <div class="flex items-center justify-between mb-3 border-b pb-2">
+          <span class="font-semibold text-gray-800">{{ day }}</span>
+          <label class="inline-flex items-center">
+            <input type="checkbox" name="{{ day }}-available" 
+                   {% if avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available %}checked{% endif %} 
+                   class="mr-2 availability-checkbox" data-day="{{ day }}">
+            <span class="text-sm text-gray-700">Available</span>
+          </label>
+        </div>
+        
+        <div class="availability-fields" id="{{ day }}-fields" 
+             {% if not avail_all_slots[day] or (avail_all_slots[day] and not avail_all_slots[day][0].is_available) %}style="display:none"{% endif %}>
+          
+          <div id="{{ day }}-slots-container" class="space-y-2 mb-3">
+            {% if avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available %}
+              {% for slot in avail_all_slots[day] %}
+                {% if slot.is_available %}
+            <div class="slot-row bg-gray-50 p-2 rounded{% if not loop.first %} border border-gray-200 relative{% endif %}">
+              {% if not loop.first %}
+              <button type="button" class="remove-slot-btn absolute top-1 right-1 text-red-500 hover:text-red-700 text-xs" 
+                      onclick="this.parentElement.remove()">
+                <i class="fas fa-times-circle"></i>
+              </button>
+              {% endif %}
+              {% if slot.shift_pattern_id %}
+              <div class="bg-blue-50 border border-blue-200 px-2 py-1 mb-2 rounded text-xs">
+                <i class="fas fa-clock text-blue-600"></i> 
+                <span class="font-semibold text-blue-800">{{ slot.shift_name }}</span>
+                {% if slot.shift_start %}
+                <span class="text-blue-600">({{ slot.shift_start }} - {{ slot.shift_end }})</span>
+                {% endif %}
+                <span class="text-gray-500 italic">- Assigned by Admin</span>
+              </div>
+              {% endif %}
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">From</label>
+                  <input type="time" name="{{ day }}-start-{{ loop.index0 }}" 
+                         value="{{ slot.start_time if slot.start_time else slot.shift_start if slot.shift_start else '09:00' }}" 
+                         class="w-full border rounded px-2 py-1 text-sm"
+                         {% if slot.shift_pattern_id %}readonly title="Set by admin shift pattern"{% endif %}>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">To</label>
+                  <input type="time" name="{{ day }}-end-{{ loop.index0 }}" 
+                         value="{{ slot.end_time if slot.end_time else slot.shift_end if slot.shift_end else '17:00' }}" 
+                         class="w-full border rounded px-2 py-1 text-sm"
+                         {% if slot.shift_pattern_id %}readonly title="Set by admin shift pattern"{% endif %}>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Status</label>
+                <input type="text" name="{{ day }}-notes-{{ loop.index0 }}" 
+                       value="{{ slot.notes }}" 
+                       class="w-full border rounded px-2 py-1 text-sm" 
+                       placeholder="e.g., Available for lectures, No lecture, Meeting">
+              </div>
+            </div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+            <div class="slot-row bg-gray-50 p-2 rounded">
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">From</label>
+                  <input type="time" name="{{ day }}-start-0" value="09:00" 
+                         class="w-full border rounded px-2 py-1 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">To</label>
+                  <input type="time" name="{{ day }}-end-0" value="17:00" 
+                         class="w-full border rounded px-2 py-1 text-sm">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Status</label>
+                <input type="text" name="{{ day }}-notes-0" 
+                       class="w-full border rounded px-2 py-1 text-sm" 
+                       placeholder="e.g., Available for lectures, No lecture, Meeting">
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          
+          <button type="button" class="add-slot-btn text-xs text-blue-600 hover:text-blue-800" 
+                  data-day="{{ day }}">
+            <i class="fas fa-plus-circle"></i> Add Another Time Slot
+          </button>
+          
+          <div class="mt-3 text-xs text-gray-500 bg-blue-50 p-2 rounded">
+            <i class="fas fa-info-circle"></i> 
+            <strong>Examples:</strong><br>
+            • 9:00-13:00 - Available for lectures<br>
+            • 13:00-14:00 - Lunch break (No lecture)<br>
+            • 14:00-17:00 - Available for lectures
+          </div>
+        </div>
+        
+        <div class="unavailable-msg text-sm text-gray-400 italic text-center py-4" 
+             id="{{ day }}-unavailable" 
+             {% if avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available %}style="display:none"{% endif %}>
+          <i class="fas fa-calendar-times text-2xl mb-2 block"></i>
+          Not available on this day
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    
+    <div class="mt-6 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        <i class="fas fa-lightbulb text-yellow-500"></i> 
+        Set your work hours and specify when you're available for teaching
+      </div>
+      <div>
+        <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700">
+          <i class="fas fa-save mr-2"></i> Save Availability
+        </button>
+        <a href="{{ url_for('teacher.dashboard') }}" class="ml-3 text-gray-600 hover:text-gray-800">
+          Cancel
+        </a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+let slotCounter = {};
+
+// Initialize counters based on existing slots
+document.querySelectorAll('.availability-checkbox').forEach(checkbox => {
+  const day = checkbox.dataset.day;
+  const container = document.getElementById(day + '-slots-container');
+  const existingSlots = container.querySelectorAll('.slot-row').length;
+  slotCounter[day] = existingSlots > 0 ? existingSlots : 1;
+});
+
+// Toggle availability fields
+document.querySelectorAll('.availability-checkbox').forEach(checkbox => {
+  checkbox.addEventListener('change', function() {
+    const day = this.dataset.day;
+    const fields = document.getElementById(day + '-fields');
+    const unavailable = document.getElementById(day + '-unavailable');
+    
+    if (this.checked) {
+      fields.style.display = 'block';
+      unavailable.style.display = 'none';
+    } else {
+      fields.style.display = 'none';
+      unavailable.style.display = 'block';
+    }
+  });
+});
+
+// Add time slot functionality
+document.querySelectorAll('.add-slot-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const day = this.dataset.day;
+    const container = document.getElementById(day + '-slots-container');
+    const slotIndex = slotCounter[day]++;
+    
+    const slotHtml = `
+      <div class="slot-row bg-gray-50 p-2 rounded border border-gray-200 relative">
+        <button type="button" class="remove-slot-btn absolute top-1 right-1 text-red-500 hover:text-red-700 text-xs" 
+                onclick="this.parentElement.remove()">
+          <i class="fas fa-times-circle"></i>
+        </button>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">From</label>
+            <input type="time" name="${day}-start-${slotIndex}" value="09:00" 
+                   class="w-full border rounded px-2 py-1 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">To</label>
+            <input type="time" name="${day}-end-${slotIndex}" value="17:00" 
+                   class="w-full border rounded px-2 py-1 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Status</label>
+          <input type="text" name="${day}-notes-${slotIndex}" 
+                 class="w-full border rounded px-2 py-1 text-sm" 
+                 placeholder="e.g., Available for lectures, No lecture, Meeting">
+        </div>
+      </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', slotHtml);
+  });
+});
+</script>
 {% endblock %}

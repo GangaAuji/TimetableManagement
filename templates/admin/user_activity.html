@@ -1,0 +1,155 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}User Activity - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+    
+    <!-- Back Button -->
+    <div class="mb-4">
+        <a href="{{ url_for('audit_logs.audit_logs_view') }}" class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800">
+            <i class="fas fa-arrow-left mr-2"></i> Back to Audit Logs
+        </a>
+    </div>
+
+    <!-- User Info Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div class="flex items-center">
+            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-2xl font-bold">
+                {{ user.username[:2].upper() }}
+            </div>
+            <div class="ml-4">
+                <h2 class="text-2xl font-bold text-gray-800">{{ user.username }}</h2>
+                <p class="text-sm text-gray-500">{{ user.email or 'No email' }} • {{ user.role }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Sessions -->
+    {% if active_sessions %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+        <div class="px-6 py-4 bg-yellow-50 border-b border-yellow-200">
+            <h3 class="text-lg font-bold text-gray-800">
+                <i class="fas fa-wifi text-yellow-600 mr-2"></i>
+                Active Sessions ({{ active_sessions|length }})
+            </h3>
+        </div>
+        <div class="p-6">
+            <div class="space-y-4">
+                {% for session in active_sessions %}
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-800">{{ session.ip_address }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ session.user_agent[:100] }}...</p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            Last activity: {{ session.last_activity.strftime('%Y-%m-%d %H:%M:%S') if session.last_activity else 'N/A' }}
+                        </p>
+                    </div>
+                    <form method="POST" action="{{ url_for('audit_logs.revoke_session', session_id=session.session_id) }}" class="ml-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
+                            Revoke
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Activity Summary (Last 30 Days) -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+        <div class="px-6 py-4 bg-indigo-50 border-b border-indigo-200">
+            <h3 class="text-lg font-bold text-gray-800">
+                <i class="fas fa-chart-bar text-indigo-600 mr-2"></i>
+                Activity Summary (Last 30 Days)
+            </h3>
+        </div>
+        {% if activity_summary %}
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for activity in activity_summary %}
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-bold text-gray-500 uppercase">{{ activity.action }}</p>
+                            <p class="text-2xl font-bold text-gray-800 mt-1">{{ activity.count }}</p>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Last: {{ activity.last_activity.strftime('%m/%d %H:%M') if activity.last_activity else 'N/A' }}
+                            </p>
+                        </div>
+                        <i class="fas fa-bolt text-3xl text-gray-300"></i>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500">
+            <i class="fas fa-inbox text-4xl text-gray-300 mb-2"></i>
+            <p>No activity in the last 30 days</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Recent Activities -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800">
+                <i class="fas fa-history text-gray-600 mr-2"></i>
+                Recent Activities
+            </h3>
+        </div>
+        {% if recent_activities %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Action</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Entity</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Details</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for activity in recent_activities %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-600">
+                            {{ activity.created_at.strftime('%m/%d %H:%M') if activity.created_at else 'N/A' }}
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap text-xs font-medium text-gray-800">
+                            {{ activity.action }}
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-600">
+                            {{ activity.entity_type or '-' }}
+                            {% if activity.entity_id %}#{{ activity.entity_id }}{% endif %}
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {% if activity.status == 'success' %}bg-green-100 text-green-800
+                                {% elif activity.status == 'failed' %}bg-red-100 text-red-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ activity.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-3">
+                            <a href="{{ url_for('audit_logs.log_details', log_id=activity.id) }}" 
+                               class="text-xs text-indigo-600 hover:text-indigo-800">
+                                View Details
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500">
+            <p>No recent activities found</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,43 +1,181 @@
 {% extends "teacher/_layout.html" %}
 {% block title %}My Assignments{% endblock %}
-{% block header_title %}My Assignments{% endblock %}
+{% block header_title %}Academic Allocated{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Table Styling */
+    .table-row-hover:hover td {
+        background-color: #f8fafc; /* gray-50 */
+    }
+    
+    /* Custom Scrollbar for the table container */
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Fade Animation */
+    .fade-in-up { animation: fadeInUp 0.4s ease-out forwards; opacity: 0; transform: translateY(10px); }
+    @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md">
-  <h3 class="text-xl font-semibold mb-4">Assigned Classes and Subjects</h3>
-  <div class="overflow-x-auto">
-    <table class="min-w-full bg-white border border-gray-200">
-      <thead class="bg-gray-50">
-        <tr>
-          <th class="py-2 px-3 text-left">Department</th>
-          <th class="py-2 px-3 text-left">Course</th>
-          <th class="py-2 px-3 text-left">Class</th>
-          <th class="py-2 px-3 text-left">Division</th>
-          <th class="py-2 px-3 text-left">Subject</th>
-          <th class="py-2 px-3 text-left">Syllabus</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for a in assignments %}
-        <tr class="border-t">
-          <td class="py-2 px-3">{{ a.department }}</td>
-          <td class="py-2 px-3">{{ a.course }}</td>
-          <td class="py-2 px-3">{{ a.class }}</td>
-          <td class="py-2 px-3">{{ a.division }}</td>
-          <td class="py-2 px-3">{{ a.subject }}</td>
-          <td class="py-2 px-3">
-            {% if a.syllabus_url %}
-              <a href="{{ a.syllabus_url }}" target="_blank" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-file-alt mr-1"></i>View</a>
-            {% else %}
-              <span class="text-gray-400">Not provided</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="py-6 text-center text-gray-500">No assignments found.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<div class="max-w-6xl mx-auto pb-10 fade-in-up">
+    
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+        <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-50/30">
+            
+            <div>
+                <h2 class="text-xl font-bold text-gray-800 tracking-tight">Assigned Subjects</h2>
+                <p class="text-xs text-gray-500 mt-1">
+                    Managing <span class="font-bold text-indigo-600">{{ assignments|length }}</span> allocations for this session.
+                </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="far fa-calendar-alt text-gray-400 text-xs"></i>
+                    </div>
+                    <select id="yearFilter" class="pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none appearance-none cursor-pointer hover:border-gray-300 transition-colors w-full sm:w-40">
+                        <option value="">All Years</option>
+                        <option value="2025" selected>2025-26</option>
+                        <option value="2024">2024-25</option>
+                    </select>
+                </div>
+
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fas fa-search text-gray-400 text-xs group-focus-within:text-indigo-500 transition-colors"></i>
+                    </div>
+                    <input type="text" id="searchInput" onkeyup="filterAssignments()" 
+                           placeholder="Search subject, class..." 
+                           class="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm w-full sm:w-64 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow">
+                </div>
+                
+                <button class="flex items-center justify-center px-3 py-2 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-100 transition-colors shadow-sm" title="Print List">
+                    <i class="fas fa-print"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto custom-scroll">
+            <table class="w-full text-left border-collapse" id="assignmentsTable">
+                <thead>
+                    <tr class="bg-gray-50/80 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-semibold text-left">
+                        <th class="px-6 py-4 w-1/4">Subject Details</th>
+                        <th class="px-6 py-4">Department</th>
+                        <th class="px-6 py-4">Class / Course</th>
+                        <th class="px-6 py-4">Division</th>
+                        <th class="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                    {% for a in assignments %}
+                    <tr class="table-row-hover transition-colors group">
+                        <td class="px-6 py-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-100 shrink-0">
+                                    {{ a.subject[:1] }}
+                                </div>
+                                <div>
+                                    <p class="text-sm font-bold text-gray-800 subject-name">{{ a.subject }}</p>
+                                    <span class="text-[10px] text-gray-400 font-medium">Core Subject</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <span class="text-xs font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100 dept-name">
+                                {{ a.department }}
+                            </span>
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-gray-700 class-name">{{ a.class }}</span>
+                                <span class="text-[10px] text-gray-400 uppercase tracking-wide course-name">{{ a.course }}</span>
+                            </div>
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <div class="flex items-center">
+                                <span class="h-6 w-6 rounded-full bg-orange-50 text-orange-600 border border-orange-100 flex items-center justify-center text-xs font-bold">
+                                    {{ a.division }}
+                                </span>
+                            </div>
+                        </td>
+
+                        <td class="px-6 py-3 text-right">
+                            {% if a.syllabus_url %}
+                                <a href="{{ a.syllabus_url }}" target="_blank" 
+                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm">
+                                    <i class="fas fa-file-download"></i>
+                                    <span>Syllabus</span>
+                                </a>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-transparent text-xs font-semibold text-gray-400 cursor-not-allowed">
+                                    <i class="fas fa-ban text-[10px]"></i>
+                                    <span>No File</span>
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center">
+                            <div class="flex flex-col items-center justify-center">
+                                <div class="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fas fa-folder-open text-gray-300 text-xl"></i>
+                                </div>
+                                <p class="text-gray-900 font-medium text-sm">No assignments found</p>
+                                <p class="text-xs text-gray-500 mt-1">Contact your administrator for allocations.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+            <span class="text-xs text-gray-500 font-medium">Showing all records</span>
+            <div class="flex gap-1">
+                <button disabled class="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-400 cursor-not-allowed"><i class="fas fa-chevron-left"></i></button>
+                <button disabled class="px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-400 cursor-not-allowed"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
+
+    </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function filterAssignments() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toLowerCase();
+        const table = document.getElementById('assignmentsTable');
+        const tr = table.getElementsByTagName('tr');
+
+        // Loop through all table rows, and hide those who don't match the search query
+        for (let i = 1; i < tr.length; i++) { // Start at 1 to skip header
+            let subject = tr[i].querySelector('.subject-name');
+            let className = tr[i].querySelector('.class-name');
+            let dept = tr[i].querySelector('.dept-name');
+            
+            if (subject || className || dept) {
+                const textValue = (subject.textContent + className.textContent + dept.textContent).toLowerCase();
+                if (textValue.indexOf(filter) > -1) {
+                    tr[i].style.display = "";
+                } else {
+                    tr[i].style.display = "none";
+                }
+            }       
+        }
+    }
+</script>
 {% endblock %}

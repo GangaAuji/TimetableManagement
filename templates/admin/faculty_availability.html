@@ -1,0 +1,372 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Faculty Availability{% endblock %}
+{% block header_title %}Faculty Shift Availability{% endblock %}
+
+{% block content %}
+<!-- Hidden CSRF token for AJAX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+<div class="container-fluid px-4 py-4 h-screen flex flex-col">
+    
+    <!-- Header Section -->
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-4 flex-none">
+        <div class="p-4">
+            <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800">Faculty Availability</h2>
+                    <p class="text-xs text-gray-500">Configure weekly work schedules for faculty members</p>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto items-center">
+                    
+                    <select id="departmentFilter" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}">{{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <a href="{{ url_for('shifts.manage_shifts') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded shadow text-xs transition-colors whitespace-nowrap">
+                        <i class="fas fa-clock mr-2"></i> Manage Shifts
+                    </a>
+
+                    {% if user_has_perm('shifts_change') %}
+                    <button onclick="showBulkModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded shadow text-xs transition-colors whitespace-nowrap">
+                        <i class="fas fa-tasks mr-2"></i> Bulk Update
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Faculty Availability Table -->
+    <div class="bg-white shadow-md rounded-lg border border-gray-200 flex-grow flex flex-col overflow-hidden">
+        <div class="overflow-auto flex-grow">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50">Faculty</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Mon</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Tue</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Wed</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Thu</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Fri</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Sat</th>
+                        <th class="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Sun</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for faculty_data in faculty_list %}
+                    <tr class="hover:bg-indigo-50 transition-colors faculty-row" data-department="{{ faculty_data.faculty.department_id }}">
+                        <td class="px-4 py-3 sticky left-0 bg-white group-hover:bg-indigo-50">
+                            <div class="font-semibold text-gray-900">{{ faculty_data.faculty.name }}</div>
+                            <div class="text-xs text-gray-500">{{ faculty_data.faculty.department_name }}</div>
+                        </td>
+
+                        {% for day in range(1, 8) %}
+                        <td class="px-2 py-2 text-center">
+                            {% set availability = faculty_data.availability.get(day) %}
+                            <div class="flex flex-col items-center gap-1">
+                                {% if user_has_perm('shifts_change') %}
+                                <select class="shift-select w-full px-2 py-1 border rounded text-xs focus:ring-indigo-500 focus:border-indigo-500 {{ 'bg-green-50 border-green-300' if availability and availability.is_available else 'bg-gray-50 border-gray-300' }}"
+                                        data-faculty="{{ faculty_data.faculty.user_id }}" 
+                                        data-day="{{ day }}"
+                                        onchange="updateAvailability(this)"
+                                        title="{{ availability.time_range if availability and availability.time_range else 'No time set' }}">
+                                    <option value="">Not Set</option>
+                                    {% for shift in shift_patterns %}
+                                    <option value="{{ shift.id }}" {{ 'selected' if availability and availability.shift_pattern_id == shift.id else '' }}>
+                                        {{ shift.shift_code }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% if availability and availability.time_range %}
+                                <div class="text-xs text-gray-500" title="{{ availability.notes if availability.notes else '' }}">
+                                    {{ availability.time_range[:5] }}
+                                </div>
+                                {% endif %}
+                                {% if availability and availability.all_slots and availability.all_slots|length > 1 %}
+                                <div class="text-xs text-blue-600" title="Multiple time slots set">
+                                    +{{ availability.all_slots|length - 1 }} more
+                                </div>
+                                {% endif %}
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="checkbox" 
+                                           class="availability-checkbox h-3 w-3 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                           data-faculty="{{ faculty_data.faculty.user_id }}" 
+                                           data-day="{{ day }}"
+                                           {{ 'checked' if availability and availability.is_available else '' }}
+                                           onchange="toggleAvailability(this)">
+                                    <span class="ml-1 text-xs text-gray-600">Avail</span>
+                                </label>
+                                {% else %}
+                                {% if availability %}
+                                <div class="text-xs px-2 py-1 rounded {{ 'bg-green-100 text-green-800' if availability.is_available else 'bg-gray-100 text-gray-600' }}">
+                                    {{ availability.display_text if availability.display_text else 'Not Set' }}
+                                </div>
+                                {% if availability.time_range %}
+                                <div class="text-xs text-gray-500">
+                                    {{ availability.time_range }}
+                                </div>
+                                {% endif %}
+                                <div class="text-xs {{ 'text-green-600' if availability.is_available else 'text-gray-400' }}">
+                                    {{ 'Available' if availability.is_available else 'Not Available' }}
+                                </div>
+                                {% else %}
+                                <div class="text-xs text-gray-400">Not Set</div>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                            <i class="fas fa-users text-4xl mb-2 opacity-50"></i>
+                            <p>No faculty members found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Update Modal -->
+<div id="bulkModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Bulk Update Availability</h3>
+            <button onclick="closeBulkModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="bulkForm" method="POST" action="{{ url_for('shifts.bulk_set_availability') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Faculty *</label>
+                    <div class="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="selectAllFaculty" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" onchange="toggleAllFaculty(this)">
+                            <span class="ml-2 text-sm font-bold text-gray-900">Select All</span>
+                        </label>
+                        <hr>
+                        {% for faculty_data in faculty_list %}
+                        <label class="flex items-center faculty-checkbox">
+                            <input type="checkbox" name="faculty_ids" value="{{ faculty_data.faculty.user_id }}" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <span class="ml-2 text-sm text-gray-700">{{ faculty_data.faculty.name }} ({{ faculty_data.faculty.department_name }})</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Days *</label>
+                    <div class="flex flex-wrap gap-2">
+                        {% set days = [('1', 'Mon'), ('2', 'Tue'), ('3', 'Wed'), ('4', 'Thu'), ('5', 'Fri'), ('6', 'Sat'), ('7', 'Sun')] %}
+                        {% for day_num, day_name in days %}
+                        <label class="flex items-center px-3 py-2 border border-gray-300 rounded-md hover:bg-indigo-50 cursor-pointer">
+                            <input type="checkbox" name="days" value="{{ day_num }}" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <span class="ml-2 text-sm text-gray-700">{{ day_name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Shift Pattern</label>
+                    <select name="shift_pattern_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">Not Set</option>
+                        {% for shift in shift_patterns %}
+                        <option value="{{ shift.id }}">{{ shift.shift_name }} ({{ shift.start_time|format_time }} - {{ shift.end_time|format_time }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex items-center">
+                    <input type="checkbox" name="is_available" checked class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    <label class="ml-2 block text-sm text-gray-700">Mark as Available</label>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                    <textarea name="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeBulkModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">Update Availability</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Get CSRF token
+function getCsrfToken() {
+    return document.querySelector('input[name="csrf_token"]').value;
+}
+
+// Department filter
+document.getElementById('departmentFilter').addEventListener('change', function() {
+    const deptId = this.value;
+    const rows = document.querySelectorAll('.faculty-row');
+    rows.forEach(row => {
+        if (deptId === '' || row.dataset.department === deptId) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+// Update shift availability
+function updateAvailability(select) {
+    const facultyId = select.dataset.faculty;
+    const day = select.dataset.day;
+    const shiftId = select.value;
+    const isAvailable = shiftId ? true : false;
+    
+    fetch('/admin/shifts/set-availability', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            faculty_id: facultyId,
+            day_of_week: day,
+            shift_pattern_id: shiftId || null,
+            is_available: isAvailable
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update UI - both select and checkbox
+            if (shiftId) {
+                select.classList.remove('bg-gray-50', 'border-gray-300');
+                select.classList.add('bg-green-50', 'border-green-300');
+            } else {
+                select.classList.remove('bg-green-50', 'border-green-300');
+                select.classList.add('bg-gray-50', 'border-gray-300');
+            }
+            
+            // Sync checkbox with shift selection
+            const checkbox = select.parentElement.querySelector('.availability-checkbox');
+            if (checkbox) {
+                checkbox.checked = isAvailable;
+            }
+            
+            showToast('Availability updated successfully', 'success');
+        } else {
+            showToast('Error: ' + data.message, 'error');
+            location.reload(); // Reload to show correct state
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Failed to update availability', 'error');
+        location.reload(); // Reload to show correct state
+    });
+}
+
+// Toggle availability checkbox
+function toggleAvailability(checkbox) {
+    const facultyId = checkbox.dataset.faculty;
+    const day = checkbox.dataset.day;
+    const isAvailable = checkbox.checked;
+    
+    // Get the shift dropdown to preserve its value
+    const shiftSelect = checkbox.closest('td').querySelector('.shift-select');
+    const currentShiftId = shiftSelect ? shiftSelect.value : null;
+    
+    // Build request - only send is_available, preserve existing shift_pattern_id
+    const requestData = {
+        faculty_id: facultyId,
+        day_of_week: day,
+        is_available: isAvailable
+    };
+    
+    // If unchecking availability, explicitly clear the shift
+    if (!isAvailable) {
+        requestData.shift_pattern_id = null;
+    }
+    
+    fetch('/admin/shifts/set-availability', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // If unchecking, clear the shift dropdown
+            if (!isAvailable && shiftSelect) {
+                shiftSelect.value = '';
+                shiftSelect.classList.remove('bg-green-50', 'border-green-300');
+                shiftSelect.classList.add('bg-gray-50', 'border-gray-300');
+            }
+            showToast('Availability updated successfully', 'success');
+        } else {
+            showToast('Error: ' + data.message, 'error');
+            checkbox.checked = !isAvailable; // Revert
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Failed to update availability', 'error');
+        checkbox.checked = !isAvailable; // Revert
+    });
+}
+
+// Bulk modal functions
+function showBulkModal() {
+    document.getElementById('bulkModal').classList.remove('hidden');
+}
+
+function closeBulkModal() {
+    document.getElementById('bulkModal').classList.add('hidden');
+}
+
+function toggleAllFaculty(checkbox) {
+    const facultyCheckboxes = document.querySelectorAll('.faculty-checkbox input[type="checkbox"]');
+    facultyCheckboxes.forEach(cb => cb.checked = checkbox.checked);
+}
+
+// Toast notification
+function showToast(message, type = 'info') {
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Close modal on outside click
+window.onclick = function(event) {
+    const bulkModal = document.getElementById('bulkModal');
+    if (event.target === bulkModal) {
+        bulkModal.classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

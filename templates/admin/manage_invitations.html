@@ -4,211 +4,237 @@
 
 {% block extra_css %}
 <style>
-    /* Table Row Hover Effect */
-    .data-row {
-        transition: background-color 0.2s ease;
-    }
-    .data-row:hover {
-        background-color: #f8fafc; /* slate-50 */
-    }
+    /* Ultra Compact Scrollbar */
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* Scrollbar beautification */
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: #f1f1f1;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #c1c1c1;
-        border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-    }
+    /* Dense Table Styling */
+    .table-dense th, .table-dense td { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+    .table-dense tr { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    
+    /* Sticky Header */
+    thead.sticky { z-index: 20; }
+    
+    /* Fade Animation */
+    .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-    /* Status badge animation for pending */
-    @keyframes pulse-soft {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-    }
-    .badge-pending {
-        animation: pulse-soft 2s infinite;
-    }
+    /* Pulse for Pending */
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); } 70% { box-shadow: 0 0 0 4px rgba(234, 179, 8, 0); } 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); } }
+    .badge-pending::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #ca8a04; margin-right: 6px; animation: pulse-ring 2s infinite; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="fade-in flex flex-col h-[calc(100vh-140px)]">
+<div class="fade-in flex flex-col h-[calc(100vh-110px)] max-w-full space-y-4">
 
-    <div class="shrink-0 space-y-3 mb-3">
-        <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-                    <i class="fas fa-envelope-open-text text-xl"></i>
-                </div>
-                <div>
-                    <h2 class="text-lg font-bold text-gray-800 leading-tight">Registration Invitations</h2>
-                    <p class="text-xs text-gray-500">Manage and track invitations</p>
-                </div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+        <div class="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)]">
+            <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pending</p>
+                <p class="text-xl font-bold text-gray-800">{{ stats.pending or 0 }}</p>
             </div>
-            <div class="flex items-center gap-2 w-full sm:w-auto">
-                <button onclick="exportInvitations()" class="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex-1 sm:flex-initial">
-                    <i class="fas fa-file-export mr-2"></i>Export
-                </button>
-                <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center justify-center flex-1 sm:flex-initial whitespace-nowrap">
-                    <i class="fas fa-plus mr-2"></i>Create New
-                </button>
+            <div class="h-10 w-10 rounded-lg bg-yellow-50 text-yellow-600 flex items-center justify-center">
+                <i class="fas fa-clock text-lg"></i>
             </div>
         </div>
-
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-yellow-400 p-2.5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-500 font-medium uppercase">Pending</p>
-                    <p class="text-lg font-bold text-gray-800">{{ stats.pending or 0 }}</p>
-                </div>
-                <i class="fas fa-clock text-yellow-400 text-xl opacity-20"></i>
+        <div class="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)]">
+            <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Accepted</p>
+                <p class="text-xl font-bold text-gray-800">{{ stats.used or 0 }}</p>
             </div>
-            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-green-500 p-2.5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-500 font-medium uppercase">Used</p>
-                    <p class="text-lg font-bold text-gray-800">{{ stats.used or 0 }}</p>
-                </div>
-                <i class="fas fa-check-circle text-green-500 text-xl opacity-20"></i>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-gray-500 p-2.5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-500 font-medium uppercase">Expired</p>
-                    <p class="text-lg font-bold text-gray-800">{{ stats.expired or 0 }}</p>
-                </div>
-                <i class="fas fa-times-circle text-gray-500 text-xl opacity-20"></i>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm border border-l-4 border-gray-100 border-l-indigo-500 p-2.5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-gray-500 font-medium uppercase">Total</p>
-                    <p class="text-lg font-bold text-gray-800">{{ stats.total or 0 }}</p>
-                </div>
-                <i class="fas fa-envelope text-indigo-500 text-xl opacity-20"></i>
+            <div class="h-10 w-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <i class="fas fa-check-circle text-lg"></i>
             </div>
         </div>
-
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
-            <form method="GET" class="flex flex-col sm:flex-row gap-2">
-                <div class="relative flex-grow">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        <i class="fas fa-search text-xs"></i>
-                    </span>
-                    <input type="text" name="search" value="{{ search }}" placeholder="Search by email or name..." 
-                        class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
-                </div>
-                <select name="status" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500">
-                    <option value="">All Status</option>
-                    <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>Pending</option>
-                    <option value="used" {% if status_filter=='used' %}selected{% endif %}>Used</option>
-                    <option value="expired" {% if status_filter=='expired' %}selected{% endif %}>Expired</option>
-                </select>
-                <button type="submit" class="px-4 py-1.5 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-medium transition-colors">Apply</button>
-                <button type="button" onclick="clearFilters()" class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 text-sm transition-colors">Clear</button>
-            </form>
+        <div class="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)]">
+            <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expired</p>
+                <p class="text-xl font-bold text-gray-800">{{ stats.expired or 0 }}</p>
+            </div>
+            <div class="h-10 w-10 rounded-lg bg-gray-50 text-gray-500 flex items-center justify-center">
+                <i class="fas fa-ban text-lg"></i>
+            </div>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)]">
+            <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Sent</p>
+                <p class="text-xl font-bold text-gray-800">{{ stats.total or 0 }}</p>
+            </div>
+            <div class="h-10 w-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <i class="fas fa-paper-plane text-lg"></i>
+            </div>
         </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex-grow overflow-hidden flex flex-col">
-        <div class="overflow-auto custom-scrollbar flex-grow relative">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+    <div class="bg-white border border-gray-200/80 rounded-t-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] shrink-0 relative z-30">
+        
+        <div class="flex items-center gap-4">
+            <div class="bg-blue-50 text-blue-600 p-2.5 rounded-xl border border-blue-100 shadow-sm">
+                <i class="fas fa-envelope-open-text text-lg"></i>
+            </div>
+            <div>
+                <h2 class="text-sm font-bold text-gray-800 leading-tight tracking-tight">Invitations</h2>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    <p class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Manage Access Links</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+            
+            <form method="GET" action="{{ url_for('invitations.manage_invitations') }}" class="relative group">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-xs group-focus-within:text-blue-500 transition-colors"></i>
+                <input type="text" name="search" value="{{ search or '' }}" placeholder="Search email..." 
+                       class="pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200/80 rounded-xl text-xs font-medium w-36 focus:w-52 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none shadow-sm">
+                {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+            </form>
+
+            <form method="GET" action="{{ url_for('invitations.manage_invitations') }}" class="relative">
+                <select name="status" onchange="this.form.submit()" 
+                        class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors">
+                    <option value="">All Status</option>
+                    <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>Pending</option>
+                    <option value="used" {% if status_filter=='used' %}selected{% endif %}>Accepted</option>
+                    <option value="expired" {% if status_filter=='expired' %}selected{% endif %}>Expired</option>
+                </select>
+                <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
+                {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+            </form>
+
+            <div class="h-6 w-px bg-gray-200 mx-1"></div>
+
+            <button onclick="exportInvitations()" class="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg transition-all" title="Export to CSV">
+                <i class="fas fa-file-csv text-sm"></i>
+            </button>
+
+            {% if user_has_perm('invitations_create') %}
+            <button onclick="openCreateModal()" class="group flex items-center px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all transform active:scale-95">
+                <i class="fas fa-plus mr-2 text-[10px] group-hover:rotate-90 transition-transform"></i> New Invite
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-white border-x border-b border-gray-200 rounded-b-2xl flex-1 overflow-hidden flex flex-col relative shadow-[0_2px_15px_-3px_rgba(0,0,0,0.02)]">
+        <div class="overflow-auto custom-scroll flex-1">
+            <table class="w-full text-left border-collapse table-dense">
+                <thead class="bg-gray-50/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                     <tr>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-48">Name</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Role</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden lg:table-cell">Details</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-24">Status</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden md:table-cell">Created</th>
-                        <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32 hidden xl:table-cell">Expires</th>
-                        <th class="py-3 px-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-32">Actions</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Recipient</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Role</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden lg:table-cell">Context</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Status</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:table-cell">Sent On</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden xl:table-cell">Expires</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 bg-white">
+                <tbody class="divide-y divide-gray-100 text-xs bg-white">
                     {% for inv in invitations %}
-                    <tr class="data-row group">
-                        <td class="py-2.5 px-4 whitespace-nowrap">
-                            <div class="flex items-center">
-                                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-2">
-                                    {{ inv[3][0].upper() if inv[3] else '?' }}
+                    <tr class="hover:bg-blue-50/40 group transition-colors">
+                        <td class="px-5 py-2 whitespace-nowrap">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center text-[10px] font-bold border border-blue-50 shadow-sm">
+                                    {{ inv['name'][0].upper() if inv['name'] else '?' }}
                                 </div>
-                                <span class="font-medium text-gray-900">{{ inv[3] }}</span>
+                                <div>
+                                    <p class="font-semibold text-gray-800 leading-none mb-0.5">{{ inv['name'] }}</p>
+                                    <p class="text-[9px] text-gray-400 font-medium">{{ inv['email'] }}</p>
+                                </div>
                             </div>
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-gray-600">
-                            {{ inv[2] }}
-                        </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium 
-                                {% if inv[4] == 'Student' %}bg-blue-50 text-blue-700 border border-blue-100
-                                {% elif inv[4] == 'Teacher' %}bg-green-50 text-green-700 border border-green-100
-                                {% else %}bg-gray-50 text-gray-700 border border-gray-100{% endif %}">
-                                {{ inv[4] }}
+
+                        <td class="px-5 py-2">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-sm
+                                {% if inv['role'] == 'Student' %} bg-indigo-50 text-indigo-700 border-indigo-100
+                                {% elif inv['role'] == 'Teacher' %} bg-emerald-50 text-emerald-700 border-emerald-100
+                                {% else %} bg-gray-50 text-gray-600 border-gray-100 {% endif %}">
+                                {{ inv['role'] }}
                             </span>
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-gray-500 text-xs hidden lg:table-cell">
-                            {% if inv[9] %}
-                                <span title="Course">{{ inv[9] }}</span>
-                            {% elif inv[10] %}
-                                <span title="Department">{{ inv[10] }}</span>
+
+                        <td class="px-5 py-2 hidden lg:table-cell">
+                            {% if inv['course_name'] %}
+                                <div class="flex items-center gap-1.5 text-gray-600">
+                                    <i class="fas fa-book-reader text-[10px] text-gray-400"></i>
+                                    <span class="truncate max-w-[120px]" title="{{ inv['course_name'] }}">{{ inv['course_name'] }}</span>
+                                </div>
+                            {% elif inv['dept_name'] %}
+                                <div class="flex items-center gap-1.5 text-gray-600">
+                                    <i class="fas fa-building text-[10px] text-gray-400"></i>
+                                    <span class="truncate max-w-[120px]" title="{{ inv['dept_name'] }}">{{ inv['dept_name'] }}</span>
+                                </div>
                             {% else %}
                                 <span class="text-gray-300">-</span>
                             {% endif %}
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap">
-                            {% if inv[5] == 'pending' %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 badge-pending">Pending</span>
-                            {% elif inv[5] == 'used' %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Used</span>
+
+                        <td class="px-5 py-2 text-center">
+                            {% if inv['status'] == 'pending' %}
+                                <span class="badge-pending inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-yellow-50 text-yellow-700 border border-yellow-100 uppercase tracking-wide">
+                                    Pending
+                                </span>
+                            {% elif inv['status'] == 'used' %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">
+                                    <i class="fas fa-check-circle text-[8px]"></i> Accepted
+                                </span>
                             {% else %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Expired</span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">
+                                    Expired
+                                </span>
                             {% endif %}
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500 hidden md:table-cell">
-                            {{ inv[6].strftime('%b %d, %Y') }}
+
+                        <td class="px-5 py-2 hidden md:table-cell text-gray-500 font-mono text-[10px]">
+                            {{ inv['created_at'].strftime('%b %d, %Y') }}
                         </td>
-                        <td class="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500 hidden xl:table-cell">
-                            {{ inv[7].strftime('%b %d, %Y') }}
+
+                        <td class="px-5 py-2 hidden xl:table-cell text-gray-500 font-mono text-[10px]">
+                            {{ inv['expires_at'].strftime('%b %d') }}
                         </td>
-                        
-                        <td class="py-2.5 px-4 whitespace-nowrap text-center">
-                            <div class="flex items-center justify-center gap-3">
-                                {% if inv[5] == 'pending' %}
-                                    <button type="button" onclick="copyLink('{{ inv[0] }}', this)" title="Copy Link" class="text-indigo-600 hover:text-indigo-900 transition-colors">
-                                        <i class="fas fa-copy text-lg"></i>
+
+                        <td class="px-5 py-2 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                {% if inv['status'] == 'pending' %}
+                                    <button type="button" onclick="copyLink('{{ inv['id'] }}', this)" class="h-7 w-7 inline-flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Copy Link">
+                                        <i class="fas fa-copy text-[10px]"></i>
                                     </button>
                                     
-                                    <form method="POST" action="{{ url_for('admin.resend_invitation', invitation_id=inv[0]) }}" class="inline-block">
+                                    {% if user_has_perm('invitations_resend') %}
+                                    <form method="POST" action="{{ url_for('invitations.resend_invitation', invitation_id=inv['id']) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                                        <button type="submit" title="Resend Email" class="text-blue-600 hover:text-blue-900 transition-colors">
-                                            <i class="fas fa-redo text-lg"></i>
+                                        <button type="submit" class="h-7 w-7 inline-flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Resend Email">
+                                            <i class="fas fa-redo text-[10px]"></i>
                                         </button>
                                     </form>
+                                    {% endif %}
                                     
-                                    <form method="POST" action="{{ url_for('admin.revoke_invitation', invitation_id=inv[0]) }}" class="inline-block" onsubmit="return confirm('Revoke this invitation?')">
+                                    {% if user_has_perm('invitations_revoke') %}
+                                    <form method="POST" action="{{ url_for('invitations.revoke_invitation', invitation_id=inv['id']) }}" onsubmit="return confirm('Revoke this invitation?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                                        <button type="submit" title="Revoke Invitation" class="text-red-600 hover:text-red-900 transition-colors">
-                                            <i class="fas fa-ban text-lg"></i>
+                                        <button type="submit" class="h-7 w-7 inline-flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Revoke">
+                                            <i class="fas fa-ban text-[10px]"></i>
                                         </button>
                                     </form>
+                                    {% endif %}
                                 {% else %}
-                                    <span class="text-gray-300 text-xs italic">No actions</span>
+                                    <span class="text-gray-300 text-[10px] italic">No actions</span>
                                 {% endif %}
                             </div>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center py-12 text-gray-500">
-                            <div class="flex flex-col items-center justify-center">
-                                <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
-                                <p>No invitations found.</p>
+                        <td colspan="7" class="px-6 py-16 text-center">
+                            <div class="flex flex-col items-center justify-center text-gray-400">
+                                <div class="h-12 w-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fas fa-envelope-open text-gray-300"></i>
+                                </div>
+                                <p class="text-xs font-medium">No invitations found matching filters.</p>
                             </div>
                         </td>
                     </tr>
@@ -216,112 +242,141 @@
                 </tbody>
             </table>
         </div>
-        
+
         {% if total_pages > 1 %}
-        <div class="bg-gray-50 border-t border-gray-200 px-4 py-2 flex items-center justify-between shrink-0">
-            <span class="text-xs text-gray-500">Page {{ page }} of {{ total_pages }}</span>
-            <div class="flex gap-1">
+        <div class="border-t border-gray-200 bg-gray-50/80 px-5 py-2.5 shrink-0 flex items-center justify-between h-12">
+            <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Page <span class="text-gray-800">{{ page }}</span> of {{ total_pages }}</span>
+            <div class="flex gap-1.5">
                 {% if page > 1 %}
-                <a href="{{ url_for('admin.manage_invitations', page=page-1, search=search, status=status_filter) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Prev</a>
+                <a href="{{ url_for('invitations.manage_invitations', page=page-1, search=search, status=status_filter) }}" 
+                   class="h-7 px-3 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-100 text-[10px] font-bold transition-all shadow-sm">
+                    Prev
+                </a>
                 {% endif %}
+                
                 {% if page < total_pages %}
-                <a href="{{ url_for('admin.manage_invitations', page=page+1, search=search, status=status_filter) }}" class="px-2 py-1 border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 text-xs">Next</a>
+                <a href="{{ url_for('invitations.manage_invitations', page=page+1, search=search, status=status_filter) }}" 
+                   class="h-7 px-3 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-100 text-[10px] font-bold transition-all shadow-sm">
+                    Next
+                </a>
                 {% endif %}
             </div>
         </div>
         {% endif %}
     </div>
+
 </div>
 
-<div id="createModal" class="modal hidden fixed z-50 inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center shrink-0">
-            <h3 class="font-bold text-lg text-gray-800">Create New Invitation</h3>
-            <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" onclick="closeCreateModal()">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-        
-        <div class="overflow-y-auto p-6">
-            <form method="POST" action="{{ url_for('admin.create_invitation') }}" id="inviteForm" class="space-y-4">
-                {{ form.csrf_token }}
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Full Name</label>
-                        <input name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="John Doe">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Email</label>
-                        <input name="email" type="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="john@example.com">
-                    </div>
+<div id="createModal" class="hidden fixed inset-0 z-50 overflow-hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onclick="closeCreateModal()"></div>
+    
+    <div class="absolute inset-y-0 right-0 max-w-md w-full flex">
+        <div class="h-full w-full bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0 border-l border-gray-100">
+            
+            <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-white">
+                <div>
+                    <h3 class="text-lg font-extrabold text-gray-800 tracking-tight">New Invitation</h3>
+                    <p class="text-[10px] text-gray-500 font-medium mt-0.5">Send a registration link</p>
                 </div>
+                <button onclick="closeCreateModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Role</label>
-                        <select name="role" id="roleSelect" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" onchange="toggleRoleFields()">
-                            <option value="">Select Role</option>
-                            <option value="Student">Student</option>
-                            <option value="Teacher">Teacher</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Validity (Days)</label>
-                        <input name="days_valid" type="number" value="7" min="1" max="90" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm">
-                    </div>
-                </div>
+            <div class="flex-1 overflow-y-auto p-6 custom-scroll bg-gray-50/30">
+                <form method="POST" action="{{ url_for('invitations.create_invitation') }}" id="inviteForm" class="space-y-5">
+                    {{ form.csrf_token }}
 
-                <div id="studentFields" class="hidden bg-blue-50 p-4 rounded-lg border border-blue-100">
-                    <h4 class="text-xs font-bold text-blue-800 uppercase tracking-wide mb-3">Student Details</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">Course</label>
-                            <select name="course_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
-                                <option value="">Select</option>
+                    <div class="flex justify-center mb-2">
+                        <div class="h-16 w-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-400 shadow-sm border border-blue-100">
+                            <i class="fas fa-paper-plane text-xl"></i>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Full Name</label>
+                        <input name="name" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm bg-white" placeholder="e.g. John Doe">
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Email Address</label>
+                        <input name="email" type="email" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm bg-white" placeholder="john@example.com">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Role</label>
+                            <select name="role" id="roleSelect" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm bg-white" onchange="toggleRoleFields()">
+                                <option value="">Select Role</option>
+                                <option value="Student">Student</option>
+                                <option value="Teacher">Teacher</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide ml-1">Validity (Days)</label>
+                            <input name="days_valid" type="number" value="7" min="1" max="90" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm bg-white">
+                        </div>
+                    </div>
+
+                    <div id="studentFields" class="hidden bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                            <h4 class="text-xs font-bold text-indigo-800 uppercase tracking-wide">Academic Details</h4>
+                        </div>
+                        
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Course</label>
+                            <select name="course_id" class="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white">
+                                <option value="">Select Course</option>
                                 {% for course in courses %}<option value="{{ course[0] }}">{{ course[1] }}</option>{% endfor %}
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">Class</label>
-                            <select name="class_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
-                                <option value="">Select</option>
-                                {% for class in classes %}<option value="{{ class[0] }}">{{ class[1] }}</option>{% endfor %}
-                            </select>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Class</label>
+                                <select name="class_id" class="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="">Select</option>
+                                    {% for class in classes %}<option value="{{ class[0] }}">{{ class[1] }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Division</label>
+                                <select name="division_id" class="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="">Select</option>
+                                    {% for division in divisions %}<option value="{{ division[0] }}">{{ division[1] }}</option>{% endfor %}
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">Division</label>
-                            <select name="division_id" class="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 text-sm">
-                                <option value="">Select</option>
-                                {% for division in divisions %}<option value="{{ division[0] }}">{{ division[1] }}</option>{% endfor %}
+                    </div>
+
+                    <div id="teacherFields" class="hidden bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <h4 class="text-xs font-bold text-emerald-800 uppercase tracking-wide">Teacher Details</h4>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Department</label>
+                            <select name="department_id" class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white">
+                                <option value="">Select Department</option>
+                                {% for dept in departments %}<option value="{{ dept[0] }}">{{ dept[1] }}</option>{% endfor %}
                             </select>
                         </div>
                     </div>
-                </div>
+                </form>
+            </div>
 
-                <div id="teacherFields" class="hidden bg-green-50 p-4 rounded-lg border border-green-100">
-                    <h4 class="text-xs font-bold text-green-800 uppercase tracking-wide mb-3">Teacher Details</h4>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">Department</label>
-                        <select name="department_id" class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-green-500 text-sm">
-                            <option value="">Select Department</option>
-                            {% for dept in departments %}<option value="{{ dept[0] }}">{{ dept[1] }}</option>{% endfor %}
-                        </select>
-                    </div>
-                </div>
-
-                <div class="pt-2 flex justify-end gap-3">
-                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 text-sm">Cancel</button>
-                    <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 text-sm shadow-md">Create Invitation</button>
-                </div>
-            </form>
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+                <button type="button" onclick="closeCreateModal()" class="flex-1 px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-bold text-xs hover:bg-gray-50 hover:border-gray-300 transition-all">Cancel</button>
+                <button type="submit" form="inviteForm" class="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black shadow-lg hover:shadow-xl transition-all transform active:scale-95">Send Invite</button>
+            </div>
         </div>
     </div>
 </div>
 
-<div id="toast" class="hidden fixed bottom-4 right-4 z-50 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 transition-all transform translate-y-2">
-    <i id="toast-icon" class="fas fa-check-circle text-green-400"></i>
-    <span id="toast-message" class="text-sm font-medium">Action completed</span>
+<div id="toast" class="hidden fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-4 transition-all transform translate-y-10 opacity-0 border border-gray-800">
+    <i id="toast-icon" class="fas fa-check-circle text-emerald-400 text-lg"></i>
+    <span id="toast-message" class="text-sm font-medium">Action completed successfully</span>
 </div>
 
 {% endblock %}
@@ -343,93 +398,67 @@
         modal.classList.remove('flex');
     }
 
-    // Role Field Logic
+    // Role Toggling
     function toggleRoleFields() {
         const role = document.getElementById('roleSelect').value;
         const studentFields = document.getElementById('studentFields');
         const teacherFields = document.getElementById('teacherFields');
 
-        if (role === 'Student') {
-            studentFields.classList.remove('hidden');
-            teacherFields.classList.add('hidden');
-        } else if (role === 'Teacher') {
-            studentFields.classList.add('hidden');
-            teacherFields.classList.remove('hidden');
-        } else {
-            studentFields.classList.add('hidden');
-            teacherFields.classList.add('hidden');
-        }
+        studentFields.classList.add('hidden');
+        teacherFields.classList.add('hidden');
+
+        if (role === 'Student') studentFields.classList.remove('hidden');
+        else if (role === 'Teacher') teacherFields.classList.remove('hidden');
     }
 
     // Copy Link Logic
     async function copyLink(invitationId, button) {
         try {
-            const resp = await fetch(`/admin/invitation/copy_link/${invitationId}`);
+            const resp = await fetch(`/admin/invitations/copy_link/${invitationId}`);
             const data = await resp.json();
 
             if (data.url) {
                 await navigator.clipboard.writeText(data.url);
-                
-                // Visual feedback on button
                 const originalIcon = button.innerHTML;
-                button.innerHTML = '<i class="fas fa-check text-green-600 text-lg"></i>';
+                button.innerHTML = '<i class="fas fa-check text-green-600 text-[10px]"></i>';
                 showToast('Link copied to clipboard!', 'success');
-
-                setTimeout(() => {
-                    button.innerHTML = originalIcon;
-                }, 2000);
+                setTimeout(() => button.innerHTML = originalIcon, 2000);
             } else {
                 showToast('Failed to get link', 'error');
             }
         } catch (e) {
-            console.error('Copy error:', e);
             showToast('Failed to copy link', 'error');
         }
     }
 
-    // Toast Logic
+    // Toast Notification
     function showToast(message, type = 'success') {
         const toast = document.getElementById('toast');
         const icon = document.getElementById('toast-icon');
         const messageEl = document.getElementById('toast-message');
 
-        if (type === 'success') {
-            icon.className = 'fas fa-check-circle text-green-400';
-        } else {
-            icon.className = 'fas fa-times-circle text-red-400';
-        }
-
+        icon.className = type === 'success' ? 'fas fa-check-circle text-emerald-400' : 'fas fa-exclamation-circle text-red-400';
         messageEl.textContent = message;
-        toast.classList.remove('hidden', 'translate-y-2', 'opacity-0');
+
+        toast.classList.remove('hidden', 'translate-y-10', 'opacity-0');
         
         setTimeout(() => {
-            toast.classList.add('translate-y-2', 'opacity-0');
-            setTimeout(() => {
-                toast.classList.add('hidden');
-                toast.classList.remove('translate-y-2', 'opacity-0');
-            }, 300);
+            toast.classList.add('translate-y-10', 'opacity-0');
+            setTimeout(() => toast.classList.add('hidden'), 300);
         }, 3000);
     }
 
-    function clearFilters() {
-        window.location.href = '{{ url_for("admin.manage_invitations") }}';
-    }
-
     function exportInvitations() {
-        const searchParam = new URLSearchParams(window.location.search).get('search') || '';
-        const statusParam = new URLSearchParams(window.location.search).get('status') || '';
+        const params = new URLSearchParams(window.location.search);
         let exportUrl = '/admin/invitations/export?';
-        if (searchParam) exportUrl += `search=${encodeURIComponent(searchParam)}&`;
-        if (statusParam) exportUrl += `status=${encodeURIComponent(statusParam)}`;
+        if (params.get('search')) exportUrl += `search=${encodeURIComponent(params.get('search'))}&`;
+        if (params.get('status')) exportUrl += `status=${encodeURIComponent(params.get('status'))}`;
         window.location.href = exportUrl;
     }
 
-    // Event Listeners
     document.addEventListener('DOMContentLoaded', function () {
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('success')) {
-            showToast('Invitation created successfully!', 'success');
-        }
+        if (urlParams.get('success')) showToast('Invitation created successfully!', 'success');
     });
 </script>
 {% endblock %}

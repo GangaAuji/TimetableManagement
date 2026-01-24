@@ -2,18 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from functools import wraps
 import mysql.connector
 from config import Config
+from security import has_permission
 
 academic_bp = Blueprint('academic', __name__, url_prefix='/admin/academic')
-
-def admin_required(f):
-    """Decorator to ensure only admins can access routes"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'role' not in session or session['role'] not in ['Admin', 'Super Admin']:
-            flash('Unauthorized access', 'danger')
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 def get_db_connection():
     """Get database connection"""
@@ -28,8 +19,7 @@ def get_db_connection():
 # MAIN DASHBOARD
 # ============================================================================
 
-@academic_bp.route('/')
-@admin_required
+@academic_bp.route('/manage_academics')
 def manage_academics():
     """Academic Management Dashboard"""
     connection = get_db_connection()
@@ -94,7 +84,7 @@ def manage_academics():
 # ============================================================================
 
 @academic_bp.route('/academic-years')
-@admin_required
+@has_permission('academicyears_view')
 def manage_academic_years():
     """Display Academic Years Management Page"""
     connection = get_db_connection()
@@ -115,7 +105,7 @@ def manage_academic_years():
         connection.close()
 
 @academic_bp.route('/academic-years/add', methods=['POST'])
-@admin_required
+@has_permission('academicyears_add')
 def add_academic_year():
     """Add new academic year"""
     name = request.form.get('name')
@@ -151,7 +141,7 @@ def add_academic_year():
     return redirect(url_for('academic.manage_academic_years'))
 
 @academic_bp.route('/academic-years/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('academicyears_change')
 def edit_academic_year(id):
     """Edit academic year"""
     name = request.form.get('name')
@@ -188,7 +178,7 @@ def edit_academic_year(id):
     return redirect(url_for('academic.manage_academic_years'))
 
 @academic_bp.route('/academic-years/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('academicyears_delete')
 def delete_academic_year(id):
     """Delete academic year"""
     connection = get_db_connection()
@@ -214,7 +204,7 @@ def delete_academic_year(id):
 # ============================================================================
 
 @academic_bp.route('/semesters')
-@admin_required
+@has_permission('semesters_view')
 def manage_semesters():
     """Display Semesters Management Page"""
     connection = get_db_connection()
@@ -271,7 +261,7 @@ def manage_semesters():
         connection.close()
 
 @academic_bp.route('/semesters/add', methods=['POST'])
-@admin_required
+@has_permission('semesters_add')
 def add_semester():
     """Add new semester"""
     academic_year_id = request.form.get('academic_year_id')
@@ -312,7 +302,7 @@ def add_semester():
     return redirect(url_for('academic.manage_semesters'))
 
 @academic_bp.route('/semesters/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('semesters_change')
 def edit_semester(id):
     """Edit semester"""
     academic_year_id = request.form.get('academic_year_id')
@@ -354,7 +344,7 @@ def edit_semester(id):
     return redirect(url_for('academic.manage_semesters'))
 
 @academic_bp.route('/semesters/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('semesters_delete')
 def delete_semester(id):
     """Delete semester"""
     connection = get_db_connection()
@@ -380,7 +370,7 @@ def delete_semester(id):
 # ============================================================================
 
 @academic_bp.route('/departments')
-@admin_required
+@has_permission('departments_view')
 def manage_departments():
     """Display Departments Management Page"""
     connection = get_db_connection()
@@ -404,7 +394,7 @@ def manage_departments():
         connection.close()
 
 @academic_bp.route('/departments/add', methods=['POST'])
-@admin_required
+@has_permission('departments_add')
 def add_department():
     """Add new department"""
     name = request.form.get('name')
@@ -436,7 +426,7 @@ def add_department():
     return redirect(url_for('academic.manage_departments'))
 
 @academic_bp.route('/departments/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('departments_change')
 def edit_department(id):
     """Edit department"""
     name = request.form.get('name')
@@ -470,7 +460,7 @@ def edit_department(id):
     return redirect(url_for('academic.manage_departments'))
 
 @academic_bp.route('/departments/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('departments_delete')
 def delete_department(id):
     """Delete department"""
     connection = get_db_connection()
@@ -496,7 +486,7 @@ def delete_department(id):
 # ============================================================================
 
 @academic_bp.route('/courses')
-@admin_required
+@has_permission('courses_view_course')
 def manage_courses():
     """Display Courses Management Page"""
     connection = get_db_connection()
@@ -530,7 +520,7 @@ def manage_courses():
         connection.close()
 
 @academic_bp.route('/courses/add', methods=['POST'])
-@admin_required
+@has_permission('courses_add_course')
 def add_course():
     """Add new course"""
     name = request.form.get('name')
@@ -566,7 +556,7 @@ def add_course():
     return redirect(url_for('academic.manage_courses'))
 
 @academic_bp.route('/courses/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('courses_change_course')
 def edit_course(id):
     """Edit course"""
     name = request.form.get('name')
@@ -603,7 +593,7 @@ def edit_course(id):
     return redirect(url_for('academic.manage_courses'))
 
 @academic_bp.route('/courses/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('courses_delete_course')
 def delete_course(id):
     """Delete course"""
     connection = get_db_connection()
@@ -629,7 +619,7 @@ def delete_course(id):
 # ============================================================================
 
 @academic_bp.route('/subjects')
-@admin_required
+@has_permission('subjects_view_subject')
 def manage_subjects():
     """Display Subjects Management Page with class-based filtering"""
     connection = get_db_connection()
@@ -715,7 +705,7 @@ def manage_subjects():
         connection.close()
 
 @academic_bp.route('/subjects/add', methods=['POST'])
-@admin_required
+@has_permission('subjects_add_subject')
 def add_subject():
     """Add new subject"""
     name = request.form.get('name')
@@ -805,7 +795,7 @@ def add_subject():
     return redirect(url_for('academic.manage_subjects'))
 
 @academic_bp.route('/subjects/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('subjects_change_subject')
 def edit_subject(id):
     """Edit subject"""
     name = request.form.get('name')
@@ -885,7 +875,7 @@ def edit_subject(id):
     return redirect(url_for('academic.manage_subjects'))
 
 @academic_bp.route('/subjects/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('subjects_delete_subject')
 def delete_subject(id):
     """Delete subject"""
     connection = get_db_connection()
@@ -911,7 +901,7 @@ def delete_subject(id):
 # ============================================================================
 
 @academic_bp.route('/batches')
-@admin_required
+@has_permission('batches_view')
 def manage_batches():
     """Display Course Batches Management Page"""
     connection = get_db_connection()
@@ -944,7 +934,7 @@ def manage_batches():
         connection.close()
 
 @academic_bp.route('/batches/add', methods=['POST'])
-@admin_required
+@has_permission('batches_add')
 def add_batch():
     """Add new course batch"""
     course_id = request.form.get('course_id')
@@ -982,7 +972,7 @@ def add_batch():
     return redirect(url_for('academic.manage_batches'))
 
 @academic_bp.route('/batches/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('batches_change')
 def edit_batch(id):
     """Edit course batch"""
     course_id = request.form.get('course_id')
@@ -1021,7 +1011,7 @@ def edit_batch(id):
     return redirect(url_for('academic.manage_batches'))
 
 @academic_bp.route('/batches/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('batches_delete')
 def delete_batch(id):
     """Delete course batch"""
     connection = get_db_connection()
@@ -1047,7 +1037,7 @@ def delete_batch(id):
 # ============================================================================
 
 @academic_bp.route('/allocations')
-@admin_required
+@has_permission('allocations_view')
 def manage_allocations():
     """Display Faculty Allocations Management Page with class-based filtering"""
     connection = get_db_connection()
@@ -1151,7 +1141,7 @@ def manage_allocations():
         connection.close()
 
 @academic_bp.route('/allocations/add', methods=['POST'])
-@admin_required
+@has_permission('allocations_add')
 def add_allocation():
     """Add new faculty allocation"""
     faculty_id_from_form = request.form.get('faculty_id')
@@ -1206,7 +1196,7 @@ def add_allocation():
     return redirect(url_for('academic.manage_allocations'))
 
 @academic_bp.route('/allocations/edit/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('allocations_change')
 def edit_allocation(id):
     """Edit faculty allocation"""
     faculty_id_from_form = request.form.get('faculty_id')
@@ -1261,7 +1251,7 @@ def edit_allocation(id):
     return redirect(url_for('academic.manage_allocations'))
 
 @academic_bp.route('/allocations/delete/<int:id>', methods=['POST'])
-@admin_required
+@has_permission('allocations_delete')
 def delete_allocation(id):
     """Delete faculty allocation"""
     connection = get_db_connection()
@@ -1287,7 +1277,7 @@ def delete_allocation(id):
 # ============================================================================
 
 @academic_bp.route('/api/courses/by-department/<int:department_id>')
-@admin_required
+@has_permission('courses_view_course')
 def api_courses_by_department(department_id):
     """Get courses for a department"""
     connection = get_db_connection()
@@ -1309,7 +1299,7 @@ def api_courses_by_department(department_id):
         connection.close()
 
 @academic_bp.route('/api/subjects/by-course/<int:course_id>')
-@admin_required
+@has_permission('subjects_view_subject')
 def api_subjects_by_course(course_id):
     """Get subjects for a course"""
     connection = get_db_connection()
@@ -1331,7 +1321,7 @@ def api_subjects_by_course(course_id):
         connection.close()
 
 @academic_bp.route('/api/faculty/by-department/<int:department_id>')
-@admin_required
+@has_permission('faculty_view_faculty')
 def api_faculty_by_department(department_id):
     """Get faculty for a department"""
     connection = get_db_connection()
@@ -1353,7 +1343,7 @@ def api_faculty_by_department(department_id):
         connection.close()
 
 @academic_bp.route('/api/semesters/by-year/<int:academic_year_id>')
-@admin_required
+@has_permission('semesters_view')
 def api_semesters_by_year(academic_year_id):
     """Get semesters for an academic year"""
     connection = get_db_connection()
@@ -1375,7 +1365,7 @@ def api_semesters_by_year(academic_year_id):
         connection.close()
 
 @academic_bp.route('/api/batches/by-course/<int:course_id>')
-@admin_required
+@has_permission('batches_view')
 def api_batches_by_course(course_id):
     """Get batches for a course"""
     connection = get_db_connection()

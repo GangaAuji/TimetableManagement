@@ -1,0 +1,246 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Security Dashboard{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+    
+    <!-- Header -->
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 flex items-center">
+            <i class="fas fa-shield-alt text-indigo-600 mr-3"></i>
+            Security & Monitoring Dashboard
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">Real-time security monitoring and activity tracking</p>
+    </div>
+
+    <!-- 24-Hour Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase">Total Activities</p>
+                    <h3 class="text-3xl font-bold text-gray-800 mt-2">{{ stats_24h.total_activities or 0 }}</h3>
+                    <p class="text-xs text-gray-400 mt-1">Last 24 hours</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <i class="fas fa-bolt text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase">Active Users</p>
+                    <h3 class="text-3xl font-bold text-gray-800 mt-2">{{ stats_24h.active_users or 0 }}</h3>
+                    <p class="text-xs text-gray-400 mt-1">Last 24 hours</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-green-100 text-green-600 flex items-center justify-center">
+                    <i class="fas fa-users text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase">Failed Activities</p>
+                    <h3 class="text-3xl font-bold text-gray-800 mt-2">{{ stats_24h.failed_activities or 0 }}</h3>
+                    <p class="text-xs text-gray-400 mt-1">Last 24 hours</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-500 uppercase">Active Sessions</p>
+                    <h3 class="text-3xl font-bold text-gray-800 mt-2">{{ active_sessions_count or 0 }}</h3>
+                    <p class="text-xs text-gray-400 mt-1">Currently online</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+                    <i class="fas fa-wifi text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Sessions -->
+    {% if recent_sessions %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+        <div class="px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+            <h3 class="text-lg font-bold">
+                <i class="fas fa-wifi mr-2"></i>
+                Active Sessions ({{ active_sessions_count }})
+            </h3>
+            <p class="text-sm text-purple-100 mt-1">Currently logged in users</p>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3">
+                {% for sess in recent_sessions %}
+                <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-sm">
+                            {{ sess.username[:2].upper() if sess.username else '?' }}
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-gray-800">{{ sess.username or 'Unknown' }}</p>
+                            <p class="text-xs text-gray-500 font-mono">{{ sess.ip_address }}</p>
+                            <p class="text-xs text-gray-400">Active: {{ sess.last_activity.strftime('%m/%d %H:%M') if sess.last_activity else sess.created_at.strftime('%m/%d %H:%M') }}</p>
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('audit_logs.revoke_session', session_id=sess.session_id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
+                            Revoke
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        
+        <!-- Most Active Users (Last 7 Days) -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                <h3 class="text-lg font-bold">Most Active Users (Last 7 Days)</h3>
+            </div>
+            {% if most_active_users %}
+            <div class="p-6">
+                <div class="space-y-3">
+                    {% for user in most_active_users %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
+                                {{ user.username[:2].upper() if user.username else '?' }}
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-gray-800">{{ user.username or 'Unknown' }}</p>
+                                <p class="text-xs text-gray-500">User ID: {{ user.user_id or 'N/A' }}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-lg font-bold text-indigo-600">{{ user.activity_count }}</p>
+                            <p class="text-xs text-gray-500">activities</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-gray-500">
+                <p>No activity data available</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Failed Logins -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 bg-gradient-to-r from-red-600 to-pink-600 text-white">
+                <h3 class="text-lg font-bold">Recent Failed Login Attempts</h3>
+            </div>
+            {% if failed_logins %}
+            <div class="p-6">
+                <div class="space-y-3 max-h-96 overflow-y-auto">
+                    {% for attempt in failed_logins %}
+                    <div class="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-800">{{ attempt.username }}</p>
+                                <p class="text-xs text-gray-500 font-mono">{{ attempt.ip_address }}</p>
+                                <p class="text-xs text-red-600 mt-1">{{ attempt.failure_reason or 'Unknown reason' }}</p>
+                            </div>
+                            <p class="text-xs text-gray-400">
+                                {{ attempt.attempted_at.strftime('%m/%d %H:%M') if attempt.attempted_at else 'N/A' }}
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-gray-500">
+                <i class="fas fa-check-circle text-4xl text-green-300 mb-2"></i>
+                <p>No failed login attempts</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Critical Actions -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 bg-gradient-to-r from-orange-600 to-red-600 text-white">
+            <h3 class="text-lg font-bold">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                Recent Critical Actions
+            </h3>
+            <p class="text-sm text-orange-100 mt-1">Deletions and permission changes</p>
+        </div>
+        {% if critical_actions %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Action</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Entity</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Details</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for action in critical_actions %}
+                    <tr class="hover:bg-orange-50">
+                        <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-600">
+                            {{ action.created_at.strftime('%Y-%m-%d %H:%M') if action.created_at else 'N/A' }}
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap text-xs font-medium text-gray-800">
+                            {{ action.username or 'System' }}
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">
+                                {{ action.action }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-600">
+                            {{ action.entity_type or '-' }}
+                            {% if action.entity_id %}#{{ action.entity_id }}{% endif %}
+                        </td>
+                        <td class="px-6 py-3">
+                            <a href="{{ url_for('audit_logs.log_details', log_id=action.id) }}" 
+                               class="text-xs text-indigo-600 hover:text-indigo-800">
+                                View Details
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500">
+            <i class="fas fa-shield-alt text-4xl text-green-300 mb-2"></i>
+            <p>No critical actions recorded</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mt-6 flex gap-4">
+        <a href="{{ url_for('audit_logs.audit_logs_view') }}" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+            <i class="fas fa-list mr-2"></i>View All Audit Logs
+        </a>
+        <a href="{{ url_for('audit_logs.export_logs') }}" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+            <i class="fas fa-download mr-2"></i>Export Logs
+        </a>
+    </div>
+</div>
+{% endblock %}

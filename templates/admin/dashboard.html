@@ -1,12 +1,22 @@
 {% extends "admin/_layout.html" %}
 
 {% block title %}Admin Dashboard{% endblock %}
+
 {% block header_title %}
-<div class="flex items-center justify-between gap-2">
-    <h2 class="text-2xl font-bold text-gray-800">Admin Dashboard </h2>
-    <span class="ml-auto text-sm text-gray-500 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100">
-        <i class="far fa-calendar-alt mr-2"></i> {{ stats.today_day }}
-    </span>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+        <h2 class="text-2xl font-bold text-gray-900 tracking-tight">Dashboard Overview</h2>
+        <p class="text-sm text-gray-500">Welcome back, here's what's happening today.</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <div class="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center text-sm font-medium text-gray-600">
+            <i class="far fa-calendar-alt text-indigo-500 mr-2"></i> {{ stats.today_day }}
+        </div>
+        <a href="{{ url_for('timetable.generate_timetable') }}" 
+           class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl shadow-md shadow-indigo-200 transition-all text-sm font-medium flex items-center">
+            <i class="fas fa-magic mr-2"></i> Generate
+        </a>
+    </div>
 </div>
 {% endblock %}
 
@@ -14,391 +24,410 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-    .dash-card {
-        @apply bg-white rounded-2xl border border-gray-100 shadow-sm transition-all duration-300;
+    /* Custom Scrollbar for Table */
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
     }
 
-    .dash-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    /* Card Hover Effect */
+    .hover-lift {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-
-    .icon-shape {
-        width: 48px;
-        height: 48px;
-        background-position: center;
-        border-radius: 1rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        transition: all 0.3s ease;
+    .hover-lift:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    }
+    
+    .glass-effect {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
     }
 </style>
 
-<div class="container mx-auto px-4 py-6 space-y-6">
+<div class="space-y-8 pb-10">
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Faculty</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-2">{{ stats.total_faculty }}</h3>
-                    <div
-                        class="mt-2 flex items-center text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-lg w-max">
-                        <i class="fas fa-check-circle mr-1.5"></i> Active
+        <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover-lift relative overflow-hidden group">
+            <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                        <i class="fas fa-chalkboard-teacher text-xl"></i>
+                    </div>
+                    <span class="flex items-center text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                        Active
+                    </span>
+                </div>
+                <h3 class="text-3xl font-bold text-gray-900">{{ stats.total_faculty }}</h3>
+                <p class="text-sm text-gray-500 font-medium mt-1">Total Faculty Members</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover-lift relative overflow-hidden group">
+            <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-purple-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-purple-50 rounded-2xl text-purple-600">
+                        <i class="fas fa-book-open text-xl"></i>
                     </div>
                 </div>
-                <div class="icon-shape bg-blue-50 text-blue-600">
-                    <i class="fas fa-chalkboard-teacher"></i>
-                </div>
+                <h3 class="text-3xl font-bold text-gray-900">{{ stats.total_courses }}</h3>
+                <p class="text-sm text-gray-500 font-medium mt-1">Active Courses in {{ stats.total_departments }} Depts</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Active Courses</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-2">{{ stats.total_courses }}</h3>
-                    <p class="mt-2 text-xs text-gray-500">Across {{ stats.total_departments }} Departments</p>
-                </div>
-                <div class="icon-shape bg-purple-50 text-purple-600">
-                    <i class="fas fa-book-open"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Rooms</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-2">{{ stats.total_rooms }}</h3>
-                    <p class="mt-2 text-xs text-gray-500 truncate">
-                        {% if stats.room_breakdown %}
-                        {{ stats.room_breakdown.get('Classroom', 0) }} Classrooms, {{
-                        stats.room_breakdown.get('Laboratory', 0) }} Labs
-                        {% else %}
-                        Labs & Classrooms
-                        {% endif %}
-                    </p>
-                </div>
-                <div class="icon-shape bg-orange-50 text-orange-600">
-                    <i class="fas fa-door-open"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Batches</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-2">{{ stats.total_batches }}</h3>
-                    <div
-                        class="mt-2 flex items-center text-xs font-medium text-teal-600 bg-teal-50 px-2 py-1 rounded-lg w-max">
-                        <i class="fas fa-user-graduate mr-1.5"></i> {{ stats.total_students }} Students
+        <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover-lift relative overflow-hidden group">
+            <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-orange-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-orange-50 rounded-2xl text-orange-600">
+                        <i class="fas fa-door-open text-xl"></i>
                     </div>
                 </div>
-                <div class="icon-shape bg-teal-50 text-teal-600">
-                    <i class="fas fa-users"></i>
+                <h3 class="text-3xl font-bold text-gray-900">{{ stats.total_rooms }}</h3>
+                <p class="text-sm text-gray-500 font-medium mt-1">
+                    {{ stats.room_breakdown.get('Classroom', 0) }} Classrooms, {{ stats.room_breakdown.get('Laboratory', 0) }} Labs
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover-lift relative overflow-hidden group">
+            <div class="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-teal-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-teal-50 rounded-2xl text-teal-600">
+                        <i class="fas fa-user-graduate text-xl"></i>
+                    </div>
                 </div>
+                <h3 class="text-3xl font-bold text-gray-900">{{ stats.total_students }}</h3>
+                <p class="text-sm text-gray-500 font-medium mt-1">Students across {{ stats.total_batches }} Batches</p>
             </div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+        
+        <div class="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
             <div class="flex items-center justify-between mb-6">
-                <h4 class="text-lg font-bold text-gray-800">Weekly Schedule Load</h4>
-                <select
-                    class="text-xs border-gray-200 rounded-lg text-gray-500 focus:ring-blue-500 focus:border-blue-500">
-                    <option>This Week</option>
-                </select>
+                <div>
+                    <h4 class="text-lg font-bold text-gray-900">Weekly Class Load</h4>
+                    <p class="text-xs text-gray-500">Distribution of classes throughout the week</p>
+                </div>
             </div>
-            <div class="h-72 w-full">
+            <div class="h-64 w-full">
                 <canvas id="workloadChart"></canvas>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col">
-            <h4 class="text-lg font-bold text-gray-800 mb-6">Quick Actions</h4>
-            <div class="grid grid-cols-2 gap-4 h-full">
-                <a href="{{ url_for('academic.manage_allocations') }}"
-                    class="flex flex-col items-center justify-center p-4 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all duration-300 group">
-                    <i class="fas fa-project-diagram text-2xl mb-2 group-hover:scale-110 transition-transform"></i>
-                    <span class="text-xs font-semibold">Allocations</span>
-                </a>
-                <a href="{{ url_for('admin.rooms_index') }}"
-                    class="flex flex-col items-center justify-center p-4 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white transition-all duration-300 group">
-                    <i class="fas fa-door-open text-2xl mb-2 group-hover:scale-110 transition-transform"></i>
-                    <span class="text-xs font-semibold">Rooms</span>
-                </a>
-                <a href="{{ url_for('academic.manage_subjects') }}"
-                    class="flex flex-col items-center justify-center p-4 rounded-xl bg-yellow-50 text-yellow-600 hover:bg-yellow-500 hover:text-white transition-all duration-300 group">
-                    <i class="fas fa-book text-2xl mb-2 group-hover:scale-110 transition-transform"></i>
-                    <span class="text-xs font-semibold">Subjects</span>
-                </a>
-                <a href="{{ url_for('admin.generate_timetable') }}"
-                    class="flex flex-col items-center justify-center p-4 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all duration-300 group">
-                    <i class="fas fa-magic text-2xl mb-2 group-hover:scale-110 transition-transform"></i>
-                    <span class="text-xs font-semibold">Generate</span>
-                </a>
+        <div class="space-y-6">
+            <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm h-64 flex flex-col justify-center relative">
+                <h4 class="absolute top-6 left-6 text-lg font-bold text-gray-900">Sessions</h4>
+                <div class="h-40 relative">
+                    <canvas id="sessionTypeChart"></canvas>
+                </div>
+                <div class="flex justify-center gap-4 mt-2">
+                    {% for type, count in stats.session_types.items() %}
+                    <div class="flex items-center text-xs">
+                        <span class="w-2 h-2 rounded-full mr-2 
+                            {% if type == 'Theory' %}bg-blue-500
+                            {% elif type == 'Practical' %}bg-purple-500
+                            {% else %}bg-green-500{% endif %}"></span>
+                        <span class="text-gray-600 font-medium">{{ type }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-6 shadow-lg text-white">
+                <h4 class="font-bold text-white mb-4">Quick Shortcuts</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <a href="{{ url_for('academic.manage_allocations') }}" class="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-xl flex items-center transition-colors">
+                        <i class="fas fa-project-diagram mr-3 text-indigo-200"></i>
+                        <span class="text-sm font-medium">Allocations</span>
+                    </a>
+                    <a href="{{ url_for('rooms.rooms_index') }}" class="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-xl flex items-center transition-colors">
+                        <i class="fas fa-door-open mr-3 text-indigo-200"></i>
+                        <span class="text-sm font-medium">Rooms</span>
+                    </a>
+                    <a href="{{ url_for('academic.manage_subjects') }}" class="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-xl flex items-center transition-colors">
+                        <i class="fas fa-book mr-3 text-indigo-200"></i>
+                        <span class="text-sm font-medium">Subjects</span>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div class="space-y-6">
-            <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h4 class="text-lg font-bold text-gray-800 mb-4">Session Distribution</h4>
-                <div class="h-48 relative flex justify-center mb-4">
-                    <canvas id="sessionTypeChart"></canvas>
+    <div class="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+        <div class="p-6 border-b border-gray-100 bg-gray-50/50">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div>
+                    <h4 class="text-xl font-bold text-gray-900">Today's Schedule</h4>
+                    <p class="text-sm text-gray-500">Comprehensive view of all classes for {{ stats.today_day }}</p>
                 </div>
-                <div class="space-y-3">
-                    {% if stats.session_types %}
-                    {% for type, count in stats.session_types.items() %}
-                    <div class="flex justify-between items-center text-sm">
-                        <span class="flex items-center text-gray-600">
-                            <span class="w-2 h-2 rounded-full mr-2 
-                                    {% if type == 'Theory' %}bg-blue-500
-                                    {% elif type == 'Practical' %}bg-purple-500
-                                    {% else %}bg-green-500{% endif %}"></span>
-                            {{ type }}
-                        </span>
-                        <span class="font-bold text-gray-800">{{ stats.session_percentages.get(type, 0) }}%</span>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <p class="text-sm text-gray-400 text-center">No data available</p>
-                    {% endif %}
+                <div class="flex gap-2">
+                    <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-xs font-bold border border-indigo-100">
+                        {{ stats.today_classes|length }} Classes
+                    </span>
                 </div>
             </div>
 
-            <div
-                class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm max-h-96 overflow-y-auto custom-scrollbar">
-                <div class="flex items-center justify-between mb-4">
-                    <h4 class="text-lg font-bold text-gray-800">Recent Activity</h4>
-                    <span class="text-xs text-blue-500 cursor-pointer hover:underline"><a
-                            href="{{ url_for('user_mgmt_bp.activity_log') }}">View All</a></span>
+            <div class="flex flex-col md:flex-row gap-3">
+                <div class="relative flex-1">
+                    <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+                    <input type="text" id="tableSearch" onkeyup="filterTable()" 
+                           placeholder="Search subject, faculty, or class..." 
+                           class="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow">
                 </div>
-                <div class="space-y-4">
-                    {% if stats.recent_updates %}
-                    {% for update in stats.recent_updates %}
-                    <div class="flex gap-3">
-                        <div class="flex-shrink-0 mt-1">
-                            <div class="w-2 h-2 rounded-full
-                                    {% if 'login' in update.activity.lower() %}bg-blue-500
-                                    {% elif 'create' in update.activity.lower() %}bg-green-500
-                                    {% elif 'delete' in update.activity.lower() %}bg-red-500
-                                    {% else %}bg-gray-400{% endif %}"></div>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-800 font-medium leading-tight">{{ update.description }}</p>
-                            <p class="text-xs text-gray-400 mt-1">{{ update.time_ago }} • {{ update.username }}</p>
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div class="text-center py-4">
-                        <i class="fas fa-history text-gray-300 text-2xl mb-2"></i>
-                        <p class="text-sm text-gray-500">No recent activity</p>
-                    </div>
-                    {% endif %}
+                <div class="w-full md:w-48">
+                    <select id="filterType" onchange="filterTable()" 
+                            class="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-gray-600">
+                        <option value="">All Types</option>
+                        <option value="Theory">Theory</option>
+                        <option value="Practical">Practical</option>
+                    </select>
                 </div>
             </div>
         </div>
 
-        <div class="lg:col-span-2 space-y-6">
-
-            <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h4 class="text-lg font-bold text-gray-800 mb-4">Highest Faculty Workload</h4>
-                {% if stats.top_faculty %}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {% for faculty in stats.top_faculty[:4] %}
-                    <div class="flex items-center p-3 rounded-xl bg-gray-50 border border-gray-100">
-                        <div
-                            class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm mr-3">
-                            {{ faculty.name[:2].upper() if faculty.name else 'NA' }}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm font-bold text-gray-800 truncate">{{ faculty.name }}</p>
-                            <p class="text-xs text-gray-500">{{ faculty.class_count }} Classes / {{ faculty.hours }} Hrs
-                            </p>
-                        </div>
-                        <div class="text-right pl-2">
-                            <div class="radial-progress text-blue-600 text-xs font-bold"
-                                style="--value:{{ (faculty.hours / 40 * 100)|int }}; --size:2rem;">
-                                {{ (faculty.hours / 40 * 100)|int }}%
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <p class="text-sm text-gray-500">No faculty workload data.</p>
-                {% endif %}
-            </div>
-
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
-                <div class="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <h4 class="text-lg font-bold text-gray-800">Today's Schedule <span
-                            class="text-gray-400 font-normal text-sm ml-1">({{ stats.today_day }})</span></h4>
-                    <a href="{{ url_for('admin.timetable_manage') }}"
-                        class="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
-                        Full Timetable
-                    </a>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr
-                                class="text-xs font-semibold text-gray-500 uppercase bg-gray-50/50 border-b border-gray-100">
-                                <th class="px-6 py-4">Time</th>
-                                <th class="px-6 py-4">Subject</th>
-                                <th class="px-6 py-4">Faculty</th>
-                                <th class="px-6 py-4">Room</th>
-                                <th class="px-6 py-4 text-right">Type</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 text-sm">
-                            {% if stats.today_classes %}
+        <div class="overflow-hidden">
+            <div class="overflow-x-auto custom-scrollbar" style="max-height: 600px;">
+                <table class="w-full text-left border-collapse" id="scheduleTable">
+                    <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                        <tr>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Time</th>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Subject & Class</th>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Faculty</th>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Location</th>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm bg-white" id="tableBody">
+                        {% if stats.today_classes %}
                             {% for class in stats.today_classes %}
-                            <tr class="hover:bg-gray-50/50 transition-colors group">
-                                <td class="px-6 py-4 text-gray-800 font-medium whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <i
-                                            class="far fa-clock text-gray-400 mr-2 group-hover:text-blue-500 transition-colors"></i>
-                                        {{ class.start_time }} - {{ class.end_time }}
+                            <tr class="hover:bg-indigo-50/30 transition-colors group table-row-item">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center text-gray-900 font-semibold">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2.5"></div>
+                                        {{ format_time(class.start_time) }}
+                                    </div>
+                                    <div class="text-xs text-gray-400 pl-4 mt-0.5">To {{ format_time(class.end_time) }}</div>
+                                </td>
+                                
+                                <td class="px-6 py-4">
+                                    <div class="font-bold text-gray-900">{{ class.subject_name }}</div>
+                                    <div class="text-xs text-gray-500 mt-0.5">
+                                        {{ class.class_name }} {% if class.division_name %}<span class="text-gray-300">|</span> {{ class.division_name }}{% endif %}
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-gray-600 font-medium">{{ class.subject_name }}</td>
+                                
                                 <td class="px-6 py-4">
                                     <div class="flex items-center">
-                                        <div
-                                            class="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center mr-2 text-gray-600 font-bold">
+                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold mr-3 border border-gray-200">
                                             {{ class.faculty_name[:1].upper() if class.faculty_name else '?' }}
                                         </div>
-                                        <span class="text-gray-600">{{ class.faculty_name }}</span>
+                                        <div>
+                                            <p class="text-gray-900 font-medium text-sm">{{ class.faculty_name }}</p>
+                                        </div>
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-gray-500">
-                                    <span
-                                        class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium border border-gray-200">
-                                        {{ class.room_number }}
-                                    </span>
+                                
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center text-gray-600">
+                                        <i class="fas fa-map-marker-alt text-gray-400 mr-2"></i>
+                                        {{ class.room_number or 'TBA' }}
+                                    </div>
                                 </td>
+                                
                                 <td class="px-6 py-4 text-right">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                            {% if class.type == 'Theory' %}bg-blue-50 text-blue-700
-                                            {% elif class.type == 'Practical' %}bg-purple-50 text-purple-700
-                                            {% else %}bg-green-50 text-green-700{% endif %}">
-                                        {{ class.type }}
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold filter-type-badge
+                                        {% if class.theory_practical == 'Theory' %}bg-blue-50 text-blue-700 border border-blue-100
+                                        {% elif class.theory_practical == 'Practical' %}bg-purple-50 text-purple-700 border border-purple-100
+                                        {% else %}bg-green-50 text-green-700 border border-green-100{% endif %}">
+                                        {{ class.theory_practical }}
                                     </span>
                                 </td>
                             </tr>
                             {% endfor %}
-                            {% else %}
+                        {% else %}
                             <tr>
-                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
-                                    <div class="flex flex-col items-center">
-                                        <i class="far fa-calendar-times text-3xl text-gray-300 mb-2"></i>
-                                        <p>No classes scheduled for today.</p>
+                                <td colspan="5" class="px-6 py-12 text-center">
+                                    <div class="flex flex-col items-center justify-center">
+                                        <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                            <i class="fas fa-mug-hot text-gray-300 text-2xl"></i>
+                                        </div>
+                                        <p class="text-gray-900 font-medium">No classes scheduled</p>
+                                        <p class="text-sm text-gray-500 mt-1">Enjoy your day off!</p>
                                     </div>
                                 </td>
                             </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-gray-100 bg-gray-50/50 flex justify-between items-center" id="paginationControls">
+            <span class="text-xs text-gray-500">Showing <span id="showingCount" class="font-bold">0</span> entries</span>
+            <div class="flex gap-2">
+                <button onclick="changePage(-1)" id="prevBtn" class="px-3 py-1 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Previous</button>
+                <button onclick="changePage(1)" id="nextBtn" class="px-3 py-1 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Next</button>
             </div>
         </div>
     </div>
+
 </div>
 
 <script>
-    // Global defaults for Chart.js
+    // --- 1. Chart Configuration ---
     Chart.defaults.font.family = "'Inter', sans-serif";
-    Chart.defaults.color = '#6b7280';
+    Chart.defaults.color = '#9ca3af';
 
-    // --- Weekly Schedule Load ---
+    // Workload Chart
     const ctxWorkload = document.getElementById('workloadChart').getContext('2d');
     const weeklyLoadData = {{ stats.weekly_load | tojson }};
-
-    // Create gradient
-    const gradientWorkload = ctxWorkload.createLinearGradient(0, 0, 0, 400);
-    gradientWorkload.addColorStop(0, 'rgba(59, 130, 246, 0.8)'); // Blue
-    gradientWorkload.addColorStop(1, 'rgba(59, 130, 246, 0.2)');
+    
+    // Gradient
+    const gradient = ctxWorkload.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.5)'); // Indigo
+    gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
 
     new Chart(ctxWorkload, {
-        type: 'bar',
+        type: 'line',
         data: {
             labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
             datasets: [{
                 label: 'Classes',
-                data: [
-                    weeklyLoadData['Monday'] || 0,
-                    weeklyLoadData['Tuesday'] || 0,
-                    weeklyLoadData['Wednesday'] || 0,
-                    weeklyLoadData['Thursday'] || 0,
-                    weeklyLoadData['Friday'] || 0,
-                    weeklyLoadData['Saturday'] || 0
-                ],
-                backgroundColor: '#3b82f6',
-                borderRadius: 6,
-                barThickness: 30,
-                hoverBackgroundColor: '#2563eb'
+                data: Object.values(weeklyLoadData),
+                borderColor: '#6366f1',
+                backgroundColor: gradient,
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#ffffff',
+                pointBorderColor: '#6366f1',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1f2937',
-                    padding: 10,
-                    cornerRadius: 8,
-                    displayColors: false
-                }
-            },
+            plugins: { legend: { display: false } },
             scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: { borderDash: [4, 4], color: '#f3f4f6', drawBorder: false },
-                    ticks: { padding: 10 }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { padding: 10 }
-                }
+                y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#f3f4f6' } },
+                x: { grid: { display: false } }
             }
         }
     });
 
-    // --- Session Types ---
+    // Session Type Chart
     const ctxSession = document.getElementById('sessionTypeChart').getContext('2d');
     const sessionTypes = {{ stats.session_types | tojson }};
-
+    
     new Chart(ctxSession, {
         type: 'doughnut',
         data: {
             labels: Object.keys(sessionTypes),
             datasets: [{
                 data: Object.values(sessionTypes),
-                backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981'], // Blue, Purple, Green
+                backgroundColor: ['#3b82f6', '#a855f7', '#10b981'],
                 borderWidth: 0,
-                hoverOffset: 6
+                hoverOffset: 10
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '80%',
-            plugins: {
-                legend: { display: false }
-            }
+            cutout: '75%',
+            plugins: { legend: { display: false } }
         }
     });
+
+    // --- 2. Advanced Table Filter & Pagination Logic ---
+    const rowsPerPage = 10;
+    let currentPage = 1;
+    let filteredRows = [];
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        const allRows = Array.from(document.querySelectorAll('#tableBody .table-row-item'));
+        filteredRows = allRows; // Start with all rows visible
+        updateTableDisplay();
+    });
+
+    function filterTable() {
+        const searchInput = document.getElementById('tableSearch').value.toLowerCase();
+        const typeFilter = document.getElementById('filterType').value.toLowerCase();
+        const allRows = Array.from(document.querySelectorAll('#tableBody .table-row-item'));
+
+        // Filter Rows
+        filteredRows = allRows.filter(row => {
+            const text = row.innerText.toLowerCase();
+            const typeBadge = row.querySelector('.filter-type-badge').innerText.toLowerCase();
+            
+            const matchesSearch = text.includes(searchInput);
+            const matchesType = typeFilter === "" || typeBadge === typeFilter;
+
+            return matchesSearch && matchesType;
+        });
+
+        // Reset to page 1 on filter change
+        currentPage = 1;
+        updateTableDisplay();
+    }
+
+    function changePage(direction) {
+        const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+        const newPage = currentPage + direction;
+
+        if (newPage > 0 && newPage <= totalPages) {
+            currentPage = newPage;
+            updateTableDisplay();
+        }
+    }
+
+    function updateTableDisplay() {
+        const allRows = Array.from(document.querySelectorAll('#tableBody .table-row-item'));
+        
+        // Hide all first
+        allRows.forEach(row => row.style.display = 'none');
+
+        // Calculate slice
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const rowsToShow = filteredRows.slice(start, end);
+
+        // Show filtered rows for current page
+        rowsToShow.forEach(row => row.style.display = '');
+
+        // Update UI Controls
+        document.getElementById('showingCount').innerText = filteredRows.length;
+        
+        const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        
+        prevBtn.disabled = currentPage === 1;
+        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+        
+        if (filteredRows.length === 0) {
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+        }
+    }
 </script>
 {% endblock %}

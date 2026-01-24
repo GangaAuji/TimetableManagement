@@ -1,0 +1,270 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Manage Faculty Availability - {{ faculty_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <a href="{{ url_for('faculty.faculty_details', faculty_id=faculty_id) }}" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i> Back to Faculty Details
+                    </a>
+                    <h1 class="text-3xl font-bold text-gray-900">Manage Availability</h1>
+                    <p class="text-gray-600 mt-1">Set availability schedule for {{ faculty_name }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-50 text-green-800 border border-green-200{% elif category == 'danger' %}bg-red-50 text-red-800 border border-red-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+                        <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'danger' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %} mr-2"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Info Card -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-blue-600 mt-1 mr-3"></i>
+                <div class="text-sm text-blue-800">
+                    <p class="font-semibold mb-1">About Availability Settings</p>
+                    <ul class="list-disc ml-4 space-y-1">
+                        <li>Set multiple time slots per day for faculty availability</li>
+                        <li>Link slots to shift patterns (optional) or use custom times</li>
+                        <li>Add notes to explain specific availability details</li>
+                        <li>This information will be used for timetable generation</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Availability Form -->
+        <form method="POST" action="{{ url_for('faculty.faculty_availability_admin', faculty_id=faculty_id) }}" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] %}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" name="{{ day }}-available" 
+                               {% if avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available %}checked{% endif %}
+                               class="day-checkbox h-5 w-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 mr-3">
+                        <span class="text-xl font-bold text-gray-900">{{ day }}</span>
+                    </label>
+                    <button type="button" class="add-slot-btn {% if not (avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available) %}hidden{% endif %} text-sm bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors" data-day="{{ day }}">
+                        <i class="fas fa-plus mr-1"></i> Add Time Slot
+                    </button>
+                </div>
+
+                <div class="time-slots-container space-y-3" data-day="{{ day }}" style="{% if not (avail_all_slots[day] and avail_all_slots[day]|length > 0 and avail_all_slots[day][0].is_available) %}display: none;{% endif %}">
+                    <!-- Load ALL existing slots from database -->
+                    {% if avail_all_slots[day] and avail_all_slots[day]|length > 0 %}
+                        {% for slot in avail_all_slots[day] %}
+                            {% if slot.is_available %}
+                    <div class="time-slot bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">From</label>
+                                <input type="time" name="{{ day }}-start-{{ loop.index0 }}" 
+                                       value="{{ slot.start_time }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">To</label>
+                                <input type="time" name="{{ day }}-end-{{ loop.index0 }}" 
+                                       value="{{ slot.end_time }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Link to Shift (Optional)</label>
+                                <select name="{{ day }}-shift-{{ loop.index0 }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Custom Time</option>
+                                    {% for shift in shift_patterns %}
+                                    <option value="{{ shift.id }}" {% if slot.shift_id == shift.id %}selected{% endif %}>{{ shift.shift_name }} ({{ shift.start_time }} - {{ shift.end_time }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                <input type="text" name="{{ day }}-notes-{{ loop.index0 }}" 
+                                       value="{{ slot.notes }}"
+                                       placeholder="e.g., Available for lectures"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            {% if not loop.first %}
+                            <button type="button" class="remove-slot-btn bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg transition-colors">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                    <!-- Default empty slot if no data -->
+                    <div class="time-slot bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">From</label>
+                                <input type="time" name="{{ day }}-start-0" 
+                                       value="09:00"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">To</label>
+                                <input type="time" name="{{ day }}-end-0" 
+                                       value="17:00"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Link to Shift (Optional)</label>
+                                <select name="{{ day }}-shift-0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Custom Time</option>
+                                    {% for shift in shift_patterns %}
+                                    <option value="{{ shift.id }}">{{ shift.shift_name }} ({{ shift.start_time }} - {{ shift.end_time }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                <input type="text" name="{{ day }}-notes-0" 
+                                       placeholder="e.g., Available for lectures"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <p class="text-xs text-gray-500 mt-3">
+                    <i class="fas fa-lightbulb"></i> 
+                    <strong>Tip:</strong> You can add multiple time slots per day. Link to a shift pattern to auto-fill times, or use custom times.
+                </p>
+            </div>
+            {% endfor %}
+
+            <!-- Submit Buttons -->
+            <div class="flex items-center gap-3">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors shadow-md">
+                    <i class="fas fa-save mr-2"></i> Save Availability
+                </button>
+                <a href="{{ url_for('faculty.faculty_details', faculty_id=faculty_id) }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-6 py-3 rounded-lg transition-colors">
+                    <i class="fas fa-times mr-2"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Day availability checkbox handler
+document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const day = this.name.replace('-available', '');
+        const container = document.querySelector(`.time-slots-container[data-day="${day}"]`);
+        const addBtn = this.closest('.bg-white').querySelector('.add-slot-btn');
+        
+        if (this.checked) {
+            container.style.display = 'block';
+            addBtn.classList.remove('hidden');
+        } else {
+            container.style.display = 'none';
+            addBtn.classList.add('hidden');
+        }
+    });
+});
+
+// Counter for dynamic slot creation - initialize based on existing slots
+const slotCounters = {};
+document.querySelectorAll('.time-slots-container').forEach(container => {
+    const day = container.dataset.day;
+    const existingSlots = container.querySelectorAll('.time-slot').length;
+    slotCounters[day] = existingSlots > 0 ? existingSlots : 1;
+});
+
+// Add new time slot button
+document.querySelectorAll('.add-slot-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const day = this.dataset.day;
+        const container = document.querySelector(`.time-slots-container[data-day="${day}"]`);
+        const slotIndex = slotCounters[day]++;
+        
+        const newSlot = document.createElement('div');
+        newSlot.className = 'time-slot bg-gray-50 p-4 rounded-lg border border-gray-200';
+        newSlot.innerHTML = `
+            <div class="flex items-end gap-3">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">From</label>
+                    <input type="time" name="${day}-start-${slotIndex}" value="09:00"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">To</label>
+                    <input type="time" name="${day}-end-${slotIndex}" value="17:00"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Link to Shift (Optional)</label>
+                    <select name="${day}-shift-${slotIndex}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Custom Time</option>
+                        {% for shift in shift_patterns %}
+                        <option value="{{ shift.id }}">{{ shift.shift_name }} ({{ shift.start_time }} - {{ shift.end_time }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <input type="text" name="${day}-notes-${slotIndex}" 
+                           placeholder="e.g., Available for lectures"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button type="button" class="remove-slot-btn bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(newSlot);
+        
+        // Add remove handler for the new slot
+        newSlot.querySelector('.remove-slot-btn').addEventListener('click', function() {
+            newSlot.remove();
+        });
+    });
+});
+
+// Add remove handlers for existing slots (except first)
+document.querySelectorAll('.remove-slot-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        this.closest('.time-slot').remove();
+    });
+});
+
+// Shift selector auto-fill
+document.addEventListener('change', function(e) {
+    if (e.target.tagName === 'SELECT' && e.target.name.includes('-shift-')) {
+        const selectedOption = e.target.options[e.target.selectedIndex];
+        if (selectedOption.value) {
+            // Extract shift times from option text (format: "Name (HH:MM - HH:MM)")
+            const match = selectedOption.text.match(/\((\d{2}:\d{2}) - (\d{2}:\d{2})\)/);
+            if (match) {
+                const slot = e.target.closest('.time-slot');
+                const namePrefix = e.target.name.replace('-shift-', '');
+                const startInput = slot.querySelector(`input[name="${namePrefix}-start-${e.target.name.split('-').pop()}"]`);
+                const endInput = slot.querySelector(`input[name="${namePrefix}-end-${e.target.name.split('-').pop()}"]`);
+                
+                if (startInput) startInput.value = match[1];
+                if (endInput) endInput.value = match[2];
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

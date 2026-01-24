@@ -1,0 +1,224 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Shift Change Requests{% endblock %}
+{% block header_title %}Faculty Shift Change Requests{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4 h-screen flex flex-col">
+    
+    <!-- Header -->
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-4 flex-none p-4">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 class="text-lg font-bold text-gray-800">Shift Change Requests</h2>
+                <p class="text-xs text-gray-500">Review and respond to faculty shift modification requests</p>
+            </div>
+            <div class="flex gap-2">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
+                    <div class="text-xs text-yellow-600 font-semibold">Pending</div>
+                    <div class="text-2xl font-bold text-yellow-800">{{ pending_count }}</div>
+                </div>
+                <a href="{{ url_for('shifts.faculty_availability') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow text-xs transition-colors self-center">
+                    <i class="fas fa-calendar-alt mr-2"></i> View Schedules
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Requests Table -->
+    <div class="bg-white shadow-md rounded-lg border border-gray-200 flex-grow flex flex-col overflow-hidden">
+        <div class="overflow-auto flex-grow">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50 sticky top-0">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Faculty</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Day</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Current</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Requested</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Reason</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Submitted</th>
+                        <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% if requests %}
+                        {% for req in requests %}
+                        {% set day_names = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday'} %}
+                        <tr class="hover:bg-indigo-50 transition-colors">
+                            <td class="px-4 py-3">
+                                <div class="font-semibold text-gray-900">{{ req.faculty_name }}</div>
+                                <div class="text-xs text-gray-500">{{ req.department_name or 'No Department' }}</div>
+                            </td>
+                            <td class="px-4 py-3 font-medium text-gray-900">{{ day_names[req.day_of_week] }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ req.current_shift_name }}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ req.requested_shift_name }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                                <div class="truncate" title="{{ req.reason }}">{{ req.reason or '-' }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ req.created_at.strftime('%b %d, %Y') }}</td>
+                            <td class="px-4 py-3 text-center">
+                                {% if req.status == 'pending' %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                {% elif req.status == 'approved' %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
+                                {% else %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                {% if req.status == 'pending' %}
+                                    {% if user_has_perm('shifts_change') %}
+                                    <button onclick="respondModal({{ req.id }}, '{{ req.faculty_name }}', '{{ day_names[req.day_of_week] }}', '{{ req.requested_shift_name }}')" 
+                                            class="text-blue-600 hover:text-blue-800 font-medium text-sm">
+                                        <i class="fas fa-reply"></i> Respond
+                                    </button>
+                                    {% endif %}
+                                {% else %}
+                                <button onclick="viewDetails({{ req.id }}, '{{ req.admin_response or '' }}', '{{ req.reviewed_by_name or '' }}', '{{ req.reviewed_at.strftime('%b %d, %Y %H:%M') if req.reviewed_at else '' }}')" 
+                                        class="text-gray-600 hover:text-gray-800 text-sm">
+                                    <i class="fas fa-eye"></i> Details
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                                <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
+                                <p>No shift change requests</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Respond Modal -->
+<div id="respondModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Respond to Shift Change Request</h3>
+            <button onclick="closeRespondModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="respondForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="action" id="respond_action">
+            
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-600">Request from:</div>
+                    <div class="font-bold text-gray-900" id="respond_faculty"></div>
+                    <div class="text-sm text-gray-600 mt-1">
+                        <span class="font-semibold" id="respond_day"></span> → 
+                        <span class="font-semibold text-indigo-600" id="respond_shift"></span>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Admin Response</label>
+                    <textarea name="admin_response" rows="3" 
+                              placeholder="Add a note to faculty (optional)"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeRespondModal()" 
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="submitResponse('reject')" 
+                        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
+                    <i class="fas fa-times"></i> Reject
+                </button>
+                <button type="button" onclick="submitResponse('approve')" 
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                    <i class="fas fa-check"></i> Approve
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div id="detailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-900">Request Details</h3>
+            <button onclick="closeDetailsModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div>
+                <div class="text-xs text-gray-600 font-semibold">Admin Response:</div>
+                <div class="text-sm text-gray-900 mt-1" id="details_response"></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div>
+                    <div class="text-xs text-gray-600">Reviewed By:</div>
+                    <div class="font-medium" id="details_reviewer"></div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-gray-600">Reviewed At:</div>
+                    <div class="font-medium" id="details_date"></div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-6 text-right">
+            <button onclick="closeDetailsModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRequestId = null;
+
+function respondModal(id, faculty, day, shift) {
+    currentRequestId = id;
+    document.getElementById('respond_faculty').textContent = faculty;
+    document.getElementById('respond_day').textContent = day;
+    document.getElementById('respond_shift').textContent = shift;
+    document.getElementById('respondModal').classList.remove('hidden');
+}
+
+function closeRespondModal() {
+    document.getElementById('respondModal').classList.add('hidden');
+}
+
+function submitResponse(action) {
+    document.getElementById('respond_action').value = action;
+    document.getElementById('respondForm').action = `/admin/shifts/change-requests/${currentRequestId}/respond`;
+    document.getElementById('respondForm').submit();
+}
+
+function viewDetails(id, response, reviewer, date) {
+    document.getElementById('details_response').textContent = response || 'No response provided';
+    document.getElementById('details_reviewer').textContent = reviewer || 'Unknown';
+    document.getElementById('details_date').textContent = date || 'N/A';
+    document.getElementById('detailsModal').classList.remove('hidden');
+}
+
+function closeDetailsModal() {
+    document.getElementById('detailsModal').classList.add('hidden');
+}
+
+// Close modals on outside click
+window.onclick = function(event) {
+    const modals = ['respondModal', 'detailsModal'];
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (event.target === modal) {
+            modal.classList.add('hidden');
+        }
+    });
+}
+</script>
+{% endblock %}

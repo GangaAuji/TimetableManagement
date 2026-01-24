@@ -13,13 +13,15 @@
                     <p class="text-xs text-gray-500">Manage curriculum, credits, and faculty allocations</p>
                 </div>
                 <div class="flex gap-2">
-                    <a href="{{ url_for('admin.manage_academics') }}"
+                    <a href="{{ url_for('academic.manage_academics') }}"
                         class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-md transition-colors flex items-center">
                         <i class="fas fa-arrow-left mr-2"></i> Back
                     </a>
+                    {% if user_has_perm('subjects_add_subject') %}
                     <button onclick="showAddModal()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md shadow flex items-center transition-colors">
                         <i class="fas fa-plus mr-2"></i> New Subject
                     </button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -121,14 +123,18 @@
 
                         <td class="px-4 py-2 text-right whitespace-nowrap">
                             <div class="flex justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                {% if user_has_perm('subjects_change_subject') %}
                                 <button data-subject='{{ subj|tojson }}' onclick="editSubjectFromDataset(this)" 
                                     class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                {% endif %}
+                                {% if user_has_perm('subjects_delete_subject') %}
                                 <button data-id="{{ subj.id }}" data-name="{{ subj.name }}" onclick="deleteSubjectFromDataset(this)" 
                                     class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-all" title="Delete">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

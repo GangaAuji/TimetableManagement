@@ -55,7 +55,7 @@
         </div>
     </div>
 
-    <form action="{{ url_for('admin.generate_timetable') }}" method="POST" id="generateForm" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <form action="{{ url_for('timetable.generate_timetable') }}" method="POST" id="generateForm" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

@@ -21,21 +21,33 @@ body {
    SIDEBAR STYLES
    ================================ */
 .sidebar {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease;
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+}
+
+/* Default desktop sidebar */
+@media (min-width: 768px) {
+    .sidebar {
+        position: relative;
+        transform: translateX(0) !important;
+    }
 }
 
 /* Mobile sidebar positioning */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .sidebar {
         position: fixed;
         left: 0;
         top: 0;
         bottom: 0;
         z-index: 30;
-        transform: translateX(-100%);
+        width: 16rem; /* w-64 = 256px = 16rem */
     }
-    .sidebar:not(.-translate-x-full) {
-        transform: translateX(0);
+    
+    /* Ensure toggle button is always visible on mobile */
+    #sidebar-toggle {
+        display: block !important;
+        z-index: 40;
     }
 }
 
@@ -260,6 +272,14 @@ body {
 .header {
     background: linear-gradient(90deg, #ffffff 0%, #f8fafc 100%);
     backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Ensure toggle button is always visible */
+#sidebar-toggle {
+    flex-shrink: 0;
 }
 
 .logo-text {
@@ -609,12 +629,25 @@ input[type="checkbox"]:hover {
 @media (min-width: 768px) {
     .sidebar.w-20 + .flex-1 {
         margin-left: 0;
-    }
+    z-index: 20;
 }
 
-/* Overlay styles */
-.overlay {
-    background: rgba(0, 0, 0, 0.5);
+.overlay.hidden {
+    display: none;
+}
+
+/* Mobile menu animation */
+@media (max-width: 767px) {
+    .sidebar {
+        transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    
+    .sidebar.-translate-x-full {
+        transform: translateX(-100%);
+    }
+    
+    .sidebar.translate-x-0 {
+        transform: translateX(0
     backdrop-filter: blur(4px);
     animation: fadeIn 0.2s ease;
 }

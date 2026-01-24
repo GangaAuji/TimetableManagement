@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
-from app import mysql
+from database import get_db_connection
 from security import log_activity
 import os
 from datetime import datetime
@@ -20,7 +20,10 @@ def view_profile():
         flash('Please login to view your profile', 'error')
         return redirect(url_for('auth.login'))
     
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    
+    cursor = connection.cursor(dictionary=True)
     try:
         user_role = session.get('role')
         
@@ -41,20 +44,20 @@ def view_profile():
         
         # Initialize user dict with base data
         user = {
-            'id': user_data[0],
-            'username': user_data[1],
-            'role': user_data[2],
-            'email': user_data[3],
-            'profile_photo': user_data[4] if user_data[4] else 'default-avatar.svg',
-            'phone': user_data[5],
-            'address': user_data[6],
-            'bio': user_data[7],
-            'date_of_birth': user_data[8],
-            'status': user_data[9] or 'active',
-            'last_login': user_data[10],
-            'created_at': user_data[11],
-            'department_id': user_data[12],
-            'is_hod': user_data[13] or False,
+            'id': user_data['id'],
+            'username': user_data['username'],
+            'role': user_data['role'],
+            'email': user_data['email'],
+            'profile_photo': user_data['profile_photo'] if user_data['profile_photo'] else 'default-avatar.svg',
+            'phone': user_data['phone'],
+            'address': user_data['address'],
+            'bio': user_data['bio'],
+            'date_of_birth': user_data['date_of_birth'],
+            'status': user_data['status'] or 'active',
+            'last_login': user_data['last_login'],
+            'created_at': user_data['created_at'],
+            'department_id': user_data['department_id'],
+            'is_hod': user_data['is_hod'] or False,
             'department_name': None
         }
         
@@ -63,7 +66,7 @@ def view_profile():
             cursor.execute("SELECT name FROM departments WHERE id = %s", [user['department_id']])
             dept_result = cursor.fetchone()
             if dept_result:
-                user['department_name'] = dept_result[0]
+                user['department_name'] = dept_result['name']
         
         # Get role-specific data (for additional info if needed)
         if user_role == 'Teacher':
@@ -72,8 +75,8 @@ def view_profile():
             """, [session['user_id']])
             faculty_data = cursor.fetchone()
             # Use faculty email if user email is not set
-            if faculty_data and faculty_data[0] and not user['email']:
-                user['email'] = faculty_data[0]
+            if faculty_data and faculty_data['email'] and not user['email']:
+                user['email'] = faculty_data['email']
                 
         elif user_role == 'Student':
             cursor.execute("""
@@ -81,12 +84,15 @@ def view_profile():
             """, [session['user_id']])
             student_data = cursor.fetchone()
             # Use student email if user email is not set
-            if student_data and student_data[0] and not user['email']:
-                user['email'] = student_data[0]
+            if student_data and student_data['email'] and not user['email']:
+                user['email'] = student_data['email']
         
         return render_template('profile/user_profile.html', user=user)
     finally:
+
         cursor.close()
+
+        connection.close()
 
 @profile_bp.route('/edit', methods=['GET', 'POST'])
 def edit_profile():
@@ -103,7 +109,10 @@ def edit_profile():
         date_of_birth = request.form.get('date_of_birth')
         user_role = session.get('role')
         
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        
+        cursor = connection.cursor(dictionary=True)
         try:
             # Handle profile photo upload
             profile_photo = None
@@ -156,7 +165,7 @@ def edit_profile():
                     WHERE user_id = %s
                 """, [email, session['user_id']])
             
-            mysql.connection.commit()
+            connection.commit()
             
             # Update session with new profile photo if uploaded
             if profile_photo:
@@ -166,13 +175,18 @@ def edit_profile():
             flash('Profile updated successfully', 'success')
             return redirect(url_for('profile.view_profile'))
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             flash(f'Error updating profile: {str(e)}', 'error')
         finally:
+
             cursor.close()
+
+            connection.close()
     
     # GET request - show edit form
-    cursor = mysql.connection.cursor()
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role, u.phone, u.address, 
@@ -189,21 +203,24 @@ def edit_profile():
             return redirect(url_for('auth.login'))
         
         user = {
-            'id': user_data[0],
-            'username': user_data[1],
-            'email': user_data[2],
-            'role': user_data[3],
-            'phone': user_data[4],
-            'address': user_data[5],
-            'bio': user_data[6],
-            'date_of_birth': user_data[7],
-            'profile_photo': user_data[8] or 'default-avatar.png',
-            'department_name': user_data[9]
+            'id': user_data['id'],
+            'username': user_data['username'],
+            'email': user_data['email'],
+            'role': user_data['role'],
+            'phone': user_data['phone'],
+            'address': user_data['address'],
+            'bio': user_data['bio'],
+            'date_of_birth': user_data['date_of_birth'],
+            'profile_photo': user_data['profile_photo'] or 'default-avatar.png',
+            'department_name': user_data['dept_name']
         }
         
         return render_template('profile/edit.html', user=user)
     finally:
+
         cursor.close()
+
+        connection.close()
 
 @profile_bp.route('/change-password', methods=['GET', 'POST'])
 def change_password():
@@ -225,14 +242,17 @@ def change_password():
             flash('Password must be at least 8 characters long', 'error')
             return redirect(url_for('profile.change_password'))
         
-        cursor = mysql.connection.cursor()
+        connection = get_db_connection()
+
+        
+        cursor = connection.cursor(dictionary=True)
         try:
             # Verify current password
             from werkzeug.security import check_password_hash
             cursor.execute("SELECT password FROM users WHERE id = %s", [session['user_id']])
             result = cursor.fetchone()
             
-            if not result or not check_password_hash(result[0], current_password):
+            if not result or not check_password_hash(result['password'], current_password):
                 flash('Current password is incorrect', 'error')
                 return redirect(url_for('profile.change_password'))
             
@@ -240,15 +260,18 @@ def change_password():
             hashed_password = generate_password_hash(new_password)
             cursor.execute("UPDATE users SET password = %s WHERE id = %s", 
                          [hashed_password, session['user_id']])
-            mysql.connection.commit()
+            connection.commit()
             
             log_activity(session['user_id'], 'change_password', 'Changed password')
             flash('Password changed successfully', 'success')
             return redirect(url_for('profile.view_profile'))
         except Exception as e:
-            mysql.connection.rollback()
+            connection.rollback()
             flash(f'Error changing password: {str(e)}', 'error')
         finally:
+
             cursor.close()
+
+            connection.close()
     
     return render_template('profile/change_password.html')

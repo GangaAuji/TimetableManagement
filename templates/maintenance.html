@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ institution_name }} - Under Maintenance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Floating Animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+
+        /* Custom Scrollbar (Desktop Only) */
+        @media (min-width: 1024px) {
+            .custom-scroll::-webkit-scrollbar { width: 6px; }
+            .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+            .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+            .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        }
+
+        /* Background Shapes */
+        .blob {
+            position: absolute;
+            filter: blur(50px);
+            opacity: 0.4;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body class="bg-white font-sans text-gray-800 antialiased">
+
+    <div class="w-full flex flex-col lg:flex-row min-h-screen lg:h-screen lg:overflow-hidden">
+        
+        <div class="lg:w-5/12 bg-gradient-to-br from-indigo-900 via-blue-800 to-purple-900 relative flex flex-col justify-center items-center text-center p-12 lg:p-12 text-white shrink-0 min-h-[400px] lg:min-h-auto">
+            
+            <div class="blob w-64 h-64 bg-purple-500 rounded-full top-0 left-0 -translate-x-1/2 -translate-y-1/2"></div>
+            <div class="blob w-80 h-80 bg-blue-500 rounded-full bottom-0 right-0 translate-x-1/3 translate-y-1/3"></div>
+
+            <div class="relative z-10 animate-float">
+                <div class="w-32 h-32 md:w-40 md:h-40 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 flex items-center justify-center shadow-2xl mx-auto mb-8">
+                    <i class="fas fa-tools text-6xl md:text-7xl text-white drop-shadow-lg"></i>
+                </div>
+            </div>
+
+            <div class="relative z-10 space-y-4 max-w-md mx-auto">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold uppercase tracking-wider mb-2">
+                    <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                    Maintenance Mode
+                </div>
+                <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">
+                    We are currently <br/> <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-purple-200">upgrading.</span>
+                </h1>
+                <p class="text-blue-100 text-lg md:text-xl font-light">
+                    The <span class="font-semibold">{{ institution_name }}</span> system is offline for scheduled improvements.
+                </p>
+            </div>
+
+            <div class="absolute bottom-6 left-0 w-full text-center text-white/40 text-xs z-10">
+                System ID: SYS-MAINT-2026
+            </div>
+        </div>
+
+        <div class="lg:w-7/12 bg-white flex flex-col h-full relative lg:overflow-y-auto custom-scroll">
+            
+            <div class="p-6 md:p-12 lg:p-16">
+                <div class="max-w-3xl mx-auto space-y-10">
+                    
+                    <div class="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg shadow-sm">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-exclamation-circle text-orange-500 mt-0.5 text-lg"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-bold text-orange-800 uppercase tracking-wide">Estimated Downtime</h3>
+                                <p class="text-sm text-orange-700 mt-1">
+                                    We expect to be back online shortly. Please check back in a few minutes.
+                                    <!-- <span id="countdown" class="font-mono font-bold ml-1">60s</span> -->
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                            <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center mr-3 text-sm">
+                                <i class="fas fa-clipboard-list"></i>
+                            </span>
+                            What's Happening?
+                        </h2>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="p-5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-indigo-100 hover:shadow-md transition-all group">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div class="p-2 bg-green-100 text-green-600 rounded-lg group-hover:scale-110 transition-transform">
+                                        <i class="fas fa-database"></i>
+                                    </div>
+                                    <h3 class="font-bold text-gray-800">Database Optimization</h3>
+                                </div>
+                                <p class="text-sm text-gray-500 pl-11">Enhancing data retrieval speeds and structural integrity.</p>
+                            </div>
+
+                            <div class="p-5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-indigo-100 hover:shadow-md transition-all group">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div class="p-2 bg-purple-100 text-purple-600 rounded-lg group-hover:scale-110 transition-transform">
+                                        <i class="fas fa-shield-alt"></i>
+                                    </div>
+                                    <h3 class="font-bold text-gray-800">Security Patching</h3>
+                                </div>
+                                <p class="text-sm text-gray-500 pl-11">Applying the latest security protocols to keep data safe.</p>
+                            </div>
+
+                            <div class="p-5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-indigo-100 hover:shadow-md transition-all group">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div class="p-2 bg-blue-100 text-blue-600 rounded-lg group-hover:scale-110 transition-transform">
+                                        <i class="fas fa-rocket"></i>
+                                    </div>
+                                    <h3 class="font-bold text-gray-800">Performance Boost</h3>
+                                </div>
+                                <p class="text-sm text-gray-500 pl-11">Upgrading server response times for smoother navigation.</p>
+                            </div>
+
+                            <div class="p-5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-indigo-100 hover:shadow-md transition-all group">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div class="p-2 bg-pink-100 text-pink-600 rounded-lg group-hover:scale-110 transition-transform">
+                                        <i class="fas fa-magic"></i>
+                                    </div>
+                                    <h3 class="font-bold text-gray-800">Feature Rollout</h3>
+                                </div>
+                                <p class="text-sm text-gray-500 pl-11">Deploying new scheduling tools and UI improvements.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-gray-100"></div>
+
+                    {% if institution_email or institution_phone %}
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 mb-4">Urgent Support</h2>
+                        <div class="flex flex-wrap gap-4">
+                            {% if institution_email %}
+                            <a href="mailto:{{ institution_email }}" class="flex items-center gap-3 px-5 py-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-500 hover:shadow-lg hover:text-indigo-600 text-gray-600 transition-all group">
+                                <i class="fas fa-envelope text-xl text-gray-400 group-hover:text-indigo-500"></i>
+                                <div>
+                                    <p class="text-xs text-gray-400 font-bold uppercase">Email Us</p>
+                                    <p class="text-sm font-medium">{{ institution_email }}</p>
+                                </div>
+                            </a>
+                            {% endif %}
+
+                            {% if institution_phone %}
+                            <a href="tel:{{ institution_phone }}" class="flex items-center gap-3 px-5 py-3 rounded-xl bg-white border border-gray-200 hover:border-green-500 hover:shadow-lg hover:text-green-600 text-gray-600 transition-all group">
+                                <i class="fas fa-phone text-xl text-gray-400 group-hover:text-green-500"></i>
+                                <div>
+                                    <p class="text-xs text-gray-400 font-bold uppercase">Call Us</p>
+                                    <p class="text-sm font-medium">{{ institution_phone }}</p>
+                                </div>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="pt-4 pb-8">
+                        <button onclick="location.reload()" class="w-full sm:w-auto px-8 py-4 bg-gray-900 hover:bg-black text-white rounded-xl font-bold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3">
+                            <i class="fas fa-sync-alt animate-spin-slow"></i>
+                            Check Status Now
+                        </button>
+                    </div>
+
+                    {% if session.role == 'Super Admin' %}
+                    <div class="pt-2 pb-8 text-center lg:text-left">
+                        <a href="{{ url_for('auth.dashboard') }}" class="inline-flex items-center text-sm text-gray-400 hover:text-indigo-600 transition-colors">
+                            <i class="fas fa-lock mr-2"></i> Administrator Override Access
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-100 text-center lg:text-left bg-gray-50/50 mt-auto">
+                <p class="text-xs text-gray-400">
+                    &copy; {{ now.year if now else '2026' }} {{ institution_name }}. 
+                    <span class="hidden sm:inline">Timetable Management System. All rights reserved.</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Smooth Countdown Loop
+        let seconds = 60;
+        const countdownEl = document.getElementById('countdown');
+        
+        setInterval(function() {
+            seconds--;
+            if (seconds < 0) {
+                seconds = 60;
+                // Optional: Trigger reload here or just loop visual
+                location.reload();
+            }
+            countdownEl.innerText = seconds + "s";
+        }, 1000);
+        
+        // Slow spin class for icon
+        document.querySelector('.animate-spin-slow')?.style.setProperty('animation', 'spin 3s linear infinite');
+    </script>
+</body>
+</html>

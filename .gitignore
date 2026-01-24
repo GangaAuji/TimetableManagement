@@ -4,12 +4,22 @@
 env/
 venv/
 ENV/
-
-# VS Code
+__pycache__/
+routes/__pycache__/
+admin/__pycache__/
+api/__pycache__/
+__pycache__/
+student_routes/__pycache__/
+teacher_routes/__pycache__/
+admin_routes/__pycache__/
+students/__pycache__/
+teachers/__pycache__/
+# VS Code   
 .vscode/
 *.code-workspace
-
-
+v1_scripts_bkp
+Documents
+migrations
 
 # Linux
 *~
@@ -109,3 +119,25 @@ test_user_management.py
 static/uploads/profiles/*
 
 v1_scripts_bkp
+.env.example
+.env.local.example
+college_timetable.sql
+backup_full_28_12_25.sql
+database_export.json
+export_db_structure.py
+update_passwords.py
+reset_passwords.py
+scripts/hash_passwords.py
+scripts/list_routes.py
+.vscode
+.DS_Store
+*.log
+*.db
+*.sqlite3
+
+static/uploads/profiles/*
+students/__pycache__/
+teachers/__pycache__/
+__pycache__/
+admin/__pycache__/
+api/__pycache__/

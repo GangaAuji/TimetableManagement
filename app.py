@@ -1,7 +1,7 @@
-from flask import Flask, session
-from flask_mysqldb import MySQL
+from flask import Flask, app, session
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from config import Config
+from database import get_db_connection, close_db
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -9,7 +9,6 @@ import secrets
 from datetime import timedelta
 
 # Initialize extensions
-mysql = MySQL()
 csrf = CSRFProtect()
 
 def format_time_filter(time_obj):
@@ -52,6 +51,8 @@ def format_time_12hr_filter(time_obj):
 def create_app():
     """Create and configure an instance of the Flask application."""
     app = Flask(__name__)
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable cache for static files
     app.config.from_object(Config)
     
     # Ensure we have a secret key
@@ -63,8 +64,30 @@ def create_app():
         os.makedirs(app.config['UPLOAD_FOLDER'])
 
     # Initialize extensions
-    mysql.init_app(app)
     csrf.init_app(app)
+    
+    # Register database teardown
+    app.teardown_appcontext(close_db)
+    
+    # Test MySQL connection
+    app.logger.info(f"MySQL Config - HOST: {app.config.get('MYSQL_HOST')}, USER: {app.config.get('MYSQL_USER')}, DB: {app.config.get('MYSQL_DB')}")
+    
+    @app.before_first_request
+    def test_mysql_connection():
+        """Test database connection on first request"""
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1 AS test")
+            result = cursor.fetchone()
+            cursor.close()
+            connection.close()
+            app.logger.info(f"✓ MySQL connection successful - Test result: {result}")
+        except Exception as e:
+            app.logger.error(f"✗ MySQL connection failed: {str(e)}")
+            import traceback
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
+
 
     # Register custom Jinja filters
     app.jinja_env.filters['format_time'] = format_time_filter
@@ -96,33 +119,175 @@ def create_app():
         
         from security import get_accessible_departments
         return get_accessible_departments(session.get('user_id'))
+    
+    @app.context_processor
+    def inject_branding():
+        """Make branding settings and user profile available to all templates"""
+        branding_settings = {}
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute("SELECT setting_key, setting_value FROM branding_settings")
+            settings = cursor.fetchall()
+            for row in settings:
+                branding_settings[row['setting_key']] = row['setting_value']
+            cursor.close()
+            connection.close()
+        except:
+            pass  # If table doesn't exist yet, use defaults
+        
+        # Ensure session always has current profile_photo from database
+        if 'user_id' in session and 'profile_photo' not in session:
+            try:
+                connection = get_db_connection()
+                cursor = connection.cursor(dictionary=True)
+                cursor.execute("SELECT profile_photo FROM users WHERE id = %s", (session['user_id'],))
+                result = cursor.fetchone()
+                if result and result['profile_photo']:
+                    session['profile_photo'] = result['profile_photo']
+                else:
+                    session['profile_photo'] = 'default-avatar.svg'
+                cursor.close()
+                connection.close()
+            except:
+                pass
+        
+        return dict(branding=branding_settings)
 
-    # Setup Logging
+    # Setup Logging - Capture ALL terminal output to app.log
     log_file = app.config.get('LOG_FILE', 'app.log')
-    handler = RotatingFileHandler(log_file, maxBytes=10000, backupCount=3)
-    handler.setLevel(logging.INFO)
+    
+    # File handler for all logs
+    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)  # 10MB per file
+    file_handler.setLevel(logging.DEBUG)  # Capture everything
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    app.logger.addHandler(handler)
-    app.logger.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    
+    # Console handler for terminal output
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    
+    # Configure root logger (captures everything from all modules)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Capture all levels
+    
+    # Clear any existing handlers to avoid duplicates
+    root_logger.handlers.clear()
+    
+    # Add handlers to root logger only (all child loggers will inherit)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    # Set specific logger levels (they inherit handlers from root)
+    app.logger.setLevel(logging.DEBUG)
+    logging.getLogger('werkzeug').setLevel(logging.INFO)  # Flask dev server
+    logging.getLogger('MySQLdb').setLevel(logging.WARNING)  # Only warnings/errors from DB
 
+    # Setup session activity tracking
+    @app.before_request
+    def ensure_session_cookie():
+        """Ensure Flask creates a session cookie on every request"""
+        if not session.get('_csrf_initialized'):
+            session['_csrf_initialized'] = True
+            session.modified = True
+    
+    @app.before_request
+    def track_session_activity():
+        from session_manager import session_activity_tracker
+        session_activity_tracker()
+    
+    # Maintenance mode middleware
+    @app.before_request
+    def check_maintenance_mode():
+        from flask import request, render_template, session
+        
+        # Skip maintenance check for static files and health check
+        if request.path.startswith('/static/') or request.path == '/health':
+            return None
+        
+        # Check if maintenance mode is enabled
+        if app.config.get('MAINTENANCE_MODE', False):
+            # Allow Super Admin access during maintenance
+            if session.get('role') == 'Super Admin':
+                return None
+            
+            # Show maintenance page for all other users
+            return render_template('maintenance.html'), 503
+        
+        return None
+    
+    # Make BASE_URL and institution details available in all templates
+    @app.context_processor
+    def inject_globals():
+        return {
+            'base_url': app.config.get('BASE_URL', ''),
+            'institution_name': app.config.get('INSTITUTION_NAME', 'Institution'),
+            'institution_short_name': app.config.get('INSTITUTION_SHORT_NAME', 'INST'),
+            'institution_email': app.config.get('INSTITUTION_EMAIL', ''),
+            'institution_phone': app.config.get('INSTITUTION_PHONE', ''),
+        }
+    
     with app.app_context():
-        # Import and register blueprints
         from routes.auth_routes import auth_bp
-        from routes.admin_routes import admin_bp
         from routes.academic_routes import academic_bp
-        from routes.teacher_routes import teacher_bp
-        from routes.student_routes import student_bp
         from routes.user_management_routes import user_mgmt_bp
         from routes.profile_routes import profile_bp
+        from routes.faculty import teacher_bp
+        from routes.students import student_bp
+        
+        # Import modular admin routes
+        from routes.admin import (
+            students_bp as admin_students_bp, 
+            faculty_bp as admin_faculty_bp, 
+            rooms_bp, 
+            timetable_bp, 
+            holiday_bp, 
+            invitations_bp, 
+            proxy_bp,
+            audit_logs_bp,
+            dashboard_bp,
+            departments_bp,
+            api_bp,
+            permissions_bp,
+            shift_management,
+            branding
+        )
 
+        # Register core blueprints
         app.register_blueprint(auth_bp)
-        app.register_blueprint(admin_bp)
         app.register_blueprint(academic_bp)
-        app.register_blueprint(teacher_bp)
-        app.register_blueprint(student_bp)
         app.register_blueprint(user_mgmt_bp)
         app.register_blueprint(profile_bp)
+        
+        # Register role-specific blueprints
+        app.register_blueprint(teacher_bp)
+        app.register_blueprint(student_bp)
+        
+        # Register modular admin blueprints
+        app.register_blueprint(admin_students_bp)
+        app.register_blueprint(admin_faculty_bp)
+        app.register_blueprint(rooms_bp)
+        app.register_blueprint(timetable_bp)
+        app.register_blueprint(holiday_bp)
+        app.register_blueprint(invitations_bp)
+        app.register_blueprint(proxy_bp)
+        app.register_blueprint(shift_management.shift_bp)
+        
+        # Register security and utility admin blueprints
+        app.register_blueprint(audit_logs_bp)
+        app.register_blueprint(dashboard_bp)
+        app.register_blueprint(departments_bp)
+        app.register_blueprint(api_bp)
+        app.register_blueprint(permissions_bp)
+        app.register_blueprint(branding.branding_bp)
+        
+        # Initialize branding settings
+        branding.init_app(app)
+        
+        # Register error handlers
+        from routes.admin.error_handlers import error_handlers_bp
+        app.register_blueprint(error_handlers_bp)
         
         app.logger.info("Blueprints registered successfully.")
 
@@ -144,6 +309,23 @@ def create_app():
         flash('Session expired or invalid request (CSRF token). Please try again.', 'danger')
         return redirect(url_for('auth.login'))
 
+    # Register template helpers for permission checks
+    from template_helpers import register_template_helpers
+    register_template_helpers(app)
+    
+    # Health check endpoint (bypasses maintenance mode)
+    @app.route('/health')
+    def health_check():
+        from datetime import datetime
+        from flask import jsonify
+        return jsonify({
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "maintenance_mode": app.config.get('MAINTENANCE_MODE', False),
+            "base_url": app.config.get('BASE_URL', ''),
+            "institution": app.config.get('INSTITUTION_NAME', '')
+        })
+    
     app.logger.info("College Timetable Management System application created.")
     return app
 

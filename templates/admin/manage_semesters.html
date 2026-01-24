@@ -14,9 +14,11 @@
                         <h2 class="text-lg font-bold text-gray-800">Semester Config</h2>
                         <p class="text-xs text-gray-500">Academic calendars & credits</p>
                     </div>
+                    {% if user_has_perm('semesters_add') %}
                     <button onclick="showAddModal()" class="xl:hidden bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded shadow text-sm transition-colors">
                         <i class="fas fa-plus"></i>
                     </button>
+                    {% endif %}
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto items-end md:items-center flex-wrap">
@@ -41,9 +43,11 @@
                         <input type="text" id="customSearch" class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500" placeholder="Search semester...">
                     </div>
 
+                    {% if user_has_perm('semesters_add') %}
                     <button onclick="showAddModal()" class="hidden xl:flex bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded shadow text-xs items-center transition-colors whitespace-nowrap">
                         <i class="fas fa-plus mr-2"></i> Add Semester
                     </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -100,12 +104,16 @@
 
                         <td class="px-4 py-2 text-right whitespace-nowrap">
                             <div class="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                                {% if user_has_perm('semesters_change') %}
                                 <button onclick="editSemester(this)" data-sem='{{ sem|tojson }}' class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                {% endif %}
+                                {% if user_has_perm('semesters_delete') %}
                                 <button onclick="deleteSemester({{ sem.id }}, '{{ sem.semester_name }}')" class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" title="Delete">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

@@ -14,9 +14,11 @@
                         <h2 class="text-lg font-bold text-gray-800">Allocations</h2>
                         <p class="text-xs text-gray-500">Assign subjects & track workload</p>
                     </div>
+                    {% if user_has_perm('allocations_add') %}
                     <button onclick="showAddModal()" class="lg:hidden bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded shadow text-sm transition-colors">
                         <i class="fas fa-plus"></i>
                     </button>
+                    {% endif %}
                 </div>
 
                 <form method="GET" action="{{ url_for('academic.manage_allocations') }}" class="contents">
@@ -54,9 +56,11 @@
                             <a href="{{ url_for('academic.manage_allocations') }}" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-xs transition-colors" title="Clear Filters">
                                 <i class="fas fa-sync-alt"></i>
                             </a>
+                            {% if user_has_perm('allocations_add') %}
                             <button type="button" onclick="showAddModal()" class="hidden lg:flex bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded shadow text-xs items-center transition-colors whitespace-nowrap">
                                 <i class="fas fa-plus mr-2"></i> Add New
                             </button>
+                            {% endif %}
                         </div>
                     </div>
                 </form>
@@ -130,14 +134,18 @@
 
                         <td class="px-4 py-2 align-middle text-right whitespace-nowrap">
                             <div class="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                                {% if user_has_perm('allocations_change') %}
                                 <button data-alloc='{{ a|tojson }}' onclick="editAllocationFromDataset(this)" 
                                     class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                {% endif %}
+                                {% if user_has_perm('allocations_delete') %}
                                 <button data-id="{{ a.id }}" data-name="{{ a.faculty_name }} - {{ a.subject_name }}" onclick="deleteAllocationFromDataset(this)" 
                                     class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" title="Delete">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

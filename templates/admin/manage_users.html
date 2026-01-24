@@ -1,183 +1,218 @@
 {% extends "admin/_layout.html" %}
 
 {% block title %}Manage Users{% endblock %}
+{% block header_title %}User Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Ultra Compact Scrollbar */
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Dense Table Styling */
+    .table-dense th, .table-dense td { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+    .table-dense tr { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    
+    /* Sticky Header Z-Index fix */
+    thead.sticky { z-index: 20; }
+    
+    /* Fade Animation */
+    .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="flex flex-col h-[calc(100vh-80px)] space-y-4 p-4 md:p-6 fade-in">
+<div class="fade-in flex flex-col h-[calc(100vh-110px)] max-w-full">
 
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800 tracking-tight">User Management</h1>
-            <p class="text-slate-500 text-sm">Administer accounts, roles, and system access.</p>
-        </div>
-        <div class="flex gap-3">
-            <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm font-medium text-sm flex items-center transition-all" data-bs-toggle="modal" data-bs-target="#inviteModal">
-                <i class="fas fa-paper-plane mr-2"></i> Invite User
-            </button>
-        </div>
-    </div>
-
-    {% if request.args.get('highlight') == 'permissions' %}
-    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm shrink-0">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <i class="fas fa-info-circle text-blue-400"></i>
+    <div class="bg-white border border-gray-200/80 rounded-t-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] shrink-0 z-30 relative">
+        
+        <div class="flex items-center gap-4">
+            <div class="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl border border-indigo-100 shadow-sm">
+                <i class="fas fa-users-cog text-lg"></i>
             </div>
-            <div class="ml-3">
-                <p class="text-sm text-blue-700">
-                    <strong>Permissions Mode:</strong> Click the <i class="fas fa-key px-1"></i> icon in the Actions column to configure granular permissions.
-                </p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
-        <form method="GET" action="{{ url_for('user_mgmt_bp.manage_users') }}" class="flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between">
-            
-            <div class="flex flex-col md:flex-row gap-3 w-full lg:w-auto flex-grow">
-                <div class="relative w-full md:w-64">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i class="fas fa-search text-slate-400"></i>
-                    </div>
-                    <input type="text" name="search" value="{{ search or '' }}" placeholder="Search users..." 
-                           class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+            <div>
+                <h2 class="text-sm font-bold text-gray-800 leading-tight tracking-tight">System Users</h2>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <p class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{{ users|length }} Accounts</p>
                 </div>
+            </div>
+            
+            <div id="bulk-actions" class="hidden ml-2 border-l pl-4 border-gray-200 flex items-center gap-2">
+                {% if user_has_perm('users_change_user') %}
+                <button type="button" id="bulkActivateBtn" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors" title="Activate Selected">
+                    <i class="fas fa-check-circle"></i>
+                </button>
+                <button type="button" id="bulkDeactivateBtn" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors" title="Deactivate Selected">
+                    <i class="fas fa-ban"></i>
+                </button>
+                {% endif %}
+                {% if user_has_perm('users_delete_user') %}
+                <button type="button" id="bulkDeleteBtn" class="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Selected">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
 
-                <select name="role" class="w-full md:w-40 py-2 px-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+        <form method="GET" action="{{ url_for('user_mgmt_bp.manage_users') }}" class="flex flex-wrap items-center gap-2.5">
+            
+            <div class="relative group">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-xs group-focus-within:text-indigo-500 transition-colors"></i>
+                <input type="text" name="search" value="{{ search or '' }}" placeholder="Search users..." 
+                       class="pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200/80 rounded-xl text-xs font-medium w-32 focus:w-48 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all outline-none shadow-sm">
+            </div>
+
+            <div class="relative">
+                <select name="role" onchange="this.form.submit()" 
+                        class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors w-24">
                     <option value="">All Roles</option>
                     {% for r in roles %}
                         <option value="{{ r[0] }}" {% if role_filter==r[0] %}selected{% endif %}>{{ r[0] }}</option>
                     {% endfor %}
                 </select>
+                <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
+            </div>
 
-                <select name="status" class="w-full md:w-40 py-2 px-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                    <option value="">All Status</option>
+            <div class="relative">
+                <select name="status" onchange="this.form.submit()" 
+                        class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors w-24">
+                    <option value="">Status</option>
                     <option value="active" {% if status_filter=='active' %}selected{% endif %}>Active</option>
                     <option value="inactive" {% if status_filter=='inactive' %}selected{% endif %}>Inactive</option>
                 </select>
-
-                <button type="submit" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors">
-                    Filter
-                </button>
+                <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
             </div>
 
-            <div class="flex items-center gap-2 border-t lg:border-t-0 border-slate-100 pt-3 lg:pt-0 w-full lg:w-auto justify-between lg:justify-end">
-                <div class="flex gap-2">
-                    <button type="button" id="bulkActivateBtn" class="p-2 text-green-600 hover:bg-green-50 rounded-lg border border-transparent hover:border-green-100 transition-all" title="Activate Selected">
-                        <i class="fas fa-check-circle"></i>
-                    </button>
-                    <button type="button" id="bulkDeactivateBtn" class="p-2 text-amber-600 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-100 transition-all" title="Deactivate Selected">
-                        <i class="fas fa-ban"></i>
-                    </button>
-                    <button type="button" id="bulkDeleteBtn" class="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all" title="Delete Selected">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-                <div class="h-6 w-px bg-slate-300 mx-1 hidden lg:block"></div>
-                <a href="{{ url_for('user_mgmt_bp.export_users', role=role_filter, status=status_filter, search=search) }}" 
-                   class="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50 transition-colors">
-                    <i class="fas fa-download"></i> <span class="hidden sm:inline">Export</span>
-                </a>
-            </div>
+            <div class="h-6 w-px bg-gray-200 mx-1"></div>
+
+            {% if user_has_perm('users_export_data') %}
+            <a href="{{ url_for('user_mgmt_bp.export_users', role=role_filter, status=status_filter, search=search) }}" class="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all" title="Export Data">
+                <i class="fas fa-download text-sm"></i>
+            </a>
+            {% endif %}
+
+            {% if user_has_perm('users_add_user') %}
+            <button type="button" data-bs-toggle="modal" data-bs-target="#inviteModal" class="group flex items-center px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all transform active:scale-95">
+                <i class="fas fa-paper-plane mr-2 text-[10px]"></i> Invite User
+            </button>
+            {% endif %}
         </form>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm flex-grow overflow-hidden flex flex-col">
-        <div class="overflow-auto custom-scrollbar flex-grow">
-            <table class="min-w-full divide-y divide-slate-200" id="usersTable">
-                <thead class="bg-slate-50 sticky top-0 z-10 shadow-sm">
+    <div class="bg-white border-x border-b border-gray-200 rounded-b-2xl flex-1 overflow-hidden flex flex-col relative shadow-[0_2px_15px_-3px_rgba(0,0,0,0.02)]">
+        <div class="overflow-auto custom-scroll flex-1">
+            <table class="w-full text-left border-collapse table-dense" id="usersTable">
+                <thead class="bg-gray-50/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                     <tr>
-                        <th class="px-6 py-3 w-10">
-                            <input type="checkbox" id="selectAll" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4">
+                        <th class="px-5 py-2.5 w-10 text-center">
+                            {% if user_has_perm('users_change_user') or user_has_perm('users_delete_user') %}
+                            <input type="checkbox" id="selectAll" class="rounded text-indigo-600 w-3.5 h-3.5 border-gray-300 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer">
+                            {% endif %}
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Last Login</th>
-                        <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">User</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Role</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Status</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:table-cell">Last Login</th>
+                        <th class="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-slate-100">
+                
+                <tbody class="divide-y divide-gray-100 text-xs bg-white">
                     {% if users is defined and users|length > 0 %}
-                        {% for id, username, role, status, last_login, display_name in users %}
-                        <tr class="hover:bg-slate-50/80 transition-colors group">
-                            <td class="px-6 py-4">
-                                <input type="checkbox" class="row-check rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4" value="{{ id }}">
+                        {% for user in users %}
+                        <tr class="hover:bg-indigo-50/40 group transition-colors">
+                            <td class="px-5 py-2 text-center">
+                                {% if user_has_perm('users_change_user') or user_has_perm('users_delete_user') %}
+                                <input type="checkbox" class="row-check rounded text-indigo-600 w-3.5 h-3.5 border-gray-300 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer" value="{{ user['id'] }}">
+                                {% endif %}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex items-center">
-                                    <div class="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                                        {{ username[0].upper() if username else '?' }}
+
+                            <td class="px-5 py-2 whitespace-nowrap">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-50 shadow-sm">
+                                        {{ user['username'][0].upper() if user['username'] else '?' }}
                                     </div>
-                                    <div class="ml-4">
-                                        <div class="text-sm font-medium text-slate-900">{{ display_name or username }}</div>
-                                        {% if display_name and display_name != username %}
-                                            <div class="text-xs text-slate-500">@{{ username }}</div>
-                                        {% else %}
-                                            <div class="text-xs text-slate-500">ID: #{{ id }}</div>
-                                        {% endif %}
+                                    <div>
+                                        <div class="font-semibold text-gray-800 leading-none mb-0.5 group-hover:text-indigo-700 transition-colors">{{ user['display_name'] or user['username'] }}</div>
+                                        <div class="text-[9px] text-gray-400 font-medium">@{{ user['username'] }}</div>
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                    {% if role == 'Admin' %} bg-purple-100 text-purple-800
-                                    {% elif role == 'Teacher' %} bg-blue-100 text-blue-800
-                                    {% else %} bg-slate-100 text-slate-800 {% endif %}">
-                                    {{ role }}
+
+                            <td class="px-5 py-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-sm
+                                    {% if user['role'] == 'Admin' %} bg-purple-50 text-purple-700 border-purple-100
+                                    {% elif user['role'] == 'Teacher' %} bg-blue-50 text-blue-700 border-blue-100
+                                    {% else %} bg-gray-50 text-gray-600 border-gray-100 {% endif %}">
+                                    {{ user['role'] }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                {% if status == 'active' %}
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+
+                            <td class="px-5 py-2 text-center">
+                                {% if user['status'] == 'active' %}
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">
+                                        <span class="w-1 h-1 rounded-full bg-emerald-500"></span> Active
                                     </span>
                                 {% else %}
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactive
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">
+                                        <span class="w-1 h-1 rounded-full bg-gray-400"></span> Inactive
                                     </span>
                                 {% endif %}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                {{ last_login or 'Never' }}
+
+                            <td class="px-5 py-2 hidden md:table-cell text-gray-500 font-mono text-[10px]">
+                                {{ user['last_login'] or 'Never' }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+
+                            <td class="px-5 py-2 text-right">
                                 <div class="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                     
-                                    <button type="button" class="edit-btn p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" data-user-id="{{ id }}" title="Edit User">
-                                        <i class="fas fa-pen"></i>
+                                    {% if user_has_perm('users_change_user') %}
+                                    <button type="button" class="edit-btn p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all" data-user-id="{{ user['id'] }}" title="Edit">
+                                        <i class="fas fa-pen text-[10px]"></i>
                                     </button>
+                                    {% endif %}
                                     
-                                    <a href="{{ url_for('user_mgmt_bp.manage_user_permissions', user_id=id) }}" 
-                                       class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Manage Permissions">
-                                        <i class="fas fa-key"></i>
+                                    {% if user_has_perm('users_manage_permissions') %}
+                                    <a href="{{ url_for('user_mgmt_bp.manage_user_permissions', user_id=user['id']) }}" 
+                                       class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all" title="Permissions">
+                                        <i class="fas fa-key text-[10px]"></i>
                                     </a>
+                                    {% endif %}
                                     
-                                    <button type="button" class="toggle-btn p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors" data-user-id="{{ id }}" title="Toggle Status">
-                                        <i class="fas fa-power-off"></i>
+                                    {% if user_has_perm('users_change_user') %}
+                                    <button type="button" class="toggle-btn p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-all" data-user-id="{{ user['id'] }}" title="Toggle Status">
+                                        <i class="fas fa-power-off text-[10px]"></i>
                                     </button>
+                                    {% endif %}
 
-                                    <button type="button" class="reset-btn p-1.5 text-slate-600 hover:bg-slate-100 rounded-md transition-colors" data-user-id="{{ id }}" title="Reset Password">
-                                        <i class="fas fa-lock-open"></i>
+                                    {% if user_has_perm('users_change_password') %}
+                                    <button type="button" class="reset-btn p-1.5 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-all" data-user-id="{{ user['id'] }}" title="Reset Password">
+                                        <i class="fas fa-lock-open text-[10px]"></i>
                                     </button>
+                                    {% endif %}
                                     
-                                    <button type="button" class="delete-btn p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors" data-user-id="{{ id }}" title="Delete User">
-                                        <i class="fas fa-trash"></i>
+                                    {% if user_has_perm('users_delete_user') %}
+                                    <button type="button" class="delete-btn p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all" data-user-id="{{ user['id'] }}" title="Delete">
+                                        <i class="fas fa-trash text-[10px]"></i>
                                     </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="6" class="px-6 py-12 text-center text-slate-500">
-                                <div class="flex flex-col items-center">
-                                    <div class="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-                                        <i class="fas fa-search text-slate-400"></i>
+                            <td colspan="6" class="px-6 py-16 text-center text-gray-400">
+                                <div class="flex flex-col items-center justify-center">
+                                    <div class="h-12 w-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fas fa-search text-gray-300"></i>
                                     </div>
-                                    <p class="text-base font-medium text-slate-900">No users found</p>
-                                    <p class="text-sm">Try adjusting your search or filters.</p>
+                                    <p class="text-xs font-medium">No users found.</p>
                                 </div>
                             </td>
                         </tr>
@@ -185,10 +220,11 @@
                 </tbody>
             </table>
         </div>
-        <div class="bg-slate-50 border-t border-slate-200 px-6 py-3 flex justify-between items-center text-xs text-slate-500 shrink-0">
-            <span>Showing {{ users|length if users else 0 }} users</span>
+        
+        <div class="bg-gray-50/80 border-t border-gray-200 px-5 py-2 flex justify-between items-center text-[10px] text-gray-500 font-medium shrink-0 h-10">
+            <span>Showing {{ users|length if users else 0 }} records</span>
             <div class="flex items-center gap-1">
-                <i class="fas fa-shield-alt text-indigo-400"></i> User Management
+                <i class="fas fa-shield-alt text-indigo-300"></i> System Access
             </div>
         </div>
     </div>
@@ -197,61 +233,69 @@
 <div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-2xl rounded-2xl overflow-hidden">
-            <div class="modal-header bg-white border-b border-slate-100 p-6">
-                <h5 class="modal-title font-bold text-lg text-slate-800 flex items-center">
-                    <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mr-3">
-                        <i class="fas fa-user-edit text-sm"></i>
-                    </span>
-                    Edit User Details
+            <div class="modal-header bg-white border-b border-gray-100 p-5">
+                <h5 class="modal-title font-extrabold text-gray-800 text-lg flex items-center">
+                    Edit Account
                 </h5>
                 <button type="button" class="btn-close opacity-50 hover:opacity-100" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-6 bg-white">
-                <form id="editUserForm" method="POST" class="space-y-5">
+            <div class="modal-body p-6 bg-white space-y-4">
+                <form id="editUserForm" method="POST" class="space-y-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" id="userId" name="user_id">
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div class="col-span-1">
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Username</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Username</label>
                             <input type="text" id="username" name="username" required
-                                   class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 focus:bg-white transition-all">
+                                   class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 transition-all outline-none">
                         </div>
-                        
-                        <div class="col-span-1">
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Role</label>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Role</label>
                             <select id="role" name="role" required
-                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
-                                <option value="Admin">Admin</option>
-                                <option value="Teacher">Teacher</option>
-                                <option value="Student">Student</option>
+                                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white outline-none">
+                                {% for r in roles %}
+                                <option value="{{ r[0] }}">{{ r[0] }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Email Address</label>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Department</label>
+                        <select id="department_id" name="department_id"
+                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white outline-none">
+                            <option value="">No Department</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Email</label>
                         <input type="email" id="email" name="email"
-                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 focus:bg-white transition-all">
+                               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1.5">
-                            New Password <span class="text-slate-400 font-normal normal-case">(Optional)</span>
-                        </label>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Password <span class="text-gray-400 font-normal normal-case">(Optional)</span></label>
                         <input type="password" id="password" name="password" minlength="8" placeholder="Leave blank to keep current"
-                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 focus:bg-white transition-all">
+                               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
                     </div>
 
-                    <div class="flex items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <input type="checkbox" id="is_active" name="is_active" class="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer">
-                        <label for="is_active" class="ml-2 text-sm font-medium text-slate-700 cursor-pointer">Active Account Status</label>
+                    <div class="flex flex-col gap-2 pt-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="is_hod" name="is_hod" class="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500">
+                            <span class="text-xs font-bold text-gray-700">Head of Department (HOD)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="is_active" name="is_active" class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                            <span class="text-xs font-bold text-gray-700">Active Account Status</span>
+                        </label>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer bg-slate-50 p-4 flex justify-end gap-2 border-t border-slate-100">
-                <button type="button" class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 text-sm font-medium transition-colors" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm transition-colors" onclick="saveUserChanges()">Save Changes</button>
+            <div class="modal-footer bg-gray-50 p-4 border-t border-gray-100 flex gap-2">
+                <button type="button" class="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-white transition-all" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-md transition-all" onclick="saveUserChanges()">Save Changes</button>
             </div>
         </div>
     </div>
@@ -260,35 +304,29 @@
 <div class="modal fade" id="inviteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-2xl rounded-2xl overflow-hidden">
-            <div class="modal-header bg-gradient-to-r from-indigo-600 to-blue-600 p-6">
+            <div class="modal-header bg-gradient-to-r from-indigo-600 to-blue-600 p-5">
                 <h5 class="modal-title font-bold text-lg text-white flex items-center">
-                    <i class="fas fa-envelope-open-text mr-3 opacity-80"></i> Send Invitation
+                    <i class="fas fa-paper-plane mr-3 text-white/80"></i> Invite User
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white opacity-80 hover:opacity-100" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('admin.create_invitation') }}">
-                <div class="modal-body p-6 space-y-5 bg-white">
+            <form method="POST" action="{{ url_for('invitations.create_invitation') }}">
+                <div class="modal-body p-6 space-y-4 bg-white">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fas fa-user"></i></span>
-                            <input type="text" name="name" required class="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Full Name</label>
+                        <input type="text" name="name" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                     </div>
                     
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fas fa-envelope"></i></span>
-                            <input type="email" name="email" required class="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Email</label>
+                        <input type="email" name="email" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                     </div>
                     
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                        <select name="role" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Role</label>
+                        <select name="role" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white outline-none">
                             <option value="Teacher">Teacher</option>
                             <option value="Student">Student</option>
                         </select>
@@ -296,43 +334,22 @@
                     
                     <input type="hidden" name="days_valid" value="7" />
                     
-                    <div class="text-xs text-slate-500 flex items-start bg-slate-50 p-3 rounded border border-slate-100">
-                        <i class="fas fa-info-circle text-indigo-400 mr-2 mt-0.5"></i>
-                        The invitation link will be sent via email and will remain valid for 7 days.
+                    <div class="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                        <i class="fas fa-info-circle mt-0.5"></i>
+                        <span>Invitation link expires in 7 days.</span>
                     </div>
                 </div>
-                <div class="modal-footer bg-slate-50 p-4 border-t border-slate-100">
-                    <button type="button" class="px-4 py-2 text-slate-600 font-medium text-sm hover:text-slate-800" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm flex items-center gap-2">
-                        <i class="fas fa-paper-plane text-xs"></i> Send Invite
-                    </button>
+                <div class="modal-footer bg-gray-50 p-4 border-t border-gray-100">
+                    <button type="submit" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-md transition-all">Send Invitation</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<div class="position-fixed bottom-0 end-0 p-4" style="z-index: 9999">
+<div class="position-fixed bottom-4 end-4 z-50">
     <div id="toastContainer" class="flex flex-col gap-2"></div>
 </div>
-
-<style>
-    /* Custom Scrollbar for better UI inside the table container */
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: #f1f5f9;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-    }
-</style>
 
 {% endblock %}
 
@@ -343,254 +360,140 @@ document.addEventListener('DOMContentLoaded', function () {
     window.__usersPageInit = true;
     const csrfToken = '{{ csrf_token() }}';
 
-    // Toast helper with Tailwind styling
+    // Toast helper
     function showToast(message, type='info', timeout=4000) {
         const container = document.getElementById('toastContainer');
-        if (!container) return; // Fallback
+        if (!container) return;
         
-        const colors = {
-            'success': 'bg-emerald-600',
-            'danger': 'bg-red-600',
-            'warning': 'bg-amber-500',
-            'info': 'bg-indigo-600'
-        };
+        const colors = { 'success': 'bg-emerald-600', 'danger': 'bg-red-600', 'warning': 'bg-amber-500', 'info': 'bg-indigo-600' };
         const bgColor = colors[type] || colors['info'];
 
         const toastEl = document.createElement('div');
-        toastEl.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transform transition-all duration-300 translate-y-2 opacity-0 min-w-[300px]`;
-        toastEl.innerHTML = `
-            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-info-circle'} text-lg"></i>
-            <span class="text-sm font-medium flex-grow">${message}</span>
-            <button type="button" class="opacity-70 hover:opacity-100"><i class="fas fa-times"></i></button>
-        `;
+        toastEl.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 transform transition-all duration-300 translate-y-2 opacity-0 min-w-[300px] text-sm`;
+        toastEl.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-info-circle'}"></i><span class="flex-grow font-medium">${message}</span><button type="button" class="opacity-70 hover:opacity-100"><i class="fas fa-times"></i></button>`;
         
         container.appendChild(toastEl);
-        
-        // Animate in
-        requestAnimationFrame(() => {
-            toastEl.classList.remove('translate-y-2', 'opacity-0');
-        });
+        requestAnimationFrame(() => toastEl.classList.remove('translate-y-2', 'opacity-0'));
 
-        // Close logic
-        const close = () => {
-            toastEl.classList.add('opacity-0', 'translate-y-2');
-            setTimeout(() => toastEl.remove(), 300);
-        };
-
+        const close = () => { toastEl.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => toastEl.remove(), 300); };
         toastEl.querySelector('button').onclick = close;
         if(timeout) setTimeout(close, timeout);
     }
 
-    // Initialize DataTables (Keep logic, reduce visual clutter)
-    if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
-        if (!jQuery.fn.dataTable.isDataTable('#usersTable')) {
-            jQuery('#usersTable').DataTable({
-                paging: false, // We use scrolling container instead
-                info: false,
-                searching: false, // Using custom search
-                order: [[1, 'asc']],
-                columnDefs: [{ orderable: false, targets: [0, 5] }] // Disable sorting on Checkbox & Actions
-            });
-        }
-    }
-
-    // Event delegation for row actions
-    const usersTable = document.getElementById('usersTable');
-    usersTable?.addEventListener('click', function (e) {
-        // Handle icon clicks (fa-icon) bubbling up to button
-        const btn = e.target.closest('button');
-        if (!btn) return;
-
-        const editBtn = btn.classList.contains('edit-btn') ? btn : null;
-        const delBtn = btn.classList.contains('delete-btn') ? btn : null;
-        const resetBtn = btn.classList.contains('reset-btn') ? btn : null;
-        const toggleBtn = btn.classList.contains('toggle-btn') ? btn : null;
-        
-        if (editBtn) {
-            const userId = editBtn.getAttribute('data-user-id');
-            openEditModal(userId);
-        } else if (delBtn) {
-            const userId = delBtn.getAttribute('data-user-id');
-            confirmAndDeleteUser(userId);
-        } else if (resetBtn) {
-            const userId = resetBtn.getAttribute('data-user-id');
-            if (resetBtn.dataset.pending === '1') return;
-            resetBtn.dataset.pending = '1';
-            resetUserPassword(userId).finally(() => { delete resetBtn.dataset.pending; });
-        } else if (toggleBtn) {
-            const userId = toggleBtn.getAttribute('data-user-id');
-            if (toggleBtn.dataset.pending === '1') return;
-            toggleBtn.dataset.pending = '1';
-            toggleUserStatus(userId).finally(() => { delete toggleBtn.dataset.pending; });
-        }
-    });
-
-    // Select all
+    // Select all logic
     const selectAll = document.getElementById('selectAll');
     selectAll?.addEventListener('change', (e) => {
         document.querySelectorAll('.row-check').forEach(cb => cb.checked = selectAll.checked);
+        updateBulkActions();
     });
 
-    // Bulk actions
-    function getSelectedIds() {
-        return Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+    // Bulk actions visibility
+    function updateBulkActions() {
+        const count = document.querySelectorAll('.row-check:checked').length;
+        const bulkDiv = document.getElementById('bulk-actions');
+        if(count > 0) {
+            bulkDiv.classList.remove('hidden');
+            bulkDiv.classList.add('flex');
+        } else {
+            bulkDiv.classList.add('hidden');
+            bulkDiv.classList.remove('flex');
+        }
     }
     
-    function postBulk(action, extra = {}) {
-        const ids = getSelectedIds();
-        if (ids.length === 0) { showToast('Please select at least one user.', 'warning'); return; }
+    document.querySelectorAll('.row-check').forEach(cb => cb.addEventListener('change', updateBulkActions));
+
+    // Bulk Post Helper
+    function postBulk(action) {
+        const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+        if (ids.length === 0) return;
         
         const body = new URLSearchParams();
         body.set('csrf_token', csrfToken);
         body.set('action', action);
         ids.forEach(id => body.append('user_ids[]', id));
-        if (extra.new_password) body.set('new_password', extra.new_password);
         
-        fetch('/admin/users/bulk', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, 
-            body 
-        })
+        fetch('/admin/users/bulk', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body })
           .then(r => r.json())
           .then(j => {
             if (j.error) throw new Error(j.error);
-            showToast(j.message || 'Operation successful', 'success');
-            if (action === 'delete') {
-                ids.forEach(id => document.querySelector(`input.row-check[value="${id}"]`)?.closest('tr')?.remove());
-            } else {
-                setTimeout(() => location.reload(), 800);
-            }
-            if (j.temp_password) showToast('Temporary password: ' + j.temp_password, 'info', 8000);
+            showToast(j.message || 'Success', 'success');
+            setTimeout(() => location.reload(), 800);
           })
-          .catch(err => showToast(err.message || 'Operation failed', 'danger'));
+          .catch(err => showToast(err.message, 'danger'));
     }
     
     document.getElementById('bulkActivateBtn')?.addEventListener('click', () => postBulk('activate'));
     document.getElementById('bulkDeactivateBtn')?.addEventListener('click', () => postBulk('deactivate'));
-    document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
-        if (confirm('Delete selected users? This cannot be undone.')) postBulk('delete');
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => { if (confirm('Delete selected?')) postBulk('delete'); });
+
+    // Row Actions
+    const usersTable = document.getElementById('usersTable');
+    usersTable?.addEventListener('click', function (e) {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+
+        if (btn.classList.contains('edit-btn')) openEditModal(btn.dataset.userId);
+        else if (btn.classList.contains('delete-btn')) confirmAndDeleteUser(btn.dataset.userId);
+        else if (btn.classList.contains('reset-btn')) resetUserPassword(btn.dataset.userId);
+        else if (btn.classList.contains('toggle-btn')) toggleUserStatus(btn.dataset.userId);
     });
 
+    // Edit Modal Logic
     function openEditModal(userId) {
         fetch(`/admin/users/get/${encodeURIComponent(userId)}`)
-            .then(async response => {
-                if (!response.ok) {
-                    const txt = await response.text().catch(() => '');
-                    throw new Error(txt || `Server returned ${response.status}`);
-                }
-                return response.json();
-            })
+            .then(r => r.ok ? r.json() : Promise.reject('Fetch failed'))
             .then(data => {
                 document.getElementById('userId').value = data.id;
                 document.getElementById('username').value = data.username || '';
                 document.getElementById('email').value = data.email || '';
                 document.getElementById('role').value = data.role || 'Student';
+                
+                fetch('/admin/departments/list').then(r => r.json()).then(depts => {
+                    const deptSelect = document.getElementById('department_id');
+                    deptSelect.innerHTML = '<option value="">No Department</option>' +
+                        depts.map(d => `<option value="${d.id}" ${d.id == data.department_id ? 'selected' : ''}>${d.name}</option>`).join('');
+                });
+                
+                document.getElementById('is_hod').checked = data.is_hod || false;
                 document.getElementById('is_active').checked = (data.status === 'active');
                 document.getElementById('password').value = '';
                 new bootstrap.Modal(document.getElementById('editUserModal')).show();
             })
-            .catch(error => {
-                showToast('Error fetching user data: ' + (error.message || error), 'danger');
-            });
+            .catch(err => showToast(err, 'danger'));
     }
 
-    function confirmAndDeleteUser(userId) {
-        if (!confirm('Are you sure you want to delete this user?')) return;
-        fetch(`/admin/users/delete/${encodeURIComponent(userId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ csrf_token: csrfToken })
-        })
-        .then(async response => {
-            if (response.ok) {
-                const row = document.querySelector(`button.delete-btn[data-user-id="${userId}"]`)?.closest('tr');
-                if (row) row.remove();
-                showToast('User deleted successfully', 'success');
-            } else {
-                const txt = await response.text().catch(() => '');
-                throw new Error(txt || 'Delete failed');
-            }
-        })
-        .catch(error => showToast(error.message || 'Error deleting user', 'danger'));
-    }
-
-    function resetUserPassword(userId) {
-        if (!confirm('Reset password for this user?')) return;
-        return fetch(`/admin/users/reset_password/${encodeURIComponent(userId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ csrf_token: csrfToken })
-        })
-        .then(r => r.json())
-        .then(j => {
-            if (j.error) throw new Error(j.error);
-            showToast(j.message || 'Password reset', 'success');
-            if (j.temp_password) showToast('Temporary password: ' + j.temp_password, 'info', 8000);
-        })
-        .catch(err => showToast(err.message || 'Reset failed', 'danger'));
-    }
-
-    function toggleUserStatus(userId) {
-        return fetch(`/admin/users/toggle_status/${encodeURIComponent(userId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ csrf_token: csrfToken })
-        })
-        .then(r => r.json())
-        .then(j => {
-            if (j.error) throw new Error(j.error);
-            showToast('Status updated: ' + j.status, 'success');
-            setTimeout(() => location.reload(), 500);
-        })
-        .catch(err => showToast(err.message || 'Toggle failed', 'danger'));
-    }
-
-    // Save changes handler
+    // Save Changes
     window.saveUserChanges = function () {
         const form = document.getElementById('editUserForm');
         const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        data.is_active = formData.has('is_active');
+        const params = new URLSearchParams(formData);
+        if(!formData.get('is_active')) params.set('status', 'inactive'); 
+        else params.set('status', 'active');
+        if(formData.get('is_hod')) params.set('is_hod', 'on');
 
-        const userId = data.user_id;
-        if (!userId) {
-            showToast('Missing user id', 'danger');
-            return;
-        }
-
-        // Client-side validation
-        if (!data.username || data.username.trim().length < 3) {
-            showToast('Username must be at least 3 characters', 'warning');
-            return;
-        }
-        if (data.email && !/^\S+@\S+\.\S+$/.test(data.email)) {
-            showToast('Email address looks invalid', 'warning');
-            return;
-        }
-        if (data.password && data.password.length > 0 && data.password.length < 8) {
-            showToast('Password must be at least 8 characters', 'warning');
-            return;
-        }
-
-        const params = new URLSearchParams(data);
-        fetch(`/admin/users/edit/${encodeURIComponent(userId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString()
-        })
-        .then(async response => {
-            if (response.ok) {
-                showToast('User updated successfully', 'success');
-                setTimeout(() => location.reload(), 800);
-            } else {
-                const j = await response.json().catch(() => ({}));
-                throw new Error(j.message || 'Update failed');
-            }
-        })
-        .catch(error => {
-            showToast(error.message || 'Error updating user', 'danger');
-        });
+        fetch(`/admin/users/edit/${encodeURIComponent(formData.get('user_id'))}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params
+        }).then(async r => {
+            if (r.ok) { showToast('Updated successfully', 'success'); setTimeout(() => location.reload(), 800); }
+            else { const j = await r.json(); throw new Error(j.message); }
+        }).catch(e => showToast(e.message, 'danger'));
     };
+
+    // Helper functions for other actions (Delete, Reset, Toggle) kept same structure
+    function confirmAndDeleteUser(id) { if(confirm('Delete user?')) postAction(`/admin/users/delete/${id}`); }
+    function resetUserPassword(id) { if(confirm('Reset password?')) postAction(`/admin/users/reset_password/${id}`, true); }
+    function toggleUserStatus(id) { postAction(`/admin/users/toggle_status/${id}`); }
+
+    function postAction(url, showTemp=false) {
+        fetch(url, { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `csrf_token=${csrfToken}` })
+        .then(r => r.json())
+        .then(j => {
+            if(j.error) throw new Error(j.error);
+            showToast(j.message || 'Success', 'success');
+            if(showTemp && j.temp_password) showToast('Temp Password: ' + j.temp_password, 'info', 8000);
+            if(!showTemp) setTimeout(() => location.reload(), 500);
+        }).catch(e => showToast(e.message, 'danger'));
+    }
 });
 </script>
 {% endblock %}

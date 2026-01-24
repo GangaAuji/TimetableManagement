@@ -3,209 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Student Panel{% endblock %} - College Timetable System</title>
+    <title>{% block title %}Student Panel{% endblock %} - {{ branding.site_title or 'Timetable System' }}</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    {% if branding.favicon %}
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
+    {% endif %}
     
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Common Custom Styles -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        sidebar: '{{ branding.sidebar_bg or "#0f172a" }}',
+                        active: '{{ branding.primary_color or "#4f46e5" }}',
+                    }
+                }
+            }
+        }
+    </script>
+    
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     
-    <!-- Page Specific Styles -->
+    <style>
+        /* Custom Scrollbar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Sidebar Transition */
+        .sidebar-transition {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Fade In Animation */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-gradient-to-br from-gray-50 to-gray-100 font-sans">
-    <div class="flex h-screen bg-gray-50">
-        <!-- Sidebar -->
-        <div id="sidebar" class="sidebar fixed inset-y-0 left-0 z-20 md:relative md:translate-x-0 flex flex-col shadow-2xl transition-all duration-300">
-            <!-- Header/Logo -->
-            <div class="px-6 py-4 border-b border-gray-700 flex items-center">
-                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg transition-all duration-300" id="sidebar-icon">
-                    <i class="fas fa-user-graduate text-white text-xl"></i>
+<body class="bg-gray-50 text-gray-800 antialiased font-sans">
+
+    <div id="mobile-overlay" class="fixed inset-0 bg-gray-900/50 z-40 hidden transition-opacity opacity-0 backdrop-blur-sm md:hidden"></div>
+
+    <aside id="sidebar" class="fixed top-0 left-0 z-50 h-screen w-64 bg-sidebar text-white sidebar-transition transform -translate-x-full md:translate-x-0 flex flex-col shadow-xl">
+        
+        <div class="h-16 flex items-center px-4 border-b border-gray-700/50 bg-gray-900/50">
+            <div class="flex items-center space-x-2 flex-1 min-w-0">
+                {% if branding.site_logo %}
+                <img src="{{ url_for('static', filename=branding.site_logo) }}" alt="Logo" class="h-8 w-8 object-contain flex-shrink-0">
+                {% else %}
+                <div class="w-8 h-8 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                    <i class="fas fa-user-graduate text-white text-xs"></i>
                 </div>
-                <span class="sidebar-text font-bold text-xl ml-3 logo-text transition-opacity duration-300">Student Panel</span>
+                {% endif %}
+                <span class="text-base font-bold tracking-wide text-gray-100 truncate" title="{{ branding.student_title or 'Student Panel' }}">{{ branding.student_title or 'Student Panel' }}</span>
             </div>
             
-            <!-- Navigation -->
-            <nav class="flex-1 px-4 py-6 space-y-2">
-                <a href="{{ url_for('student.dashboard') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
-                    <i class="fas fa-tachometer-alt w-6 mr-3"></i>
-                    <span class="sidebar-text font-medium">Dashboard</span>
-                </a>
-                <a href="{{ url_for('student.dashboard') }}" class="nav-link flex items-center px-4 py-3 rounded-lg {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
-                    <i class="fas fa-calendar-alt w-6 mr-3"></i>
-                    <span class="sidebar-text font-medium">My Timetable</span>
-                </a>
-                <a href="#" class="nav-link flex items-center px-4 py-3 rounded-lg opacity-50 cursor-not-allowed">
-                    <i class="fas fa-clipboard-check w-6 mr-3"></i>
-                    <span class="sidebar-text font-medium">Attendance</span>
-                </a>
-                <a href="#" class="nav-link flex items-center px-4 py-3 rounded-lg opacity-50 cursor-not-allowed">
-                    <i class="fas fa-tasks w-6 mr-3"></i>
-                    <span class="sidebar-text font-medium">Assignments</span>
-                </a>
-                <a href="#" class="nav-link flex items-center px-4 py-3 rounded-lg opacity-50 cursor-not-allowed">
-                    <i class="fas fa-chart-line w-6 mr-3"></i>
-                    <span class="sidebar-text font-medium">Results</span>
-                </a>
-            </nav>
+            <button id="close-sidebar" class="ml-2 md:hidden text-gray-400 hover:text-white transition-colors flex-shrink-0">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-6 px-3 space-y-1 no-scrollbar">
             
-            <!-- User Profile & Logout -->
-            <div class="px-4 pb-6">
-                <a href="{{ url_for('profile.view_profile') }}" class="bg-white/10 rounded-lg p-4 mb-4 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 block" id="user-profile">
-                    <div class="flex items-center space-x-3">
-                        {% if session.profile_photo and session.profile_photo != 'default-avatar.svg' %}
-                        <img src="{{ url_for('static', filename=session.profile_photo) }}" 
+            <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Menu</p>
+
+            <a href="{{ url_for('student.dashboard') }}" 
+               class="flex items-center px-3 py-2.5 rounded-lg group transition-all duration-200 
+               {% if request.endpoint == 'student.dashboard' %}bg-active text-white shadow-md{% else %}text-gray-400 hover:bg-white/5 hover:text-gray-100{% endif %}">
+                <i class="fas fa-tachometer-alt w-6 text-center {% if request.endpoint == 'student.dashboard' %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
+                <span class="ml-3 font-medium">Dashboard</span>
+            </a>
+
+            <a href="{{ url_for('student.dashboard') }}" 
+               class="flex items-center px-3 py-2.5 rounded-lg group transition-all duration-200 
+               {% if request.endpoint == 'student.timetable' %}bg-active text-white shadow-md{% else %}text-gray-400 hover:bg-white/5 hover:text-gray-100{% endif %}">
+                <i class="fas fa-calendar-alt w-6 text-center {% if request.endpoint == 'student.timetable' %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
+                <span class="ml-3 font-medium">My Timetable</span>
+            </a>
+
+            <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6 mb-2">Academic</p>
+
+            <a href="#" class="flex items-center px-3 py-2.5 rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors opacity-75">
+                <i class="fas fa-clipboard-check w-6 text-center text-gray-600"></i>
+                <span class="ml-3 font-medium">Attendance</span>
+                <span class="ml-auto text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700">Soon</span>
+            </a>
+            
+            <a href="#" class="flex items-center px-3 py-2.5 rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors opacity-75">
+                <i class="fas fa-tasks w-6 text-center text-gray-600"></i>
+                <span class="ml-3 font-medium">Assignments</span>
+            </a>
+
+            <a href="#" class="flex items-center px-3 py-2.5 rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors opacity-75">
+                <i class="fas fa-chart-line w-6 text-center text-gray-600"></i>
+                <span class="ml-3 font-medium">Results</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-gray-700/50 bg-gray-900/30">
+            <a href="{{ url_for('profile.view_profile') }}" class="flex items-center w-full p-2 rounded-lg hover:bg-white/5 transition-colors mb-3 group">
+                <div class="relative shrink-0">
+                    {% if session.get('profile_photo') and session.profile_photo not in ['default-avatar.svg', 'default-avatar.png', '', None] %}
+                        <img id="student-profile-img" src="{{ url_for('static', filename=session.profile_photo) }}" 
                              alt="Profile" 
-                             class="w-10 h-10 rounded-full object-cover"
-                             onerror="this.outerHTML='<div class=\'w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center font-semibold text-white text-lg\'>{{ (session.name or session.username)[0].upper() }}</div>'">
-                        {% else %}
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center font-semibold text-white text-lg">
+                             class="w-9 h-9 rounded-full object-cover border border-gray-600">
+                        <div id="student-profile-fallback" class="hidden w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
                             {{ (session.name or session.username)[0].upper() }}
                         </div>
-                        {% endif %}
-                        <div class="sidebar-text flex-1 min-w-0 transition-opacity duration-300">
-                            <p class="text-sm font-medium text-white truncate">{{ session.name or session.username }}</p>
-                            <p class="text-xs text-gray-300">Student</p>
+                    {% else %}
+                        <div class="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
+                            {{ (session.name or session.username)[0].upper() }}
                         </div>
-                    </div>
-                </a>
-                <a href="{{ url_for('auth.logout') }}" class="flex items-center justify-center w-full px-4 py-3 rounded-lg bg-red-500/90 hover:bg-red-600 transition-all duration-300 font-medium shadow-lg hover:shadow-xl hover:scale-105">
-                    <i class="fas fa-sign-out-alt mr-2"></i>
-                    <span class="sidebar-text">Logout</span>
-                </a>
-            </div>
+                    {% endif %}
+                    <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-800 rounded-full"></span>
+                </div>
+                
+                <div class="ml-3 overflow-hidden">
+                    <p class="text-sm font-medium text-gray-200 group-hover:text-white truncate transition-colors">{{ session.name or session.username }}</p>
+                    <p class="text-xs text-gray-500 truncate">View Profile</p>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('auth.logout') }}" class="flex items-center justify-center w-full py-2 rounded-md bg-red-600/90 hover:bg-red-600 text-white text-sm font-medium transition-all shadow-lg hover:shadow-red-900/20">
+                <i class="fas fa-sign-out-alt mr-2"></i> Logout
+            </a>
         </div>
+    </aside>
 
-        <!-- Main Content -->
-        <div class="flex-1 flex flex-col overflow-hidden min-w-0">
-            <!-- Header -->
-            <header class="header shadow-sm p-4 flex justify-between items-center border-b border-gray-200">
-                <button id="sidebar-toggle" class="text-gray-600 hover:text-gray-800 focus:outline-none transition-colors">
-                    <i class="fas fa-bars text-2xl"></i>
-                </button>
-                <h1 class="text-2xl font-bold text-gray-800">{% block header_title %}Student Dashboard{% endblock %}</h1>
+    <div class="flex flex-col min-h-screen md:ml-64 transition-all duration-300">
+        
+        <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3 md:px-8 md:py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <button id="sidebar-toggle" class="md:hidden p-2 -ml-2 mr-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    
+                    <h1 class="text-xl font-bold text-gray-800 tracking-tight">
+                        {% block header_title %}Dashboard{% endblock %}
+                    </h1>
+                </div>
+
                 <div class="flex items-center space-x-4">
-                    <div class="hidden md:flex items-center space-x-2 text-gray-600">
-                        <i class="fas fa-clock text-purple-500"></i>
-                        <span class="text-sm font-medium" id="current-time"></span>
+                    <div class="hidden sm:flex items-center px-3 py-1.5 bg-gray-100 rounded-full border border-gray-200 text-sm font-medium text-gray-600">
+                        <i class="far fa-clock text-indigo-500 mr-2"></i>
+                        <span id="current-time">Loading...</span>
                     </div>
                 </div>
-            </header>
+            </div>
+        </header>
 
-            <!-- Content Area -->
-            <main class="flex-1 overflow-x-hidden overflow-y-auto p-6 fade-in">
-                <!-- Flash Messages -->
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto w-full max-w-7xl mx-auto">
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="mb-6 flex flex-col gap-2">
                         {% for category, message in messages %}
-                        <div class="alert px-6 py-4 rounded-lg relative mb-4 {% if category == 'danger' or category == 'error' %}bg-red-50 text-red-800 border-l-4 border-red-500{% else %}bg-green-50 text-green-800 border-l-4 border-green-500{% endif %} shadow-md" role="alert">
-                            <div class="flex items-center">
-                                <i class="fas {% if category == 'danger' or category == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} mr-3 text-xl"></i>
-                                <span class="font-medium">{{ message }}</span>
+                            {% set is_error = category in ['danger', 'error'] %}
+                            <div class="flex items-start p-4 rounded-lg border shadow-sm animate-fade-in-down
+                                {{ 'bg-red-50 border-red-200 text-red-800' if is_error else 'bg-emerald-50 border-emerald-200 text-emerald-800' }}">
+                                <i class="fas {{ 'fa-exclamation-circle text-red-500' if is_error else 'fa-check-circle text-emerald-500' }} mt-0.5 mr-3 text-lg"></i>
+                                <div class="flex-1 text-sm font-medium">{{ message }}</div>
+                                <button onclick="this.parentElement.remove()" class="ml-3 text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-times"></i>
+                                </button>
                             </div>
-                        </div>
                         {% endfor %}
-                    {% endif %}
-                {% endwith %}
+                    </div>
+                {% endif %}
+            {% endwith %}
 
+            <div class="fade-in">
                 {% block content %}{% endblock %}
-            </main>
-        </div>
+            </div>
+        </main>
+        
+        <footer class="py-6 px-8 border-t border-gray-200 bg-white mt-auto">
+            <div class="text-center md:text-left text-sm text-gray-500">
+                &copy; {{ now.year if now else '2025' }} College Timetable System. All rights reserved.
+            </div>
+        </footer>
     </div>
-    
-    <!-- Mobile Overlay -->
-    <div id="overlay" class="overlay fixed inset-0 z-10 hidden md:hidden"></div>
-    
-    <!-- Common Custom JavaScript -->
+
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     
-    <!-- Student Panel Specific JavaScript -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Elements
             const sidebar = document.getElementById('sidebar');
-            const sidebarToggle = document.getElementById('sidebar-toggle');
-            const sidebarTexts = document.querySelectorAll('.sidebar-text');
-            const sidebarIcon = document.getElementById('sidebar-icon');
-            const userProfile = document.getElementById('user-profile');
-            const overlay = document.getElementById('overlay');
-            
-            let isCollapsed = false;
+            const overlay = document.getElementById('mobile-overlay');
+            const toggleBtn = document.getElementById('sidebar-toggle');
+            const closeBtn = document.getElementById('close-sidebar');
 
-            sidebarToggle.addEventListener('click', () => {
-                if (window.innerWidth >= 768) {
-                    // Desktop: Collapse/Expand
-                    isCollapsed = !isCollapsed;
-                    
-                    if (isCollapsed) {
-                        sidebar.classList.remove('w-64');
-                        sidebar.classList.add('w-20');
-                        sidebarTexts.forEach(text => {
-                            text.style.opacity = '0';
-                            text.style.visibility = 'hidden';
-                        });
-                        if (userProfile) {
-                            userProfile.style.opacity = '0';
-                            userProfile.style.visibility = 'hidden';
-                        }
-                    } else {
-                        sidebar.classList.remove('w-20');
-                        sidebar.classList.add('w-64');
-                        setTimeout(() => {
-                            sidebarTexts.forEach(text => {
-                                text.style.opacity = '1';
-                                text.style.visibility = 'visible';
-                            });
-                            if (userProfile) {
-                                userProfile.style.opacity = '1';
-                                userProfile.style.visibility = 'visible';
-                            }
-                        }, 150);
-                    }
-                } else {
-                    // Mobile: Toggle visibility with overlay
-                    sidebar.classList.toggle('open');
-                    overlay.classList.toggle('hidden');
-                }
-            });
+            // --- Mobile Sidebar Logic ---
+            function openSidebar() {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                // Small delay to allow display:block to apply before opacity transition
+                setTimeout(() => overlay.classList.remove('opacity-0'), 10); 
+                document.body.style.overflow = 'hidden'; // Lock background scroll
+            }
 
-            // Close sidebar on mobile when clicking overlay
-            overlay.addEventListener('click', () => {
-                sidebar.classList.remove('open');
-                overlay.classList.add('hidden');
-            });
+            function closeSidebar() {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300); // Wait for fade out
+                document.body.style.overflow = ''; // Unlock background scroll
+            }
 
-            // Handle window resize
+            // Event Listeners
+            if(toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+            if(closeBtn) closeBtn.addEventListener('click', closeSidebar);
+            if(overlay) overlay.addEventListener('click', closeSidebar);
+
+            // Handle resize: If window grows > 768px, ensure overlay is hidden and sidebar resets
             window.addEventListener('resize', () => {
                 if (window.innerWidth >= 768) {
-                    overlay.classList.add('hidden');
-                    if (!isCollapsed) {
-                        sidebar.classList.add('w-64');
-                        sidebar.classList.remove('w-20', 'open');
-                        sidebarTexts.forEach(text => {
-                            text.style.opacity = '1';
-                            text.style.visibility = 'visible';
-                        });
-                        if (userProfile) {
-                            userProfile.style.opacity = '1';
-                            userProfile.style.visibility = 'visible';
-                        }
-                    }
-                } else {
-                    sidebar.classList.remove('open', 'w-20');
-                    sidebar.classList.add('w-64');
+                    overlay.classList.add('hidden', 'opacity-0');
+                    document.body.style.overflow = '';
                 }
             });
+
+            // --- Clock Logic ---
+            function updateTime() {
+                const now = new Date();
+                // Format: Mon, Jan 1 • 12:00 PM
+                const options = { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                const timeString = now.toLocaleDateString('en-US', options).replace(',', ' •');
+                const timeEl = document.getElementById('current-time');
+                if(timeEl) timeEl.innerText = timeString;
+            }
+            setInterval(updateTime, 1000);
+            updateTime();
+
+            // --- Profile Photo Error Handling ---
+            const profileImg = document.getElementById('student-profile-img');
+            const profileFallback = document.getElementById('student-profile-fallback');
+            if (profileImg && profileFallback) {
+                profileImg.onerror = function() {
+                    this.style.display = 'none';
+                    profileFallback.style.display = 'flex';
+                };
+            }
         });
     </script>
     
-    <!-- Page Specific JavaScript -->
     {% block scripts %}{% endblock %}
     
-    <!-- Additional JS Block -->
     {% block extra_js %}{% endblock %}
 </body>
 </html>

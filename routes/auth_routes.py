@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from forms import LoginForm, RegistrationForm
 from werkzeug.security import check_password_hash, generate_password_hash
 from database import get_db
+from security import log_activity, log_login_attempt
 import secrets
 from datetime import datetime, timedelta
 
@@ -49,6 +50,28 @@ def login():
             session['user_id'] = user['id']
             session['username'] = username
             session['role'] = user['role']
+            
+            # Generate session ID
+            import uuid
+            session_id = str(uuid.uuid4())
+            session['session_id'] = session_id
+            
+            # Create session entry in user_sessions table
+            from datetime import datetime, timedelta
+            expires_at = datetime.now() + timedelta(days=7)  # 7 days expiry
+            cursor.execute("""
+                INSERT INTO user_sessions 
+                (session_id, user_id, ip_address, user_agent, expires_at, is_active) 
+                VALUES (%s, %s, %s, %s, %s, 1)
+            """, (session_id, user['id'], request.remote_addr, request.user_agent.string, expires_at))
+            
+            # Log successful login
+            log_login_attempt(username, 'success')
+            log_activity(user['id'], 'login', f'User {username} logged in as {user["role"]}')
+            
+            # Update last_login timestamp
+            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user['id'],))
+            db.commit()
             
             # Get additional user information including department and profile photo
             cursor.execute("SELECT department_id, is_hod, profile_photo FROM users WHERE id = %s", (user['id'],))
@@ -126,6 +149,8 @@ def login():
             
             return redirect(url_for('auth.home'))
         else:
+            # Log failed login attempt
+            log_login_attempt(username, 'failed', 'Invalid password')
             flash("Invalid credentials for Student/Teacher.", "danger")
     return render_template('login.html', form=form)
 
@@ -136,8 +161,8 @@ def admin_login():
         username = form.username.data
         password = form.password.data
         db, cursor = get_db()
-        # Allow users with role 'Admin' or 'Super Admin' to use the admin login
-        cursor.execute("SELECT id, password, role, status FROM users WHERE username = %s AND role IN ('Admin', 'Super Admin')", (username,))
+        # Allow users with admin roles (Admin, Super Admin, HOD) to use the admin login
+        cursor.execute("SELECT id, password, role, status FROM users WHERE username = %s AND role IN ('Admin', 'Super Admin', 'HOD')", (username,))
         user = cursor.fetchone()
 
         # Debug logging
@@ -172,15 +197,39 @@ def admin_login():
             session['username'] = username
             session['role'] = user['role']
             
-            # Get additional user information including department
-            cursor.execute("SELECT department_id, is_hod FROM users WHERE id = %s", (user['id'],))
+            # Generate session ID
+            import uuid
+            session_id = str(uuid.uuid4())
+            session['session_id'] = session_id
+            
+            # Create session entry in user_sessions table
+            from datetime import datetime, timedelta
+            expires_at = datetime.now() + timedelta(days=7)  # 7 days expiry
+            cursor.execute("""
+                INSERT INTO user_sessions 
+                (session_id, user_id, ip_address, user_agent, expires_at, is_active) 
+                VALUES (%s, %s, %s, %s, %s, 1)
+            """, (session_id, user['id'], request.remote_addr, request.user_agent.string, expires_at))
+            
+            # Log successful admin login
+            log_login_attempt(username, 'success')
+            log_activity(user['id'], 'admin_login', f'Admin {username} logged in with role {user["role"]}')
+            
+            # Update last_login timestamp
+            cursor.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user['id'],))
+            db.commit()
+            
+            # Get additional user information including department and profile photo
+            cursor.execute("SELECT department_id, is_hod, profile_photo FROM users WHERE id = %s", (user['id'],))
             user_details = cursor.fetchone()
             if user_details:
                 session['department_id'] = user_details['department_id']
                 session['is_hod'] = user_details['is_hod']
+                session['profile_photo'] = user_details['profile_photo'] if user_details['profile_photo'] else 'default-avatar.svg'
             else:
                 session['department_id'] = None
                 session['is_hod'] = False
+                session['profile_photo'] = 'default-avatar.svg'
             
             # Admins can optionally have a name stored directly (for display purposes)
             # but they typically don't need role-specific table lookups like students/faculty
@@ -188,6 +237,8 @@ def admin_login():
             
             return redirect(url_for('admin.dashboard'))
         else:
+            # Log failed admin login attempt
+            log_login_attempt(username, 'failed', 'Invalid admin password')
             flash("Invalid Admin credentials.", "danger")
     # Log request details on POST for debugging CSRF/missing token issues
     if request.method == 'POST':
@@ -201,6 +252,22 @@ def admin_login():
 
 @auth_bp.route('/logout')
 def logout():
+    # Log logout and deactivate session before clearing
+    if 'user_id' in session:
+        log_activity(session['user_id'], 'logout', f"User {session.get('username', 'unknown')} logged out")
+        
+        # Mark session as inactive in database
+        if 'session_id' in session:
+            from database import get_db
+            db, cursor = get_db()
+            cursor.execute("""
+                UPDATE user_sessions 
+                SET is_active = 0 
+                WHERE session_id = %s
+            """, (session['session_id'],))
+            db.commit()
+            cursor.close()
+    
     session.clear()
     flash("You have been logged out.", "success")
     return redirect(url_for('auth.login'))

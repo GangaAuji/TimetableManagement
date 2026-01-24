@@ -3,12 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complete Registration - College Timetable System</title>
+    <title>Complete Registration - {{ branding.site_title or 'College Timetable System' }}</title>
+    {% if branding.favicon %}
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
+    {% endif %}
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body { font-family: 'Inter', sans-serif; }
+        :root {
+            --primary-color: {{ branding.primary_color or '#6366f1' }};
+            --secondary-color: {{ branding.secondary_color or '#10b981' }};
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
