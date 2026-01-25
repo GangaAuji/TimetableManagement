@@ -39,9 +39,9 @@
                     <div class="relative">
                         <select name="timetable_id" required class="form-input w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none appearance-none text-sm text-gray-700">
                             <option value="" disabled selected>Choose a scheduled class...</option>
-                            {% for tid, day, st, et, subj in lectures or [] %}
-                            <option value="{{ tid }}">
-                                {{ day }} • {{ st|format_time_12hr }} • {{ subj }}
+                            {% for lecture in lectures or [] %}
+                            <option value="{{ lecture['id'] }}">
+                                {{ lecture['day_of_week'] }} • {{ lecture['start_time']|format_time_12hr }} • {{ lecture['name'] }}
                             </option>
                             {% endfor %}
                         </select>
@@ -125,50 +125,50 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        {% for id, ad, st, appr_st, day, stt, ett, subj, ofname, pfname in logs %}
+                        {% for log in logs %}
                         <tr class="hover:bg-gray-50/50 transition-colors">
                             <td class="px-6 py-4">
                                 <div class="flex flex-col">
                                     <span class="font-bold text-gray-800 text-sm">
-                                        {{ ad.strftime('%b %d, %Y') if ad.strftime else ad }}
+                                        {{ log['absence_date'].strftime('%b %d, %Y') if log['absence_date'].strftime else log['absence_date'] }}
                                     </span>
                                     <div class="flex items-center text-xs text-gray-500 mt-1">
-                                        <span class="font-medium bg-gray-100 px-1.5 rounded text-gray-600 mr-1.5">{{ day[:3] }}</span>
-                                        {{ stt|format_time_12hr }} - {{ ett|format_time_12hr }}
+                                        <span class="font-medium bg-gray-100 px-1.5 rounded text-gray-600 mr-1.5">{{ log['day_of_week'][:3] }}</span>
+                                        {{ log['start_time']|format_time_12hr }} - {{ log['end_time']|format_time_12hr }}
                                     </div>
                                 </div>
                             </td>
                             
                             <td class="px-6 py-4">
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                                    {{ subj }}
+                                    {{ log['subject_name'] }}
                                 </span>
                             </td>
 
                             <td class="px-6 py-4">
                                 <div class="flex items-center">
                                     <div class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 mr-2">
-                                        {{ pfname[0] if pfname else '?' }}
+                                        {{ log['proxy_name'][0] if log['proxy_name'] else '?' }}
                                     </div>
                                     <span class="text-sm text-gray-700 font-medium">
-                                        {{ pfname if pfname else 'Not Assigned' }}
+                                        {{ log['proxy_name'] if log['proxy_name'] else 'Not Assigned' }}
                                     </span>
                                 </div>
                             </td>
 
                             <td class="px-6 py-4">
-                                {% if appr_st == 'PENDING' %}
+                                {% if log['approval_status'] == 'PENDING' %}
                                     <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide badge-pending">Pending</span>
-                                {% elif appr_st == 'APPROVED' %}
-                                    {% if st == 'ASSIGNED' %}
+                                {% elif log['approval_status'] == 'APPROVED' %}
+                                    {% if log['status'] == 'ASSIGNED' %}
                                         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide badge-assigned">Assigned</span>
                                     {% else %}
                                         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide badge-unassigned">Waiting</span>
                                     {% endif %}
-                                {% elif appr_st == 'REJECTED' %}
+                                {% elif log['approval_status'] == 'REJECTED' %}
                                     <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide badge-rejected">Rejected</span>
                                 {% else %}
-                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-600 border border-gray-200">{{ st }}</span>
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-600 border border-gray-200">{{ log['status'] }}</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -190,40 +190,40 @@
             </div>
 
             <div class="md:hidden p-4 space-y-4 bg-gray-50/50">
-                {% for id, ad, st, appr_st, day, stt, ett, subj, ofname, pfname in logs %}
+                {% for log in logs %}
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex flex-col">
-                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">{{ day }}</span>
-                            <span class="text-sm font-bold text-gray-800">{{ ad.strftime('%b %d') if ad.strftime else ad }}</span>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">{{ log['day_of_week'] }}</span>
+                            <span class="text-sm font-bold text-gray-800">{{ log['absence_date'].strftime('%b %d') if log['absence_date'].strftime else log['absence_date'] }}</span>
                         </div>
                         
-                        {% if appr_st == 'PENDING' %}
+                        {% if log['approval_status'] == 'PENDING' %}
                             <span class="px-2 py-1 rounded text-[10px] font-bold uppercase badge-pending">Pending</span>
-                        {% elif appr_st == 'APPROVED' %}
-                            {% if st == 'ASSIGNED' %}
+                        {% elif log['approval_status'] == 'APPROVED' %}
+                            {% if log['status'] == 'ASSIGNED' %}
                                 <span class="px-2 py-1 rounded text-[10px] font-bold uppercase badge-assigned">Assigned</span>
                             {% else %}
                                 <span class="px-2 py-1 rounded text-[10px] font-bold uppercase badge-unassigned">Waiting</span>
                             {% endif %}
-                        {% elif appr_st == 'REJECTED' %}
+                        {% elif log['approval_status'] == 'REJECTED' %}
                             <span class="px-2 py-1 rounded text-[10px] font-bold uppercase badge-rejected">Rejected</span>
                         {% endif %}
                     </div>
 
                     <div class="mb-3">
-                        <h4 class="font-semibold text-gray-800">{{ subj }}</h4>
+                        <h4 class="font-semibold text-gray-800">{{ log['subject_name'] }}</h4>
                         <div class="flex items-center text-xs text-gray-500 mt-1">
                             <i class="far fa-clock mr-1.5"></i>
-                            {{ stt|format_time_12hr }} - {{ ett|format_time_12hr }}
+                            {{ log['start_time']|format_time_12hr }} - {{ log['end_time']|format_time_12hr }}
                         </div>
                     </div>
 
                     <div class="pt-3 border-t border-gray-100 flex items-center justify-between">
                         <span class="text-xs text-gray-400 font-medium">Substitute</span>
                         <div class="flex items-center">
-                            {% if pfname %}
-                            <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded">{{ pfname }}</span>
+                            {% if log['proxy_name'] %}
+                            <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded">{{ log['proxy_name'] }}</span>
                             {% else %}
                             <span class="text-xs text-gray-400 italic">Pending assignment</span>
                             {% endif %}

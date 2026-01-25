@@ -6,22 +6,33 @@ from .teacher import teacher_bp, teacher_required, format_time
 @teacher_required
 def my_shifts():
     """View assigned shifts and availability"""
-    faculty_id = session.get('faculty_id')
+    faculty_id = session.get('faculty_id')  # This is faculty.id
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
     
     try:
+        # Get user_id for this faculty (faculty_availability uses user_id)
+        cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (faculty_id,))
+        faculty_record = cursor.fetchone()
+        if not faculty_record:
+            flash("Faculty profile not found.", "danger")
+            cursor.close()
+            connection.close()
+            return redirect(url_for('teacher.dashboard'))
+        
+        faculty_user_id = faculty_record['user_id']
+        
         # Get faculty details
         cursor.execute("""
             SELECT f.name, f.email, d.name as department_name
             FROM faculty f
             LEFT JOIN departments d ON f.department_id = d.id
-            WHERE f.user_id = %s
+            WHERE f.id = %s
         """, (faculty_id,))
         faculty_info = cursor.fetchone()
         
-        # Get faculty availability with shift patterns
+        # Get faculty availability with shift patterns (faculty_availability.faculty_id stores user_id)
         cursor.execute("""
             SELECT fa.day_of_week, fa.is_available, fa.notes,
                    sp.shift_name, sp.shift_code, sp.start_time, sp.end_time
@@ -29,7 +40,7 @@ def my_shifts():
             LEFT JOIN shift_patterns sp ON fa.shift_pattern_id = sp.id
             WHERE fa.faculty_id = %s
             ORDER BY fa.day_of_week
-        """, (faculty_id,))
+        """, (faculty_user_id,))
         availability_records = cursor.fetchall()
         
         # Build schedule by day
@@ -50,7 +61,7 @@ def my_shifts():
                 'end_time': format_time(record['end_time']) if record['end_time'] else None
             }
         
-        # Get pending shift change requests
+        # Get pending shift change requests (shift_change_requests uses faculty.id)
         cursor.execute("""
             SELECT id, day_of_week, current_shift_name, requested_shift_name, 
                    reason, status, created_at, admin_response
@@ -62,6 +73,7 @@ def my_shifts():
         change_requests = cursor.fetchall()
         
         cursor.close()
+        connection.close()
         
         return render_template('teacher/my_shifts.html',
                              faculty_info=faculty_info,

@@ -94,13 +94,25 @@ def find_and_assign_proxy(absent_faculty_id, absence_date):
 @teacher_bp.route('/assignments')
 @teacher_required
 def assignments():
-    faculty_id = session.get('faculty_id')
+    faculty_id = session.get('faculty_id')  # This is faculty.id
     if not faculty_id:
         flash("Faculty profile not found.", "danger")
         return redirect(url_for('auth.logout'))
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+    
+    # Get user_id for this faculty (faculty_allocations.faculty_id stores user_id)
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (faculty_id,))
+    faculty_record = cursor.fetchone()
+    if not faculty_record:
+        flash("Faculty profile not found.", "danger")
+        cursor.close()
+        connection.close()
+        return redirect(url_for('auth.logout'))
+    
+    faculty_user_id = faculty_record['user_id']
+    
     cursor.execute(
         """
         SELECT dep.name AS department, crs.name AS course, c.name AS class_name, d.name AS division_name,
@@ -114,10 +126,11 @@ def assignments():
         WHERE fa.faculty_id = %s
         ORDER BY dep.name, crs.name, c.name, d.name, s.name
         """,
-        [faculty_id],
+        [faculty_user_id],
     )
     rows = cursor.fetchall()
     cursor.close()
+    connection.close()
     # Transform rows into friendly dicts
     assignments = [
         {
