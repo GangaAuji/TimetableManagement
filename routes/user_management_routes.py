@@ -571,12 +571,12 @@ def get_role(role_id):
         # fetch permission ids
         cursor.execute('SELECT permission_id FROM role_permissions WHERE role_id = %s', [role_id])
         perms = cursor.fetchall()
-        perm_ids = [p[0] for p in perms]
+        perm_ids = [p['permission_id'] for p in perms]
 
         return jsonify({
-            'id': role[0],
-            'name': role[1],
-            'description': role[2],
+            'id': role['id'],
+            'name': role['name'],
+            'description': role['description'],
             'permissions': perm_ids
         })
     finally:
@@ -602,9 +602,9 @@ def get_role_users(role_id):
         
         return jsonify([
             {
-                'id': user[0],
-                'username': user[1],
-                'email': user[2]
+                'id': user['id'],
+                'username': user['username'],
+                'email': user['email']
             }
             for user in users
         ])
@@ -630,9 +630,9 @@ def manage_role_permissions(role_id):
             return redirect(url_for('user_mgmt_bp.manage_roles'))
         
         role = {
-            'id': role_tuple[0],
-            'name': role_tuple[1],
-            'description': role_tuple[2]
+            'id': role_tuple['id'],
+            'name': role_tuple['name'],
+            'description': role_tuple['description']
         }
         
         # Get all permissions grouped by module
@@ -645,13 +645,13 @@ def manage_role_permissions(role_id):
         
         permissions_by_module = {}
         for perm in all_permissions:
-            module = perm[3] or 'General'
+            module = perm['module'] or 'General'
             if module not in permissions_by_module:
                 permissions_by_module[module] = []
             permissions_by_module[module].append({
-                'id': perm[0],
-                'name': perm[1],
-                'description': perm[2]
+                'id': perm['id'],
+                'name': perm['name'],
+                'description': perm['description']
             })
         
         # Get current role permissions
@@ -664,7 +664,7 @@ def manage_role_permissions(role_id):
         """, [role_id])
         role_permissions = cursor.fetchall()
         
-        role_permission_ids = [p[0] for p in role_permissions]
+        role_permission_ids = [p['id'] for p in role_permissions]
         
         return render_template(
             'admin/manage_role_permissions.html',
@@ -898,7 +898,7 @@ def export_users():
     writer = csv.writer(output)
     writer.writerow(['ID', 'Username', 'Role', 'Status', 'Last Login'])
     for r in rows:
-        writer.writerow([r[0], r[1], r[2], r[3], r[4]])
+        writer.writerow([r['id'], r['username'], r['role'], r['status'], r['last_login']])
     csv_data = output.getvalue()
     output.close()
 
@@ -936,7 +936,7 @@ def export_activity_log():
     writer = csv.writer(output)
     writer.writerow(['Time', 'Username', 'Activity', 'Description', 'IP', 'User Agent'])
     for r in rows:
-        writer.writerow([r[0], r[1], r[2], r[3], r[4], r[5]])
+        writer.writerow([r['created_at'], r['username'], r['activity_type'], r['description'], r['ip_address'], r['user_agent']])
     csv_data = output.getvalue()
     output.close()
 
@@ -957,7 +957,7 @@ def export_roles():
         cursor.execute(
             """
             SELECT r.id, r.name, r.description,
-                   GROUP_CONCAT(p.name ORDER BY p.module, p.name SEPARATOR '; ')
+                   GROUP_CONCAT(p.name ORDER BY p.module, p.name SEPARATOR '; ') as permissions_list
             FROM roles r
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
@@ -976,7 +976,7 @@ def export_roles():
     writer = csv.writer(output)
     writer.writerow(['ID', 'Role', 'Description', 'Permissions'])
     for r in rows:
-        writer.writerow([r[0], r[1], r[2] or '', r[3] or ''])
+        writer.writerow([r['id'], r['name'], r['description'] or '', r['permissions_list'] or ''])
     csv_data = output.getvalue()
     output.close()
 
@@ -1010,18 +1010,18 @@ def manage_user_permissions(user_id):
         
         # Convert user tuple to dictionary for easier template handling
         user = {
-            'id': user_tuple[0],
-            'username': user_tuple[1],
-            'role': user_tuple[2],
-            'department_id': user_tuple[3],
-            'is_hod': user_tuple[4]
+            'id': user_tuple['id'],
+            'username': user_tuple['username'],
+            'role': user_tuple['role'],
+            'department_id': user_tuple['department_id'],
+            'is_hod': user_tuple['is_hod']
         }
         
         # Get department name if user has one
         if user['department_id']:
             cursor.execute("SELECT name FROM departments WHERE id = %s", [user['department_id']])
             dept_result = cursor.fetchone()
-            user['department_name'] = dept_result[0] if dept_result else None
+            user['department_name'] = dept_result['name'] if dept_result else None
         else:
             user['department_name'] = None
         
@@ -1032,15 +1032,15 @@ def manage_user_permissions(user_id):
         user_permissions = []
         for perm in user_permissions_raw:
             # Normalize module name: capitalize first letter, rest lowercase
-            module = perm[2] or 'General'
+            module = perm['module'] or 'General'
             module = module.capitalize() if module else 'General'
             user_permissions.append({
-                'name': perm[0],
-                'description': perm[1],
+                'name': perm['name'],
+                'description': perm['description'],
                 'module': module,
-                'source': perm[3],
-                'department_id': perm[4],
-                'expires_at': perm[5] if len(perm) > 5 else None
+                'source': perm['source'],
+                'department_id': perm.get('department_id'),
+                'expires_at': perm.get('expires_at')
             })
         
         # Get all available permissions grouped by module
@@ -1055,10 +1055,10 @@ def manage_user_permissions(user_id):
         permissions_by_module = {}
         for perm_tuple in all_permissions_raw:
             perm = {
-                'id': perm_tuple[0],
-                'name': perm_tuple[1],
-                'description': perm_tuple[2],
-                'module': perm_tuple[3] or 'General'
+                'id': perm_tuple['id'],
+                'name': perm_tuple['name'],
+                'description': perm_tuple['description'],
+                'module': perm_tuple['module'] or 'General'
             }
             module = perm['module']
             if module not in permissions_by_module:
@@ -1068,17 +1068,17 @@ def manage_user_permissions(user_id):
         # Get available departments for department-specific permissions
         cursor.execute("SELECT id, name FROM departments ORDER BY name")
         departments_raw = cursor.fetchall()
-        departments = [{'id': dept[0], 'name': dept[1]} for dept in departments_raw]
+        departments = [{'id': dept['id'], 'name': dept['name']} for dept in departments_raw]
         
         # Get available courses
         cursor.execute("SELECT id, name, department_id FROM courses ORDER BY name")
         courses_raw = cursor.fetchall()
-        courses = [{'id': c[0], 'name': c[1], 'department_id': c[2]} for c in courses_raw]
+        courses = [{'id': c['id'], 'name': c['name'], 'department_id': c['department_id']} for c in courses_raw]
         
         # Get available classes (year levels: FY, SY, TY, Fourth Year)
         cursor.execute("SELECT id, name FROM classes ORDER BY display_order, name")
         classes_raw = cursor.fetchall()
-        classes = [{'id': c[0], 'name': c[1]} for c in classes_raw]
+        classes = [{'id': c['id'], 'name': c['name']} for c in classes_raw]
         
         # Get permission groups
         cursor.execute("""
@@ -1095,11 +1095,11 @@ def manage_user_permissions(user_id):
         permission_groups = []
         for group_tuple in permission_groups_raw:
             permission_groups.append({
-                'id': group_tuple[0],
-                'name': group_tuple[1],
-                'description': group_tuple[2],
-                'module': group_tuple[3],
-                'permissions': group_tuple[4]
+                'id': group_tuple['id'],
+                'name': group_tuple['name'],
+                'description': group_tuple['description'],
+                'module': group_tuple['module'],
+                'permissions': group_tuple['permissions']
             })
         
         # Check which groups user is already assigned to
@@ -1113,9 +1113,9 @@ def manage_user_permissions(user_id):
         user_groups = []
         for group_tuple in user_groups_raw:
             user_groups.append({
-                'group_id': group_tuple[0],
-                'department_id': group_tuple[1],
-                'name': group_tuple[2]
+                'group_id': group_tuple['group_id'],
+                'department_id': group_tuple['department_id'],
+                'name': group_tuple['name']
             })
         
         return render_template(
@@ -1285,7 +1285,7 @@ def revoke_permission_group(user_id):
         if not group_result:
             return jsonify({'error': 'Permission group not found'}), 404
         
-        group_name = group_result[0]
+        group_name = group_result['name']
         
         # Delete the group assignment
         cursor.execute("""
@@ -1402,19 +1402,19 @@ def clone_role(role_id):
             return jsonify({'error': 'Role not found.'}), 404
         
         # Create new role name
-        new_name = f"{role[0]} (Copy)"
+        new_name = f"{role['name']} (Copy)"
         counter = 1
         while True:
             cursor.execute('SELECT id FROM roles WHERE name = %s', [new_name])
             if not cursor.fetchone():
                 break
             counter += 1
-            new_name = f"{role[0]} (Copy {counter})"
+            new_name = f"{role['name']} (Copy {counter})"
         
         # Insert new role
         cursor.execute(
             'INSERT INTO roles (name, description) VALUES (%s, %s)',
-            [new_name, role[1]]
+            [new_name, role['description']]
         )
         new_role_id = cursor.lastrowid
         
@@ -1427,13 +1427,13 @@ def clone_role(role_id):
         for perm in perms:
             cursor.execute(
                 'INSERT INTO role_permissions (role_id, permission_id) VALUES (%s, %s)',
-                [new_role_id, perm[0]]
+                [new_role_id, perm['permission_id']]
             )
         
         log_activity(
             session['user_id'],
             'clone_role',
-            f'Cloned role "{role[0]}" to "{new_name}" (ID: {new_role_id})'
+            f'Cloned role "{role["name"]}" to "{new_name}" (ID: {new_role_id})'
         )
         
         connection.commit()
@@ -1479,7 +1479,7 @@ def bulk_permissions():
                 # Skip Super Admin
                 cursor.execute('SELECT name FROM roles WHERE id = %s', [role_id])
                 role = cursor.fetchone()
-                if role and role[0] == 'Super Admin':
+                if role and role['name'] == 'Super Admin':
                     continue
                     
                 for perm_id in perm_ids:
@@ -1507,7 +1507,7 @@ def bulk_permissions():
                 # Skip Super Admin
                 cursor.execute('SELECT name FROM roles WHERE id = %s', [role_id])
                 role = cursor.fetchone()
-                if role and role[0] == 'Super Admin':
+                if role and role['name'] == 'Super Admin':
                     continue
                     
                 for perm_id in perm_ids:
@@ -1587,9 +1587,9 @@ def role_stats():
         return jsonify({
             'total_roles': total_roles,
             'total_permissions': total_permissions,
-            'role_usage': [{'name': r[0], 'users': r[1]} for r in role_usage],
-            'permission_distribution': [{'module': p[0], 'roles': p[1]} for p in perm_distribution],
-            'common_permissions': [{'name': p[0], 'module': p[1], 'roles': p[2]} for p in common_perms]
+            'role_usage': [{'name': r['name'], 'users': r['user_count']} for r in role_usage],
+            'permission_distribution': [{'module': p['module'], 'roles': p['role_count']} for p in perm_distribution],
+            'common_permissions': [{'name': p['name'], 'module': p['module'], 'roles': p['role_count']} for p in common_perms]
         })
         
     except Exception as e:
@@ -1620,13 +1620,13 @@ def permissions_by_module():
         # Group by module
         by_module = {}
         for perm in all_perms:
-            module = perm[0] or 'General'
+            module = perm['module'] or 'General'
             if module not in by_module:
                 by_module[module] = []
             by_module[module].append({
-                'id': perm[1],
-                'name': perm[2],
-                'description': perm[3]
+                'id': perm['id'],
+                'name': perm['name'],
+                'description': perm['description']
             })
         
         return jsonify(by_module)

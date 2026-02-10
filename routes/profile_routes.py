@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
 from database import get_db_connection
-from security import log_activity
+from security import log_activity, login_required
 import os
 from datetime import datetime
 
@@ -14,12 +14,9 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @profile_bp.route('/')
+@login_required
 def view_profile():
     """View current user's profile"""
-    if 'user_id' not in session:
-        flash('Please login to view your profile', 'error')
-        return redirect(url_for('auth.login'))
-    
     connection = get_db_connection()
 
     
@@ -95,12 +92,9 @@ def view_profile():
         connection.close()
 
 @profile_bp.route('/edit', methods=['GET', 'POST'])
+@login_required
 def edit_profile():
     """Edit current user's profile"""
-    if 'user_id' not in session:
-        flash('Please login to edit your profile', 'error')
-        return redirect(url_for('auth.login'))
-    
     if request.method == 'POST':
         email = request.form.get('email')
         phone = request.form.get('phone')
@@ -223,12 +217,9 @@ def edit_profile():
         connection.close()
 
 @profile_bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
 def change_password():
     """Change user password"""
-    if 'user_id' not in session:
-        flash('Please login to change your password', 'error')
-        return redirect(url_for('auth.login'))
-    
     if request.method == 'POST':
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')

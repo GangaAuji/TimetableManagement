@@ -169,8 +169,8 @@ def request_proxy():
         [faculty_id],
     )
     proxy_map = {}
-    for sid, fid, fname in cursor.fetchall():
-        proxy_map.setdefault(sid, []).append({'faculty_id': fid, 'name': fname})
+    for row in cursor.fetchall():
+        proxy_map.setdefault(row['subject_id'], []).append({'faculty_id': row['faculty_id'], 'name': row['name']})
 
     cursor.close()
     return render_template('teacher/request_proxy.html', lectures=lectures, proxy_map=proxy_map)

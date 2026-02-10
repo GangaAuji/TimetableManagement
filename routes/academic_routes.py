@@ -3,6 +3,7 @@ from functools import wraps
 import mysql.connector
 from config import Config
 from security import has_permission
+from routes.admin_utils import admin_required
 
 academic_bp = Blueprint('academic', __name__, url_prefix='/admin/academic')
 
@@ -20,6 +21,7 @@ def get_db_connection():
 # ============================================================================
 
 @academic_bp.route('/manage_academics')
+@admin_required
 def manage_academics():
     """Academic Management Dashboard"""
     connection = get_db_connection()

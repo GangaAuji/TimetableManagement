@@ -20,7 +20,7 @@ def list_departments():
     try:
         cursor.execute("SELECT id, name FROM departments ORDER BY name")
         departments = cursor.fetchall()
-        return jsonify([{'id': d[0], 'name': d[1]} for d in departments])
+        return jsonify([{'id': d['id'], 'name': d['name']} for d in departments])
     finally:
 
         cursor.close()

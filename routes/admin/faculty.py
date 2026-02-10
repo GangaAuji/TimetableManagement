@@ -164,14 +164,14 @@ def get_faculty(faculty_id):
     cursor.close()
     if faculty_member:
         return jsonify({
-            'name': faculty_member[0],
-            'email': faculty_member[1],
-            'department_id': faculty_member[2],
-            'username': faculty_member[3] or '',
-            'phone': faculty_member[4] or '',
-            'employee_id': faculty_member[5] or '',
-            'designation': faculty_member[6] or '',
-            'is_active': bool(faculty_member[7])
+            'name': faculty_member['name'],
+            'email': faculty_member['email'],
+            'department_id': faculty_member['department_id'],
+            'username': faculty_member['username'] or '',
+            'phone': faculty_member['phone'] or '',
+            'employee_id': faculty_member['employee_id'] or '',
+            'designation': faculty_member['designation'] or '',
+            'is_active': bool(faculty_member['is_active'])
         })
     return jsonify({'error': 'Faculty not found'}), 404
 
@@ -203,8 +203,8 @@ def update_faculty(faculty_id):
         if password:
             cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
             result = cursor.fetchone()
-            if result and result[0]:
-                user_id = result[0]
+            if result and result['user_id']:
+                user_id = result['user_id']
                 hashed = generate_password_hash(password)
                 cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hashed, user_id))
         
@@ -253,7 +253,7 @@ def faculty_details(faculty_id):
     if not fac:
         flash('Faculty not found.', 'danger')
         return redirect(url_for('faculty.manage_faculty'))
-    return render_template('admin/faculty_details.html', faculty_id=faculty_id, faculty_name=fac[0], faculty_email=fac[1])
+    return render_template('admin/faculty_details.html', faculty_id=faculty_id, faculty_name=fac['name'], faculty_email=fac['email'])
 
 
 @faculty_bp.route('/<int:faculty_id>/timetable/data')
@@ -376,7 +376,7 @@ def manage_faculty_availability(faculty_id):
     if not faculty_row:
         flash('Faculty not found.', 'danger')
         return redirect(url_for('faculty.manage_faculty'))
-    faculty_name = faculty_row[0]
+    faculty_name = faculty_row['name']
     
     if request.method == 'POST':
         try:
@@ -457,26 +457,26 @@ def manage_faculty_availability(faculty_id):
     
     # Collect ALL slots per day (not just first)
     avail_all_slots = {day: [] for day in day_names.values()}
-    for day_num, is_avail, start_t, end_t, notes, shift_id in cursor.fetchall():
-        day_name = day_names.get(day_num)
+    for row in cursor.fetchall():
+        day_name = day_names.get(row['day_of_week'])
         if day_name:
             avail_all_slots[day_name].append({
-                'is_available': bool(is_avail),
-                'start_time': format_time(start_t) if start_t else None,
-                'end_time': format_time(end_t) if end_t else None,
-                'notes': notes or '',
-                'shift_id': shift_id
+                'is_available': bool(row['is_available']),
+                'start_time': format_time(row['start_time']) if row['start_time'] else None,
+                'end_time': format_time(row['end_time']) if row['end_time'] else None,
+                'notes': row['notes'] or '',
+                'shift_id': row['shift_pattern_id']
             })
     
     # Fetch shift patterns for dropdown
     cursor.execute("SELECT id, shift_name, start_time, end_time FROM shift_patterns WHERE is_active = TRUE ORDER BY shift_order")
     shift_patterns = []
-    for sp_id, sp_name, sp_start, sp_end in cursor.fetchall():
+    for row in cursor.fetchall():
         shift_patterns.append({
-            'id': sp_id,
-            'shift_name': sp_name,
-            'start_time': format_time(sp_start),
-            'end_time': format_time(sp_end)
+            'id': row['id'],
+            'shift_name': row['shift_name'],
+            'start_time': format_time(row['start_time']),
+            'end_time': format_time(row['end_time'])
         })
     
     cursor.close()
@@ -592,20 +592,20 @@ def faculty_availability_admin(faculty_id):
     day_names = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday'}
     avail_by_day = {day: [] for day in day_names.values()}
     
-    for day_num, is_avail, shift_id, notes, fa_start, fa_end, shift_name, sp_start, sp_end in cursor.fetchall():
-        day_name = day_names.get(day_num)
+    for row in cursor.fetchall():
+        day_name = day_names.get(row['day_of_week'])
         if day_name:
             # Prefer faculty_availability times over shift_pattern times
-            start_time = fa_start if fa_start else sp_start
-            end_time = fa_end if fa_end else sp_end
+            start_time = row['start_time'] if row['start_time'] else row['sp_start']
+            end_time = row['end_time'] if row['end_time'] else row['sp_end']
             
             avail_by_day[day_name].append({
-                'is_available': bool(is_avail),
-                'shift_id': shift_id,
-                'shift_name': shift_name,
+                'is_available': bool(row['is_available']),
+                'shift_id': row['shift_pattern_id'],
+                'shift_name': row['shift_name'],
                 'start_time': format_time(start_time) if start_time else None,
                 'end_time': format_time(end_time) if end_time else None,
-                'notes': notes or ''
+                'notes': row['notes'] or ''
             })
     
     # Fetch all shift patterns for dropdown
@@ -618,10 +618,10 @@ def faculty_availability_admin(faculty_id):
     return jsonify({
         'availability': avail_by_day,
         'shift_patterns': [{
-            'id': sp[0],
-            'name': sp[1],
-            'start_time': format_time(sp[2]),
-            'end_time': format_time(sp[3])
+            'id': sp['id'],
+            'name': sp['shift_name'],
+            'start_time': format_time(sp['start_time']),
+            'end_time': format_time(sp['end_time'])
         } for sp in shift_patterns]
     })
 
@@ -681,7 +681,7 @@ def faculty_absence_delete_admin(faculty_id, absence_id):
     if not row:
         cursor.close()
         return jsonify({'ok': False, 'error': 'Not found'}), 404
-    if row[0] != 'UNPROCESSED':
+    if row['status'] != 'UNPROCESSED':
         cursor.close()
         return jsonify({'ok': False, 'error': 'Cannot delete processed absence'}), 400
     cursor.execute("DELETE FROM faculty_absences WHERE id = %s AND faculty_id = %s", (absence_id, faculty_id))
@@ -828,7 +828,7 @@ def faculty_proxy_approve_admin(faculty_id, proxy_id):
             "SELECT faculty_id FROM faculty_allocations WHERE subject_id = %s AND faculty_id != %s",
             (subject_id, faculty_id),
         )
-        cands = [r[0] for r in cursor.fetchall()]
+        cands = [r['faculty_id'] for r in cursor.fetchall()]
         for cand in cands:
             if _is_faculty_free(cursor, cand, day, st, et):
                 proxy_faculty_id = cand

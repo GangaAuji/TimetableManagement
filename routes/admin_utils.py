@@ -150,7 +150,7 @@ def _admin_find_and_assign_proxy(absent_faculty_id, absence_date):
     affected_lectures = cursor.fetchall()
 
     for lecture in affected_lectures:
-        timetable_id, subject_id, start_time, end_time = lecture
+        timetable_id, subject_id, start_time, end_time = lecture['id'], lecture['subject_id'], lecture['start_time'], lecture['end_time']
         
         # Find potential proxies (faculty teaching the same subject)
         cursor.execute(
@@ -161,7 +161,7 @@ def _admin_find_and_assign_proxy(absent_faculty_id, absence_date):
         
         # Find first available proxy
         assigned_proxy_id = next(
-            (p[0] for p in potential_proxies if _is_faculty_free(cursor, p[0], day_of_week, start_time, end_time)),
+            (p['faculty_id'] for p in potential_proxies if _is_faculty_free(cursor, p['faculty_id'], day_of_week, start_time, end_time)),
             None,
         )
 

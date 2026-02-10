@@ -62,7 +62,7 @@
                         class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors">
                     <option value="">All Courses</option>
                     {% for course in courses %}
-                    <option value="{{ course[0] }}" {% if request.args.get('course_filter')==course[0]|string %}selected{% endif %}>{{ course[1] }}</option>
+                    <option value="{{ course.id }}" {% if request.args.get('course_filter')==course.id|string %}selected{% endif %}>{{ course.name }}</option>
                     {% endfor %}
                 </select>
                 <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
@@ -268,7 +268,7 @@
                             <select id="course_id" name="course_id" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
                                 <option value="" disabled selected>Select Course</option>
                                 {% for course in courses %}
-                                <option value="{{ course[0] }}">{{ course[1] }}</option>
+                                <option value="{{ course.id }}">{{ course.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -278,7 +278,7 @@
                                 <select id="class_id" name="class_id" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
                                     <option value="">None</option>
                                     {% for cls in classes %}
-                                    <option value="{{ cls[0] }}">{{ cls[1] }}</option>
+                                    <option value="{{ cls.id }}">{{ cls.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -287,7 +287,7 @@
                                 <select id="division_id" name="division_id" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-transparent">
                                     <option value="">None</option>
                                     {% for division in divisions %}
-                                    <option value="{{ division[0] }}">{{ division[1] }}</option>
+                                    <option value="{{ division.id }}">{{ division.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>

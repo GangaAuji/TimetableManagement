@@ -5,10 +5,11 @@ from datetime import datetime
 
 try:
     conn = mysql.connector.connect(
-        host=Config.MYSQL_HOST or 'localhost',
-        user=Config.MYSQL_USER or 'root',
-        password=Config.MYSQL_PASSWORD or '',
-        database=Config.MYSQL_DB or 'college_timetable'
+        host=Config.MYSQL_HOST,
+        user=Config.MYSQL_USER,
+        password=Config.MYSQL_PASSWORD,
+        database=Config.MYSQL_DB,
+        autocommit=False
     )
     cursor = conn.cursor()
     
@@ -22,7 +23,7 @@ try:
     
     export_data = {
         'export_date': datetime.now().isoformat(),
-        'database': Config.MYSQL_DB or 'college_timetable',
+        'database': Config.MYSQL_DB,
         'tables': {}
     }
     
@@ -61,7 +62,7 @@ try:
                 REFERENCED_TABLE_NAME,
                 REFERENCED_COLUMN_NAME
             FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE TABLE_SCHEMA = '{Config.MYSQL_DB or "college_timetable"}'
+            WHERE TABLE_SCHEMA = '{Config.MYSQL_DB}'
             AND TABLE_NAME = '{table}'
             AND REFERENCED_TABLE_NAME IS NOT NULL
         """)
@@ -79,8 +80,12 @@ try:
                 print(f"  {fk[1]} -> {fk[2]}.{fk[3]}")
         
         # Get row count
-        cursor.execute(f"SELECT COUNT(*) FROM {table}")
-        count = cursor.fetchone()[0]
+        try:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            count = cursor.fetchone()[0]
+        except Exception as e:
+            count = f"Error: {str(e)}"
+            print(f"Warning: Could not get row count - {e}")
         table_info['sample_count'] = count
         print(f"Row count: {count}")
         

@@ -194,8 +194,8 @@ def get_student(student_id):
     cursor.close()
     if student:
         return jsonify({
-            'name': student[0], 'email': student[1], 'phone': student[2], 'roll_number': student[3],
-            'course_id': student[4], 'class_id': student[5], 'division_id': student[6], 'username': student[7]
+            'name': student['name'], 'email': student['email'], 'phone': student['phone'], 'roll_number': student['roll_number'],
+            'course_id': student['course_id'], 'class_id': student['class_id'], 'division_id': student['division_id'], 'username': student['username']
         })
     return jsonify({'error': 'Student not found'}), 404
 

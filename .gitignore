@@ -76,8 +76,7 @@ acedamic_schema.sql
 *.sqlite
 *.sqlite3
 
-# Configuration files with sensitive data
-config.py
+logs/*
 # If you want to track config.py template, use config.example.py instead
 
 # Environment variables

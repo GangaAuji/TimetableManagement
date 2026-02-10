@@ -62,7 +62,7 @@
                         class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors">
                     <option value="">All Departments</option>
                     {% for dept in departments %}
-                    <option value="{{ dept[0] }}" {% if request.args.get('department_filter') == dept[0]|string %}selected{% endif %}>{{ dept[1] }}</option>
+                    <option value="{{ dept['id'] }}" {% if request.args.get('department_filter') == dept['id']|string %}selected{% endif %}>{{ dept['name'] }}</option>
                     {% endfor %}
                 </select>
                 <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
@@ -269,7 +269,7 @@
                             <select id="department_id" name="department_id" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all bg-transparent">
                                 <option value="" disabled selected>Select Department</option>
                                 {% for dept in departments %}
-                                <option value="{{ dept[0] }}">{{ dept[1] }}</option>
+                                <option value="{{ dept['id'] }}">{{ dept['name'] }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -320,7 +320,7 @@
                     <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Department</label>
                     <select name="department_id" required class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                         {% for dept in departments %}
-                        <option value="{{ dept[0] }}">{{ dept[1] }}</option>
+                        <option value="{{ dept['id'] }}">{{ dept['name'] }}</option>
                         {% endfor %}
                     </select>
                 </div>

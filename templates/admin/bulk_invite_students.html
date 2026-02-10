@@ -136,7 +136,7 @@ Bob Wilson,bob.wilson@example.com,bob.wilson,2,3,1</code></pre>
                             <select name="default_course_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm">
                                 <option value="">Select Course...</option>
                                 {% for course in courses %}
-                                <option value="{{ course[0] }}">{{ course[1] }}</option>
+                                <option value="{{ course['id'] }}">{{ course['name'] }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -145,7 +145,7 @@ Bob Wilson,bob.wilson@example.com,bob.wilson,2,3,1</code></pre>
                             <select name="default_class_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm">
                                 <option value="">Select Class...</option>
                                 {% for cls in classes %}
-                                <option value="{{ cls[0] }}">{{ cls[1] }}</option>
+                                <option value="{{ cls['id'] }}">{{ cls['name'] }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -154,7 +154,7 @@ Bob Wilson,bob.wilson@example.com,bob.wilson,2,3,1</code></pre>
                             <select name="default_division_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm">
                                 <option value="">Select Division...</option>
                                 {% for div in divisions %}
-                                <option value="{{ div[0] }}">{{ div[1] }}</option>
+                                <option value="{{ div['id'] }}">{{ div['name'] }}</option>
                                 {% endfor %}
                             </select>
                         </div>

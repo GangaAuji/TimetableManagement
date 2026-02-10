@@ -23,6 +23,11 @@
 
                 <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto items-end md:items-center flex-wrap">
                     
+                    <a href="{{ url_for('academic.manage_academics') }}"
+                        class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-md transition-colors flex items-center whitespace-nowrap">
+                        <i class="fas fa-arrow-left mr-2"></i> Back
+                    </a>
+                    
                     <select id="yearFilter" class="w-full md:w-40 px-3 py-1.5 text-xs border border-gray-300 rounded bg-gray-50 focus:ring-1 focus:ring-teal-500">
                         <option value="">All Years</option>
                         {% for year in academic_years %}

@@ -21,6 +21,16 @@
     /* Fade Animation */
     .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Modal Centering Fix */
+    .modal-dialog-centered {
+        display: flex !important;
+        align-items: center !important;
+        min-height: calc(100% - 1rem) !important;
+    }
+    .modal-dialog-centered::before {
+        display: none !important;
+    }
 </style>
 {% endblock %}
 
@@ -71,7 +81,7 @@
                         class="pl-3 pr-8 py-2 bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 cursor-pointer outline-none shadow-sm appearance-none hover:border-gray-300 transition-colors w-24">
                     <option value="">All Roles</option>
                     {% for r in roles %}
-                        <option value="{{ r[0] }}" {% if role_filter==r[0] %}selected{% endif %}>{{ r[0] }}</option>
+                        <option value="{{ r['name'] }}" {% if role_filter==r['name'] %}selected{% endif %}>{{ r['name'] }}</option>
                     {% endfor %}
                 </select>
                 <i class="fas fa-chevron-down absolute right-3 top-2.5 text-[10px] text-gray-400 pointer-events-none"></i>
@@ -255,7 +265,7 @@
                             <select id="role" name="role" required
                                     class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white outline-none">
                                 {% for r in roles %}
-                                <option value="{{ r[0] }}">{{ r[0] }}</option>
+                                <option value="{{ r['name'] }}">{{ r['name'] }}</option>
                                 {% endfor %}
                             </select>
                         </div>

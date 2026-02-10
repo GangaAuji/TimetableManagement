@@ -101,8 +101,8 @@
                                         class="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm appearance-none cursor-pointer hover:bg-white transition-colors">
                                         <option value="">Select course</option>
                                         {% for c in courses %}
-                                        <option value="{{ c[0] }}" {% if selected_course and
-                                            selected_course|string==c[0]|string %}selected{% endif %}>{{ c[1] }}
+                                        <option value="{{ c.id }}" {% if selected_course and
+                                            selected_course|string==c.id|string %}selected{% endif %}>{{ c.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -121,8 +121,8 @@
                                         class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm appearance-none cursor-pointer hover:bg-white">
                                         <option value="">Select</option>
                                         {% for cl in classes %}
-                                        <option value="{{ cl[0] }}" {% if selected_class and
-                                            selected_class|string==cl[0]|string %}selected{% endif %}>{{ cl[1] }}
+                                        <option value="{{ cl.id }}" {% if selected_class and
+                                            selected_class|string==cl.id|string %}selected{% endif %}>{{ cl.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -135,8 +135,8 @@
                                         class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm appearance-none cursor-pointer hover:bg-white">
                                         <option value="">Select</option>
                                         {% for d in divisions %}
-                                        <option value="{{ d[0] }}" {% if selected_division and
-                                            selected_division|string==d[0]|string %}selected{% endif %}>{{ d[1] }}
+                                        <option value="{{ d.id }}" {% if selected_division and
+                                            selected_division|string==d.id|string %}selected{% endif %}>{{ d.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -252,9 +252,9 @@
                         </div>
                     </div>
 
-                    <div id="listView" class="flex-1 overflow-x-auto custom-scrollbar">
+                    <div id="listView" class="flex-1 overflow-auto custom-scrollbar max-h-[calc(100vh-280px)]">
                         <table class="w-full whitespace-nowrap">
-                            <thead class="bg-slate-50 border-b border-slate-200">
+                            <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                                 <tr>
                                     <th
                                         class="py-3 px-6 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">

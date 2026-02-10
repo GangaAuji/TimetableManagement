@@ -193,11 +193,10 @@
 </div>
 
 <div id="editRoleModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="flex items-center justify-center min-h-screen p-4">
         <div class="fixed inset-0 bg-gray-900/50 transition-opacity backdrop-blur-sm close-edit-modal-backdrop" aria-hidden="true"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
         
-        <div class="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full border border-gray-100">
+        <div class="relative bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg w-full border border-gray-100 z-10">
             <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div class="sm:flex sm:items-start">
                     <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -231,11 +230,10 @@
 </div>
 
 <div id="roleDetailsModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="flex items-center justify-center min-h-screen p-4">
         <div class="fixed inset-0 bg-gray-900/50 transition-opacity backdrop-blur-sm close-details-modal-backdrop" aria-hidden="true"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
         
-        <div class="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full border border-gray-100">
+        <div class="relative bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg w-full border border-gray-100 z-10">
             <div class="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-4 sm:px-6">
                 <h3 class="text-lg leading-6 font-medium text-white flex items-center">
                     <i class="fas fa-shield-alt mr-2"></i> Role Permissions
@@ -261,17 +259,26 @@
 </div>
 
 <div id="roleUsersModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="flex items-center justify-center min-h-screen p-4">
         <div class="fixed inset-0 bg-gray-900/50 transition-opacity backdrop-blur-sm close-users-modal-backdrop" aria-hidden="true"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
         
-        <div class="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl w-full border border-gray-100">
+        <div class="relative bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl w-full border border-gray-100 z-10">
             <div class="bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-4 sm:px-6">
-                <h3 class="text-lg leading-6 font-medium text-white flex items-center">
-                    <i class="fas fa-users mr-2"></i> <span id="usersModalRoleName"></span> Users
-                </h3>
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg leading-6 font-medium text-white flex items-center">
+                        <i class="fas fa-users mr-2"></i> <span id="usersModalRoleName"></span> Users
+                        <span id="usersCountBadge" class="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs"></span>
+                    </h3>
+                </div>
             </div>
-            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 max-h-96 overflow-y-auto custom-scroll">
+            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="roleUsersSearch" placeholder="Search users by name or email..." 
+                           class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                </div>
+            </div>
+            <div class="bg-white px-4 pt-4 pb-4 sm:px-6 max-h-80 overflow-y-auto custom-scroll">
                 <div id="usersListContainer">
                     <div class="text-center py-8">
                         <i class="fas fa-circle-notch fa-spin text-3xl text-gray-400"></i>
@@ -389,7 +396,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const users = await response.json();
                 const container = document.getElementById('usersListContainer');
+                const searchInput = document.getElementById('roleUsersSearch');
+                const countBadge = document.getElementById('usersCountBadge');
                 
+                // Store users data for filtering
+                window.currentRoleUsers = users;
+                countBadge.textContent = users.length;
+                
+                // Reset search input
+                searchInput.value = '';
+                
+                // Function to render users
+                const renderUsers = (filteredUsers) => {
+                    if (filteredUsers.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <i class="fas fa-user-slash text-3xl text-gray-300"></i>
+                                <p class="text-gray-500 mt-2">No users found</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = `
+                            <div class="space-y-2">
+                                ${filteredUsers.map(user => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors user-item" data-username="${user.username.toLowerCase()}" data-email="${(user.email || '').toLowerCase()}">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                                                ${user.username.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div class="text-sm font-medium text-gray-900">${user.username}</div>
+                                                ${user.email ? `<div class="text-xs text-gray-500">${user.email}</div>` : ''}
+                                            </div>
+                                        </div>
+                                        <a href="/admin/users/permissions/${user.id}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
+                                            <i class="fas fa-cog mr-1"></i>Manage
+                                        </a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                };
+                
+                // Initial render
                 if (users.length === 0) {
                     container.innerHTML = `
                         <div class="text-center py-8">
@@ -398,27 +448,22 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `
-                        <div class="space-y-2">
-                            ${users.map(user => `
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                                    <div class="flex items-center space-x-3">
-                                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-                                            ${user.username.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <div class="text-sm font-medium text-gray-900">${user.username}</div>
-                                            ${user.email ? `<div class="text-xs text-gray-500">${user.email}</div>` : ''}
-                                        </div>
-                                    </div>
-                                    <a href="/admin/users/permissions/${user.id}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
-                                        <i class="fas fa-cog mr-1"></i>Manage
-                                    </a>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
+                    renderUsers(users);
                 }
+                
+                // Search handler
+                searchInput.oninput = (e) => {
+                    const query = e.target.value.toLowerCase().trim();
+                    if (!query) {
+                        renderUsers(window.currentRoleUsers);
+                        return;
+                    }
+                    const filtered = window.currentRoleUsers.filter(user => 
+                        user.username.toLowerCase().includes(query) || 
+                        (user.email && user.email.toLowerCase().includes(query))
+                    );
+                    renderUsers(filtered);
+                };
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('usersListContainer').innerHTML = `

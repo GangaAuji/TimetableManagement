@@ -32,7 +32,7 @@ def get_classes():
         # Return all classes since they're not course-specific
         cursor.execute("SELECT id, name FROM classes ORDER BY display_order, name")
         classes = cursor.fetchall()
-        return jsonify([{'id': c[0], 'name': c[1]} for c in classes])
+        return jsonify([{'id': c['id'], 'name': c['name']} for c in classes])
     finally:
 
         cursor.close()
@@ -56,7 +56,7 @@ def get_divisions():
         # Return all divisions since they're not class-specific
         cursor.execute("SELECT id, name FROM divisions ORDER BY name")
         divisions = cursor.fetchall()
-        return jsonify([{'id': d[0], 'name': d[1]} for d in divisions])
+        return jsonify([{'id': d['id'], 'name': d['name']} for d in divisions])
     finally:
 
         cursor.close()
@@ -86,9 +86,9 @@ def get_faculty_by_subject():
         """, (subject_id,))
         faculty = cursor.fetchall()
         return jsonify([{
-            'id': f[0],
-            'name': f[1],
-            'is_primary': bool(f[2])
+            'id': f['user_id'],
+            'name': f['name'],
+            'is_primary': bool(f['is_primary'])
         } for f in faculty])
     finally:
 

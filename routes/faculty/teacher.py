@@ -66,14 +66,14 @@ def find_and_assign_proxy(absent_faculty_id, absence_date):
     affected_lectures = cursor.fetchall()
 
     for lecture in affected_lectures:
-        timetable_id, subject_id, start_time, end_time = lecture
+        timetable_id, subject_id, start_time, end_time = lecture['id'], lecture['subject_id'], lecture['start_time'], lecture['end_time']
         cursor.execute(
             "SELECT faculty_id FROM faculty_allocations WHERE subject_id = %s AND faculty_id != %s",
             (subject_id, absent_faculty_id),
         )
         potential_proxies = cursor.fetchall()
         assigned_proxy_id = next(
-            (p[0] for p in potential_proxies if is_faculty_available(cursor, p[0], day_of_week, start_time, end_time)),
+            (p['faculty_id'] for p in potential_proxies if is_faculty_available(cursor, p['faculty_id'], day_of_week, start_time, end_time)),
             None,
         )
 

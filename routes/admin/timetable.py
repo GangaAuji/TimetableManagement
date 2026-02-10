@@ -54,7 +54,7 @@ def generate_timetable():
             cursor.execute("SELECT program FROM courses WHERE id = %s", (course_id,))
             course_row = cursor.fetchone()
             if course_row:
-                program = course_row[0] if course_row[0] else 'UG'  # Access by index since cursor is not DictCursor
+                program = course_row['program'] if course_row['program'] else 'UG'
                 default_lecture_minutes = 60 if program == 'PG' else 45
 
         form_state['week_start_date'] = request.form.get('week_start_date') or ''
@@ -299,7 +299,7 @@ def timetable_manage():
 
             # Check for conflicts
             cursor.execute("""
-                SELECT t.id, c.name, d.name, s.name, t.start_time, t.end_time
+                SELECT t.id, c.name AS class_name, d.name AS division_name, s.name AS subject_name, t.start_time, t.end_time
                 FROM timetable t
                 JOIN classes c ON t.class_id = c.id
                 JOIN divisions d ON t.division_id = d.id
@@ -314,7 +314,7 @@ def timetable_manage():
                 conflict_details = []
                 for c in conflicts:
                     conflict_details.append(
-                        f"{c[1]} {c[2]} - {c[3]} ({format_time(c[4])} - {format_time(c[5])})"
+                        f"{c['class_name']} {c['division_name']} - {c['subject_name']} ({format_time(c['start_time'])} - {format_time(c['end_time'])})"
                     )
                 raise ValueError(f"Room has conflicts:\n" + "\n".join(conflict_details))
 
@@ -376,11 +376,11 @@ def timetable_manage():
         sessions = []
         unique_pairs = set()
         for r in fetched:
-            start_str = format_time(r[2]); end_str = format_time(r[3])
-            room_num = (r[8] if has_room else None)
+            start_str = format_time(r['start_time']); end_str = format_time(r['end_time'])
+            room_num = (r['room_number'] if has_room else None)
             sessions.append({
-                'id': r[0], 'day': r[1], 'start_time': start_str, 'end_time': end_str,
-                'subject_id': r[4], 'subject': r[5], 'faculty_id': r[6] or '', 'faculty': r[7] or '',
+                'id': r['id'], 'day': r['day_of_week'], 'start_time': start_str, 'end_time': end_str,
+                'subject_id': r['subject_id'], 'subject': r['subject_name'], 'faculty_id': r['faculty_user_id'] or '', 'faculty': r['faculty_name'] or '',
                 'room': room_num or ''
             })
             unique_pairs.add((start_str, end_str))
@@ -405,7 +405,7 @@ def timetable_manage():
 
         # Get rooms for assignment modal
         cursor.execute("SELECT id, room_number, room_type, capacity FROM rooms ORDER BY room_type, room_number")
-        rooms = [{'id': r[0], 'room_number': r[1], 'room_type': r[2], 'capacity': r[3]} for r in cursor.fetchall()]
+        rooms = [{'id': r['id'], 'room_number': r['room_number'], 'room_type': r['room_type'], 'capacity': r['capacity']} for r in cursor.fetchall()]
 
         # Subject options for add form
         cursor.execute(
@@ -416,7 +416,7 @@ def timetable_manage():
             """,
             (course_id, class_id),
         )
-        subjects = [{'id': r[0], 'name': r[1]} for r in cursor.fetchall()]
+        subjects = [{'id': r['id'], 'name': r['name']} for r in cursor.fetchall()]
 
     cursor.close()
     return render_template(

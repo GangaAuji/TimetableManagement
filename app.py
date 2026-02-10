@@ -157,6 +157,11 @@ def create_app():
     # Setup Logging - Capture ALL terminal output to app.log
     log_file = app.config.get('LOG_FILE', 'app.log')
     
+    # Ensure logs directory exists
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    
     # File handler for all logs
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)  # 10MB per file
     file_handler.setLevel(logging.DEBUG)  # Capture everything
@@ -332,6 +337,6 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     # Make the app accessible on the local network and change port to 8080
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=app.config['DEBUG'])
     app.logger.info("Application started on port 8080.")
 

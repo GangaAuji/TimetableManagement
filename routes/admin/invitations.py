@@ -218,7 +218,7 @@ def resend_invitation(invitation_id):
         cursor.close()
         return redirect(url_for('admin.manage_invitations'))
     
-    if invitation[1] == 'used':
+    if invitation['status'] == 'used':
         flash('Cannot resend a used invitation.', 'warning')
         cursor.close()
         return redirect(url_for('admin.manage_invitations'))
@@ -253,7 +253,7 @@ def copy_invitation_link(invitation_id):
     cursor.close()
     
     if result:
-        token = result[0]
+        token = result['token']
         registration_url = url_for('auth.register', token=token, _external=True)
         return jsonify({'url': registration_url})
     
