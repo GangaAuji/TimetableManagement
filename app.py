@@ -1,4 +1,4 @@
-from flask import Flask, app, session
+from flask import Flask, app, session, send_from_directory
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from config import Config
 from database import get_db_connection, close_db
@@ -82,9 +82,9 @@ def create_app():
             result = cursor.fetchone()
             cursor.close()
             connection.close()
-            app.logger.info(f"✓ MySQL connection successful - Test result: {result}")
+            app.logger.info(f"[OK] MySQL connection successful - Test result: {result}")
         except Exception as e:
-            app.logger.error(f"✗ MySQL connection failed: {str(e)}")
+            app.logger.error(f"[ERROR] MySQL connection failed: {str(e)}")
             import traceback
             app.logger.error(f"Traceback: {traceback.format_exc()}")
 
@@ -239,6 +239,7 @@ def create_app():
         from routes.user_management_routes import user_mgmt_bp
         from routes.profile_routes import profile_bp
         from routes.faculty import teacher_bp
+        from routes.faculty.attendance import attendance_bp
         from routes.students import student_bp
         
         # Import modular admin routes
@@ -258,6 +259,8 @@ def create_app():
             shift_management,
             branding
         )
+        from routes.admin.attendance_admin import attendance_admin_bp
+        from routes.admin.reports import reports_bp
 
         # Register core blueprints
         app.register_blueprint(auth_bp)
@@ -267,6 +270,7 @@ def create_app():
         
         # Register role-specific blueprints
         app.register_blueprint(teacher_bp)
+        app.register_blueprint(attendance_bp)
         app.register_blueprint(student_bp)
         
         # Register modular admin blueprints
@@ -278,6 +282,8 @@ def create_app():
         app.register_blueprint(invitations_bp)
         app.register_blueprint(proxy_bp)
         app.register_blueprint(shift_management.shift_bp)
+        app.register_blueprint(attendance_admin_bp)
+        app.register_blueprint(reports_bp)
         
         # Register security and utility admin blueprints
         app.register_blueprint(audit_logs_bp)
@@ -319,6 +325,35 @@ def create_app():
     register_template_helpers(app)
     
     # Health check endpoint (bypasses maintenance mode)
+    @app.route('/favicon.ico')
+    def favicon():
+        """Serve favicon from branding setting when available, otherwise fallback file."""
+        favicon_file = 'favicon.png'
+
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT setting_value FROM branding_settings WHERE setting_key = 'favicon' LIMIT 1"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            connection.close()
+
+            if result and result.get('setting_value'):
+                candidate = str(result.get('setting_value')).lstrip('/\\')
+                static_root = os.path.abspath(app.static_folder)
+                candidate_path = os.path.abspath(os.path.join(static_root, candidate))
+
+                # Ensure resolved path stays inside static folder.
+                if candidate_path.startswith(static_root) and os.path.isfile(candidate_path):
+                    favicon_file = candidate
+        except Exception:
+            pass
+
+        return send_from_directory(app.static_folder, favicon_file)
+
+    # Health check endpoint (bypasses maintenance mode)
     @app.route('/health')
     def health_check():
         from datetime import datetime
@@ -336,7 +371,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    # Make the app accessible on the local network and change port to 8080
-    app.run(host='0.0.0.0', port=8080, debug=app.config['DEBUG'])
-    app.logger.info("Application started on port 8080.")
+    # Run locally for development
+    app.run(host='127.0.0.1', port=5000, debug=app.config['DEBUG'])
+    app.logger.info("Application started on port 5000.")
 

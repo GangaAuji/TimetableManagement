@@ -43,7 +43,7 @@
 {% block content %}
 <div class="min-h-screen bg-slate-50/50 pb-20">
     
-    <div class="max-w-7xl mx-auto pt-6 px-4 sm:px-6 lg:px-8">
+    <div class="w-full pt-6 px-4 sm:px-6 lg:px-8">
         <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start space-x-3 shadow-sm">
             <div class="flex-shrink-0">
                 <i class="fas fa-info-circle text-blue-600 text-lg mt-0.5"></i>
@@ -55,7 +55,7 @@
         </div>
     </div>
 
-    <form action="{{ url_for('timetable.generate_timetable') }}" method="POST" id="generateForm" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <form action="{{ url_for('timetable.generate_timetable') }}" method="POST" id="generateForm" class="w-full px-4 sm:px-6 lg:px-8 py-6">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

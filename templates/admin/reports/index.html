@@ -1,0 +1,227 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Reports Center{% endblock %}
+
+{% block extra_css %}
+<style>
+    .fade-enter {
+        animation: fadeEnter 0.4s ease-out forwards;
+    }
+    @keyframes fadeEnter {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Smooth card hover transition */
+    .report-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .report-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-50/50 p-4 md:p-8 fade-enter">
+    
+    <div class="w-full mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Reports Center</h1>
+            <p class="text-slate-500 mt-2 text-lg">Use the Reports dropdown in the sidebar to open a report module. Processed files appear in the queue below.</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                <i class="fas fa-database mr-1.5"></i> Real-time Data
+            </span>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                <i class="fas fa-file-csv mr-1.5"></i> CSV Export
+            </span>
+        </div>
+    </div>
+
+    <div class="w-full mb-8">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-base font-semibold text-slate-800">Important Reports</h2>
+            <span class="text-xs text-slate-500">Quick access</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {% if user_has_perm('reports_view_attendance') %}
+            <a href="{{ url_for('admin_reports.attendance_report') }}" class="report-card bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-user-check"></i></span>
+                    <i class="fas fa-arrow-right text-slate-300 text-xs"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-800">Attendance</p>
+                <p class="text-xs text-slate-500 mt-1">Course and date filters</p>
+            </a>
+            {% endif %}
+
+            {% if user_has_perm('reports_view_timetable') %}
+            <a href="{{ url_for('admin_reports.timetable_report') }}" class="report-card bg-white border border-slate-200 rounded-xl p-4 hover:border-emerald-300">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-calendar-week"></i></span>
+                    <i class="fas fa-arrow-right text-slate-300 text-xs"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-800">Timetable</p>
+                <p class="text-xs text-slate-500 mt-1">Class, faculty, room views</p>
+            </a>
+            {% endif %}
+
+            {% if user_has_perm('reports_view_audit') %}
+            <a href="{{ url_for('admin_reports.audit_logs_report') }}" class="report-card bg-white border border-slate-200 rounded-xl p-4 hover:border-purple-300">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="w-9 h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><i class="fas fa-shield-alt"></i></span>
+                    <i class="fas fa-arrow-right text-slate-300 text-xs"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-800">Audit Logs</p>
+                <p class="text-xs text-slate-500 mt-1">Security and activity</p>
+            </a>
+            {% endif %}
+
+            {% if user_has_perm('reports_view_shifts') %}
+            <a href="{{ url_for('admin_reports.shifts_report') }}" class="report-card bg-white border border-slate-200 rounded-xl p-4 hover:border-orange-300">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center"><i class="fas fa-clock"></i></span>
+                    <i class="fas fa-arrow-right text-slate-300 text-xs"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-800">Shift Management</p>
+                <p class="text-xs text-slate-500 mt-1">Requests and patterns</p>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if user_has_perm('reports_export') %}
+    <div class="w-full mt-10 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-xl font-bold text-slate-800">Processed Reports Queue</h2>
+                <p class="text-sm text-slate-500 mt-1">Process reports on module pages. Final download is available only from this table.</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                {{ processed_reports|length }} Recent Items
+            </span>
+        </div>
+
+        {% if processed_reports %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Report</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Processed By</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rows</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Processed At</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Download</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    {% for item in processed_reports %}
+                    <tr class="hover:bg-slate-50/80">
+                        <td class="px-4 py-3 text-sm font-medium text-slate-700">#{{ item.id }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-700">{{ report_labels.get(item.report_type, item.report_type) }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600">{{ item.created_by_name or 'System' }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-700">{{ item.row_count }}</td>
+                        <td class="px-4 py-3 text-sm">
+                            {% if item.status == 'completed' %}
+                            <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Completed</span>
+                            {% else %}
+                            <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{{ item.status|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{{ item.created_at }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{{ item.downloaded_at or '-' }}</td>
+                        <td class="px-4 py-3 text-right">
+                            {% if item.status == 'completed' %}
+                            <div class="inline-flex items-center justify-end gap-2">
+                                <a href="{{ url_for('admin_reports.download_processed_report', processed_report_id=item.id) }}"
+                                   class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-colors">
+                                    <i class="fas fa-download mr-1.5"></i>Download CSV
+                                </a>
+                                <form method="POST" action="{{ url_for('admin_reports.delete_processed_report', processed_report_id=item.id) }}" onsubmit="return confirm('Move this report to trash? You can restore it later.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors">
+                                        <i class="fas fa-trash-alt mr-1.5"></i>Trash
+                                    </button>
+                                </form>
+                            </div>
+                            {% else %}
+                            <div class="inline-flex items-center justify-end gap-2">
+                                <span class="text-xs text-slate-400">Unavailable</span>
+                                <form method="POST" action="{{ url_for('admin_reports.delete_processed_report', processed_report_id=item.id) }}" onsubmit="return confirm('Move this report to trash? You can restore it later.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors">
+                                        <i class="fas fa-trash-alt mr-1.5"></i>Trash
+                                    </button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <i class="fas fa-box-open text-3xl text-slate-400 mb-3"></i>
+            <p class="text-slate-700 font-semibold">No processed reports yet.</p>
+            <p class="text-slate-500 text-sm mt-1">Open any report module, apply filters, and click Process Report.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if user_has_perm('reports_export') and deleted_reports %}
+    <div class="w-full mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-xl font-bold text-slate-800">Trash</h2>
+                <p class="text-sm text-slate-500 mt-1">Soft-deleted reports can be restored from here.</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
+                {{ deleted_reports|length }} In Trash
+            </span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Report</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rows</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Processed At</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    {% for item in deleted_reports %}
+                    <tr class="hover:bg-slate-50/80">
+                        <td class="px-4 py-3 text-sm font-medium text-slate-700">#{{ item.id }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-700">{{ report_labels.get(item.report_type, item.report_type) }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-700">{{ item.row_count }}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{{ item.created_at }}</td>
+                        <td class="px-4 py-3 text-right">
+                            <form method="POST" action="{{ url_for('admin_reports.restore_processed_report', processed_report_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors">
+                                    <i class="fas fa-rotate-left mr-1.5"></i>Restore
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

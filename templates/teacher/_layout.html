@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     {% if branding.favicon %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
+    {% else %}
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     {% endif %}
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -97,6 +99,20 @@
                 <span class="font-medium">Availability</span>
             </a>
 
+            <a href="{{ url_for('attendance.index') }}" 
+               class="flex items-center px-4 py-3 rounded-lg group transition-colors duration-200 
+               {% if request.endpoint and request.endpoint == 'attendance.index' %}bg-white/10 text-white shadow-sm border-l-4 border-blue-500{% else %}text-gray-300 hover:bg-white/5 hover:text-white{% endif %}">
+                <i class="fas fa-user-check w-6 {% if request.endpoint and request.endpoint == 'attendance.index' %}text-blue-400{% else %}text-gray-400 group-hover:text-white{% endif %}"></i>
+                <span class="font-medium">Attendance</span>
+            </a>
+
+            <a href="{{ url_for('attendance.attendance_report') }}" 
+               class="flex items-center px-4 py-3 rounded-lg group transition-colors duration-200 
+               {% if request.endpoint and (request.endpoint == 'attendance.attendance_report' or request.endpoint == 'attendance.attendance_summary_report') %}bg-white/10 text-white shadow-sm border-l-4 border-blue-500{% else %}text-gray-300 hover:bg-white/5 hover:text-white{% endif %}">
+                <i class="fas fa-chart-bar w-6 {% if request.endpoint and (request.endpoint == 'attendance.attendance_report' or request.endpoint == 'attendance.attendance_summary_report') %}text-blue-400{% else %}text-gray-400 group-hover:text-white{% endif %}"></i>
+                <span class="font-medium">Reports</span>
+            </a>
+
             <p class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mt-6 mb-2">Management</p>
 
             <a href="{{ url_for('teacher.my_classes') }}" 
@@ -159,30 +175,18 @@
 
     <div class="flex flex-col min-h-screen md:pl-72 transition-all duration-300">
         
-        <header class="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm px-4 py-3 md:px-8 md:py-4 flex items-center justify-between">
-            <div class="flex items-center">
-                <button id="sidebar-toggle" class="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 mr-3">
-                    <i class="fas fa-bars text-xl"></i>
-                </button>
-                
-                <h1 class="text-xl md:text-2xl font-bold text-gray-800">
-                    {% block header_title %}Dashboard{% endblock %}
-                </h1>
-            </div>
+        {% set header_title %}{% block header_title %}{{ branding.teacher_title or 'Dashboard' }}{% endblock %}{% endset %}
+        {% set header_show_sidebar_toggle = true %}
+        {% set header_show_clock = true %}
+        {% set header_clock_icon_color = 'text-blue-500' %}
+        {% set header_toggle_mr_class = 'mr-3' %}
+        {% include 'components/header.html' %}
 
-            <div class="flex items-center space-x-4">
-                <div class="hidden sm:flex items-center px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-sm font-medium border border-gray-200">
-                    <i class="far fa-clock text-blue-500 mr-2"></i>
-                    <span id="current-time">Loading...</span>
-                </div>
-            </div>
-        </header>
-
-        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+        <main class="flex-1 p-3 sm:p-4 lg:p-5 xl:p-6 overflow-y-auto">
             
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
-                    <div class="max-w-4xl mx-auto mb-6 space-y-2">
+                    <div class="w-full mb-6 space-y-2">
                         {% for category, message in messages %}
                             {% set bg_color = 'bg-red-50 text-red-700 border-red-200' if category in ['danger', 'error'] else 'bg-emerald-50 text-emerald-700 border-emerald-200' %}
                             {% set icon = 'fa-exclamation-circle' if category in ['danger', 'error'] else 'fa-check-circle' %}
@@ -199,14 +203,22 @@
                 {% endif %}
             {% endwith %}
 
-            <div class="fade-in max-w-7xl mx-auto">
+            <div class="fade-in w-full">
                 {% block content %}{% endblock %}
             </div>
         </main>
         
-        <footer class="bg-white border-t border-gray-200 py-4 px-8 text-center md:text-left">
-            <p class="text-sm text-gray-500">© {{ now.year if now else '2025' }} College Timetable System. All rights reserved.</p>
-        </footer>
+        {% set footer_icon_bg = 'bg-blue-50' %}
+        {% set footer_icon_border = 'border-blue-100' %}
+        {% set footer_icon_color = 'text-blue-600' %}
+        {% set footer_icon_class = 'fa-chalkboard-teacher' %}
+        {% set footer_title = branding.site_title or 'Timetable System' %}
+        {% set footer_caption_before_year = '&copy;' %}
+        {% set footer_caption_after_year = 'Teacher Workspace. All rights reserved.' %}
+        {% set footer_pill_icon_class = 'fa-graduation-cap' %}
+        {% set footer_pill_icon_color = 'text-blue-500' %}
+        {% set footer_pill_text = branding.footer_text or 'Teaching and timetable operations' %}
+        {% include 'components/footer.html' %}
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
@@ -255,6 +267,10 @@
             }
             setInterval(updateTime, 1000);
             updateTime();
+
+            document.querySelectorAll('[data-footer-year]').forEach((yearEl) => {
+                yearEl.textContent = new Date().getFullYear();
+            });
 
             // -- Profile Photo Error Handling --
             const profileImg = document.getElementById('teacher-profile-img');

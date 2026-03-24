@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     {% if branding.favicon %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
+    {% else %}
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     {% endif %}
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -89,11 +91,11 @@
             <a href="{{ url_for('student.dashboard') }}" 
                class="flex items-center px-3 py-2.5 rounded-lg group transition-all duration-200 
                {% if request.endpoint == 'student.dashboard' %}bg-active text-white shadow-md{% else %}text-gray-400 hover:bg-white/5 hover:text-gray-100{% endif %}">
-                <i class="fas fa-tachometer-alt w-6 text-center {% if request.endpoint == 'student.dashboard' %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
+                <i class="fas fa-home w-6 text-center {% if request.endpoint == 'student.dashboard' %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
                 <span class="ml-3 font-medium">Dashboard</span>
             </a>
 
-            <a href="{{ url_for('student.dashboard') }}" 
+            <a href="{{ url_for('student.timetable') }}" 
                class="flex items-center px-3 py-2.5 rounded-lg group transition-all duration-200 
                {% if request.endpoint == 'student.timetable' %}bg-active text-white shadow-md{% else %}text-gray-400 hover:bg-white/5 hover:text-gray-100{% endif %}">
                 <i class="fas fa-calendar-alt w-6 text-center {% if request.endpoint == 'student.timetable' %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
@@ -102,10 +104,11 @@
 
             <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6 mb-2">Academic</p>
 
-            <a href="#" class="flex items-center px-3 py-2.5 rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors opacity-75">
-                <i class="fas fa-clipboard-check w-6 text-center text-gray-600"></i>
+            <a href="{{ url_for('student.attendance') }}" 
+               class="flex items-center px-3 py-2.5 rounded-lg group transition-all duration-200 
+               {% if request.endpoint and (request.endpoint == 'student.attendance' or request.endpoint == 'student.attendance_subject') %}bg-active text-white shadow-md{% else %}text-gray-400 hover:bg-white/5 hover:text-gray-100{% endif %}">
+                <i class="fas fa-clipboard-check w-6 text-center {% if request.endpoint and (request.endpoint == 'student.attendance' or request.endpoint == 'student.attendance_subject') %}text-white{% else %}text-gray-500 group-hover:text-white{% endif %}"></i>
                 <span class="ml-3 font-medium">Attendance</span>
-                <span class="ml-auto text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700">Soon</span>
             </a>
             
             <a href="#" class="flex items-center px-3 py-2.5 rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors opacity-75">
@@ -151,28 +154,20 @@
 
     <div class="flex flex-col min-h-screen md:ml-64 transition-all duration-300">
         
-        <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm px-4 py-3 md:px-8 md:py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center">
-                    <button id="sidebar-toggle" class="md:hidden p-2 -ml-2 mr-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-100">
-                        <i class="fas fa-bars text-xl"></i>
-                    </button>
-                    
-                    <h1 class="text-xl font-bold text-gray-800 tracking-tight">
-                        {% block header_title %}Dashboard{% endblock %}
-                    </h1>
-                </div>
+        {% set header_title %}{% block header_title %}{{ branding.student_title or 'Dashboard' }}{% endblock %}{% endset %}
+        {% set header_bg_class = 'bg-white/80 backdrop-blur-md' %}
+        {% set header_show_sidebar_toggle = true %}
+        {% set header_toggle_ml_class = '-ml-2' %}
+        {% set header_toggle_mr_class = 'mr-2' %}
+        {% set header_toggle_ring_class = 'focus:outline-none focus:ring-2 focus:ring-indigo-100' %}
+        {% set header_title_extra_class = 'tracking-tight' %}
+        {% set header_show_clock = true %}
+        {% set header_clock_gap_class = 'space-x-4' %}
+        {% set header_clock_icon_color = 'text-indigo-500' %}
+        {% set header_clock_py_class = 'py-1.5' %}
+        {% include 'components/header.html' %}
 
-                <div class="flex items-center space-x-4">
-                    <div class="hidden sm:flex items-center px-3 py-1.5 bg-gray-100 rounded-full border border-gray-200 text-sm font-medium text-gray-600">
-                        <i class="far fa-clock text-indigo-500 mr-2"></i>
-                        <span id="current-time">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <main class="flex-1 p-4 md:p-8 overflow-y-auto w-full max-w-7xl mx-auto">
+        <main class="flex-1 p-3 sm:p-4 lg:p-5 xl:p-6 overflow-y-auto w-full">
             
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -197,11 +192,17 @@
             </div>
         </main>
         
-        <footer class="py-6 px-8 border-t border-gray-200 bg-white mt-auto">
-            <div class="text-center md:text-left text-sm text-gray-500">
-                &copy; {{ now.year if now else '2025' }} College Timetable System. All rights reserved.
-            </div>
-        </footer>
+        {% set footer_icon_bg = 'bg-indigo-50' %}
+        {% set footer_icon_border = 'border-indigo-100' %}
+        {% set footer_icon_color = 'text-indigo-600' %}
+        {% set footer_icon_class = 'fa-user-graduate' %}
+        {% set footer_title = branding.site_title or 'Timetable System' %}
+        {% set footer_caption_before_year = '&copy;' %}
+        {% set footer_caption_after_year = 'Student Workspace. All rights reserved.' %}
+        {% set footer_pill_icon_class = 'fa-book-open' %}
+        {% set footer_pill_icon_color = 'text-indigo-500' %}
+        {% set footer_pill_text = branding.footer_text or 'Stay on track with classes and attendance' %}
+        {% include 'components/footer.html' %}
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
@@ -254,6 +255,10 @@
             }
             setInterval(updateTime, 1000);
             updateTime();
+
+            document.querySelectorAll('[data-footer-year]').forEach((yearEl) => {
+                yearEl.textContent = new Date().getFullYear();
+            });
 
             // --- Profile Photo Error Handling ---
             const profileImg = document.getElementById('student-profile-img');

@@ -1,0 +1,158 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Student Attendance Details{% endblock %}
+{% block header_title %}Student Attendance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">{{ student.name }}</h2>
+            <p class="text-gray-500 mt-1 text-sm">Roll No: {{ student.roll_number }} | {{ student.class_info }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('attendance_admin.attendance_defaulters') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Overall Stats -->
+    {% if overall_stats %}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-book text-blue-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-gray-800">{{ overall_stats.total_lectures }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Total Lectures</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-green-600">{{ overall_stats.total_present }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Present</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-clock text-yellow-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-yellow-600">{{ overall_stats.total_late }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Late</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 {% if overall_stats.overall_percentage >= 75 %}bg-green-100{% else %}bg-red-100{% endif %} rounded-lg">
+                    <i class="fas fa-percentage {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %} text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.1f"|format(overall_stats.overall_percentage) }}%</h3>
+            <p class="text-sm text-gray-500 mt-1">Overall Percentage</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Subject-wise Breakdown -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-semibold text-gray-800">Subject-wise Attendance</h3>
+        </div>
+        
+        {% if subject_wise %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attended</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Late</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Missed</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for subject in subject_wise %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ subject.subject_name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ subject.total_lectures_scheduled }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ subject.lectures_attended }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800">{{ subject.lectures_late }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-800">{{ subject.lectures_missed }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold {% if subject.attendance_percentage >= 75 %}text-green-600{% elif subject.attendance_percentage >= 65 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                    {{ "%.2f"|format(subject.attendance_percentage) }}%
+                                </span>
+                                <div class="w-20 bg-gray-200 rounded-full h-2">
+                                    <div class="{% if subject.attendance_percentage >= 75 %}bg-green-500{% elif subject.attendance_percentage >= 65 %}bg-yellow-500{% else %}bg-red-500{% endif %} h-2 rounded-full" 
+                                         style="width: {{ subject.attendance_percentage }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if subject.attendance_percentage >= 75 %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Good</span>
+                            {% elif subject.attendance_percentage >= 65 %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Warning</span>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Critical</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <i class="fas fa-clipboard-list text-gray-300 text-5xl mb-4"></i>
+            <p class="text-gray-500">No subject-wise attendance data available</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Contact Information -->
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div class="flex items-start gap-4">
+            <div class="p-3 bg-blue-100 rounded-lg">
+                <i class="fas fa-address-card text-blue-600 text-2xl"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="font-semibold text-gray-800 mb-3">Contact Information</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-600">Email</p>
+                        <a href="mailto:{{ student.email }}" class="text-sm font-medium text-blue-600 hover:text-blue-800">
+                            {{ student.email or 'Not provided' }}
+                        </a>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Phone</p>
+                        <a href="tel:{{ student.phone }}" class="text-sm font-medium text-blue-600 hover:text-blue-800">
+                            {{ student.phone or 'Not provided' }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

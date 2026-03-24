@@ -1,0 +1,169 @@
+{% extends "teacher/_layout.html" %}
+{% block title %}Attendance Reports{% endblock %}
+{% block header_title %}Reports Center{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Fade Animation */
+    .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Card Hover Lift */
+    .hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .hover-lift:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full pb-10 fade-in">
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                <a href="{{ url_for('teacher.dashboard') }}" class="hover:text-indigo-600 transition-colors">Dashboard</a>
+                <i class="fas fa-chevron-right text-[10px]"></i>
+                <span class="text-gray-800 font-medium">Reports</span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Reports Center</h1>
+            <p class="text-sm text-gray-500">Generate insights and analyze attendance trends.</p>
+        </div>
+        </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        
+        <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover-lift flex flex-col h-full group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    <i class="fas fa-chart-bar text-xl"></i>
+                </div>
+                <span class="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase rounded tracking-wide">Popular</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Attendance Summary</h3>
+            <p class="text-sm text-gray-500 mb-6 flex-grow">
+                Comprehensive breakdown of student attendance by subject and date range. Ideal for term-end analysis.
+            </p>
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <a href="{{ url_for('attendance.attendance_summary_report') }}" class="flex items-center justify-center w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all shadow-sm">
+                    Generate Report <i class="fas fa-arrow-right ml-2 text-xs"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover-lift flex flex-col h-full group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <i class="fas fa-calendar-day text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Daily Log</h3>
+            <p class="text-sm text-gray-500 mb-6 flex-grow">
+                Quick snapshot of today's attendance across all your classes. Track present, absent, and late arrivals.
+            </p>
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <button onclick="alert('Feature coming soon!')" class="flex items-center justify-center w-full py-2.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold rounded-lg transition-all">
+                    View Today
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover-lift flex flex-col h-full group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    <i class="fas fa-chart-line text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Monthly Trends</h3>
+            <p class="text-sm text-gray-500 mb-6 flex-grow">
+                Visualize attendance patterns over the month. Identify drops in engagement or specific problem days.
+            </p>
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <button onclick="alert('Feature coming soon!')" class="flex items-center justify-center w-full py-2.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold rounded-lg transition-all">
+                    View Trends
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover-lift flex flex-col h-full group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
+                    <i class="fas fa-exclamation-triangle text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Defaulters List</h3>
+            <p class="text-sm text-gray-500 mb-6 flex-grow">
+                Automatically generate a list of students below the 75% attendance threshold for warning letters.
+            </p>
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <button onclick="alert('Feature coming soon!')" class="flex items-center justify-center w-full py-2.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold rounded-lg transition-all">
+                    Check Defaulters
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover-lift flex flex-col h-full group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-orange-50 text-orange-600 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                    <i class="fas fa-layer-group text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Subject Analysis</h3>
+            <p class="text-sm text-gray-500 mb-6 flex-grow">
+                Compare attendance performance across different subjects to identify difficult courses.
+            </p>
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <button onclick="alert('Feature coming soon!')" class="flex items-center justify-center w-full py-2.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold rounded-lg transition-all">
+                    Compare Subjects
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-xl p-6 shadow-lg flex flex-col h-full text-white relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+            
+            <div class="flex items-start justify-between mb-4 relative z-10">
+                <div class="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
+                    <i class="fas fa-sliders-h text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold mb-2 relative z-10">Custom Export</h3>
+            <p class="text-sm text-indigo-200 mb-6 flex-grow relative z-10">
+                Need raw data? Build a custom query with specific columns and filters for external analysis.
+            </p>
+            <div class="mt-auto relative z-10">
+                <button onclick="alert('Feature coming soon!')" class="flex items-center justify-center w-full py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-sm font-bold rounded-lg transition-all backdrop-blur-sm">
+                    Build Query
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-wrap justify-between items-center gap-4 text-sm text-gray-600">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-blue-600 shadow-sm">
+                <i class="fas fa-file-csv"></i>
+            </div>
+            <span class="font-medium">CSV/Excel Exports</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-green-600 shadow-sm">
+                <i class="fas fa-filter"></i>
+            </div>
+            <span class="font-medium">Advanced Filtering</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-purple-600 shadow-sm">
+                <i class="fas fa-chart-pie"></i>
+            </div>
+            <span class="font-medium">Visual Analytics</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-orange-600 shadow-sm">
+                <i class="fas fa-bolt"></i>
+            </div>
+            <span class="font-medium">Real-time Data</span>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

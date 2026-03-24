@@ -1,0 +1,233 @@
+{% extends "student/_layout.html" %}
+
+{% block title %}My Attendance | Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Circular Progress Bar Utility */
+    .progress-ring {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: conic-gradient(var(--color) var(--percent), #f1f5f9 0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .progress-ring::before {
+        content: '';
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        background: white;
+        border-radius: 50%;
+    }
+    .progress-ring span {
+        position: relative;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #334155;
+    }
+    
+    /* Timeline Line */
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: 1.25rem;
+        top: 2.5rem;
+        bottom: -1rem;
+        width: 2px;
+        background-color: #e2e8f0;
+        z-index: 0;
+    }
+    .timeline-item:last-child::before { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-8 fade-in">
+
+    <div class="w-full flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Attendance Dashboard</h1>
+            <p class="text-slate-500 mt-1">Track your academic engagement and performance.</p>
+        </div>
+        
+        {% if overall_stats %}
+        <div class="hidden md:flex gap-3">
+            <div class="px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span class="text-xs font-bold text-slate-600">Present: {{ overall_stats.present_count }}</span>
+            </div>
+            <div class="px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span class="text-xs font-bold text-slate-600">Absent: {{ overall_stats.absent_count }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if error %}
+    <div class="w-full bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+        <i class="fas fa-exclamation-circle text-rose-500 mt-0.5"></i>
+        <p class="text-sm text-rose-700">{{ error }}</p>
+    </div>
+    {% endif %}
+
+    {% if overall_stats %}
+    <div class="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        
+        <div class="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+            
+            <p class="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-2">Overall Attendance</p>
+            <div class="flex items-end gap-2">
+                <h2 class="text-4xl font-bold">{{ "%.1f"|format(overall_stats.attendance_percentage or 0) }}%</h2>
+                <span class="mb-1 text-sm font-medium bg-white/20 px-2 py-0.5 rounded text-white">
+                    {{ 'Excellent' if overall_stats.attendance_percentage >= 75 else ('Warning' if overall_stats.attendance_percentage < 60 else 'Average') }}
+                </span>
+            </div>
+            <div class="w-full bg-black/20 h-1.5 rounded-full mt-4 overflow-hidden">
+                <div class="h-full bg-white/90 rounded-full transition-all duration-1000" style="width: {{ overall_stats.attendance_percentage or 0 }}%"></div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:border-indigo-100 transition-colors">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-slate-50 text-slate-600 rounded-xl">
+                    <i class="fas fa-university text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-slate-400 uppercase">Total</span>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800">{{ overall_stats.total_lectures_scheduled or 0 }}</h3>
+            <p class="text-xs text-slate-500 mt-1">Scheduled Lectures</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:border-emerald-100 transition-colors">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <i class="fas fa-check-double text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-emerald-600 uppercase">+{{ overall_stats.present_count }} Pres</span>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800">{{ overall_stats.total_lectures_attended or 0 }}</h3>
+            <p class="text-xs text-slate-500 mt-1">Lectures Attended</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:border-rose-100 transition-colors">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                    <i class="fas fa-user-times text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-rose-500 uppercase">{{ overall_stats.absent_count }} Abs</span>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800">{{ overall_stats.absent_count + (overall_stats.late_count or 0) }}</h3>
+            <p class="text-xs text-slate-500 mt-1">Missed / Late</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <div class="lg:col-span-2 space-y-6">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-800 text-lg">Subject Performance</h3>
+                <div class="text-xs text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
+                    {{ subject_wise|length }} Subjects
+                </div>
+            </div>
+
+            {% if subject_wise %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {% for subject in subject_wise %}
+                {% set pct = subject.attendance_percentage or 0 %}
+                {% set color = '#10b981' if pct >= 75 else ('#f59e0b' if pct >= 60 else '#f43f5e') %}
+                
+                <div class="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md transition-shadow group relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full" style="background-color: {{ color }}"></div>
+                    
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="pr-4">
+                            <h4 class="font-bold text-slate-800 text-sm line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">
+                                {{ subject.subject_name }}
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-1">Total: {{ subject.total_lectures }} Lectures</p>
+                        </div>
+                        <div class="progress-ring shrink-0" style="--percent: {{ pct }}%; --color: {{ color }}">
+                            <span>{{ "%.0f"|format(pct) }}%</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 p-2 rounded-lg justify-around">
+                        <div class="text-center">
+                            <span class="block text-emerald-600 font-bold">{{ subject.present_count }}</span>
+                            <span class="text-[10px] uppercase">Pres</span>
+                        </div>
+                        <div class="w-px h-6 bg-slate-200"></div>
+                        <div class="text-center">
+                            <span class="block text-rose-500 font-bold">{{ subject.absent_count }}</span>
+                            <span class="text-[10px] uppercase">Abs</span>
+                        </div>
+                        <div class="w-px h-6 bg-slate-200"></div>
+                        <div class="text-center">
+                            <span class="block text-amber-500 font-bold">{{ subject.late_count }}</span>
+                            <span class="text-[10px] uppercase">Late</span>
+                        </div>
+                    </div>
+
+                    <a href="{{ url_for('student.attendance_subject', subject_id=subject.subject_id) }}" class="absolute inset-0"></a>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-slate-50 rounded-xl p-8 text-center border border-slate-200 border-dashed">
+                <p class="text-slate-400 text-sm">No subject data available yet.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="lg:col-span-1 space-y-6">
+            <h3 class="font-bold text-slate-800 text-lg">Recent Activity</h3>
+            
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 relative">
+                {% if recent_records %}
+                <div class="space-y-0">
+                    {% for record in recent_records[:5] %}
+                    <div class="timeline-item relative pl-10 pb-6 group">
+                        <div class="absolute left-0 top-1 w-10 h-10 rounded-full flex items-center justify-center bg-white border-2 z-10 
+                            {% if record.status == 'Present' %}border-emerald-100 text-emerald-600{% elif record.status == 'Absent' %}border-rose-100 text-rose-600{% else %}border-amber-100 text-amber-600{% endif %}">
+                            <i class="fas {% if record.status == 'Present' %}fa-check{% elif record.status == 'Absent' %}fa-times{% else %}fa-clock{% endif %} text-sm"></i>
+                        </div>
+                        
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{{ record.attendance_date }}</span>
+                            <h5 class="text-sm font-bold text-slate-800 leading-tight mt-0.5">{{ record.subject_name }}</h5>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase 
+                                    {% if record.status == 'Present' %}bg-emerald-50 text-emerald-700{% elif record.status == 'Absent' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
+                                    {{ record.status }}
+                                </span>
+                                <span class="text-xs text-slate-400">&bull; {{ record.marked_by_name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-2 text-center pt-4 border-t border-slate-100">
+                    <button class="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">View All History</button>
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="far fa-clock text-slate-300"></i>
+                    </div>
+                    <p class="text-sm text-slate-500">No recent records found.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

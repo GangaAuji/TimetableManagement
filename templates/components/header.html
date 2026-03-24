@@ -1,0 +1,21 @@
+<header class="sticky top-0 z-30 {{ header_bg_class or 'bg-white' }} border-b border-gray-200 shadow-sm px-3 sm:px-4 py-3 lg:px-4 xl:px-6 md:py-4">
+    <div class="flex items-center {{ header_layout_class or 'justify-between' }}">
+        <div class="flex items-center">
+            {% if header_show_sidebar_toggle %}
+            <button id="sidebar-toggle" class="md:hidden p-2 {{ header_toggle_ml_class or '-ml-2' }} {{ header_toggle_mr_class or 'mr-3' }} text-gray-600 hover:bg-gray-100 rounded-lg transition-colors {{ header_toggle_ring_class or '' }}" type="button">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            {% endif %}
+            <h1 class="text-xl md:text-2xl font-bold text-gray-800 {{ header_title_extra_class or '' }}">{{ header_title }}</h1>
+        </div>
+
+        {% if header_show_clock %}
+        <div class="flex items-center {{ header_clock_gap_class or 'gap-4' }}">
+            <div class="hidden sm:flex items-center px-3 {{ header_clock_py_class or 'py-1' }} bg-gray-100 rounded-full border border-gray-200 text-sm font-medium text-gray-600">
+                <i class="far fa-clock {{ header_clock_icon_color or 'text-indigo-500' }} mr-2"></i>
+                <span id="current-time"></span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</header>

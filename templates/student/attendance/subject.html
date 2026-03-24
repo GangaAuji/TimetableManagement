@@ -1,0 +1,190 @@
+{% extends "student/_layout.html" %}
+
+{% block title %}{{ subject_stats.subject_name if subject_stats else 'Subject Details' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Gradient Text */
+    .text-gradient {
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-image: linear-gradient(to right, #4f46e5, #7c3aed);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-50/50 pb-12 fade-in">
+    
+    <div class="bg-white border-b border-slate-200 sticky top-0 z-20">
+        <div class="w-full px-4 sm:px-6 py-4">
+            <a href="{{ url_for('student.attendance') }}" class="inline-flex items-center text-sm text-slate-500 hover:text-indigo-600 transition-colors mb-2 group">
+                <i class="fas fa-arrow-left mr-2 text-xs group-hover:-translate-x-1 transition-transform"></i>
+                Back to Dashboard
+            </a>
+            
+            {% if subject_stats %}
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">{{ subject_stats.subject_name }}</h1>
+                    <div class="flex items-center gap-2 mt-1 text-sm text-slate-500">
+                        <span class="bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider">CODE: {{ subject_stats.subject_code or 'N/A' }}</span>
+                        <span>&bull;</span>
+                        <span>Detailed Report</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Current Score</span>
+                    <span class="text-2xl font-bold {% if subject_stats.attendance_percentage >= 75 %}text-emerald-600{% elif subject_stats.attendance_percentage >= 60 %}text-amber-500{% else %}text-rose-500{% endif %}">
+                        {{ "%.1f"|format(subject_stats.attendance_percentage or 0) }}%
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="w-full px-4 sm:px-6 py-8 space-y-8">
+
+        {% if error %}
+        <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3 text-rose-700">
+            <i class="fas fa-exclamation-circle text-xl"></i>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        {% if subject_stats %}
+        
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Attendance Distribution</h3>
+            
+            <div class="h-4 w-full flex rounded-full overflow-hidden mb-4 bg-slate-100">
+                {% set total = subject_stats.total_lectures or 1 %}
+                <div class="bg-emerald-500 h-full" style="width: {{ (subject_stats.present_count / total * 100)|round(1) }}%" title="Present"></div>
+                <div class="bg-amber-400 h-full" style="width: {{ (subject_stats.late_count / total * 100)|round(1) }}%" title="Late"></div>
+                <div class="bg-rose-500 h-full" style="width: {{ (subject_stats.absent_count / total * 100)|round(1) }}%" title="Absent"></div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                    <span class="block text-2xl font-bold text-emerald-600">{{ subject_stats.present_count }}</span>
+                    <span class="text-xs font-bold text-emerald-800 uppercase">Present</span>
+                </div>
+                <div class="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                    <span class="block text-2xl font-bold text-amber-600">{{ subject_stats.late_count }}</span>
+                    <span class="text-xs font-bold text-amber-800 uppercase">Late</span>
+                </div>
+                <div class="p-3 rounded-xl bg-rose-50 border border-rose-100">
+                    <span class="block text-2xl font-bold text-rose-600">{{ subject_stats.absent_count }}</span>
+                    <span class="text-xs font-bold text-rose-800 uppercase">Absent</span>
+                </div>
+            </div>
+            
+            <p class="text-center text-xs text-slate-400 mt-4">Based on {{ subject_stats.total_lectures }} total scheduled lectures.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-1 space-y-4">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i class="far fa-calendar-alt text-slate-400"></i> Monthly Trends
+                </h3>
+                
+                {% if monthly_breakdown %}
+                <div class="space-y-3">
+                    {% for month in monthly_breakdown %}
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:border-indigo-300 transition-colors">
+                        <div>
+                            <p class="font-bold text-slate-700">{{ month.month }}</p>
+                            <p class="text-xs text-slate-500 mt-0.5">
+                                <span class="text-emerald-600 font-bold">{{ month.present }} P</span> &bull; 
+                                <span class="text-rose-500 font-bold">{{ month.absent }} A</span>
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <span class="block font-bold {% if month.percentage >= 75 %}text-emerald-600{% else %}text-rose-500{% endif %}">
+                                {{ "%.0f"|format(month.percentage) }}%
+                            </span>
+                            <span class="text-[10px] text-slate-400 uppercase">Score</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 bg-white border border-slate-200 rounded-xl">
+                    <p class="text-sm text-slate-400">No monthly data available yet.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="lg:col-span-2 space-y-4">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fas fa-history text-slate-400"></i> Session History
+                </h3>
+
+                {% if attendance_records %}
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th class="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Date & Time</th>
+                                    <th class="px-5 py-3 text-xs font-bold text-slate-500 uppercase text-center">Status</th>
+                                    <th class="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for record in attendance_records %}
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-5 py-4">
+                                        <p class="font-bold text-slate-700 text-sm">{{ record.attendance_date }}</p>
+                                        <p class="text-xs text-slate-500 mt-0.5">{{ record.day_of_week }} &bull; {{ record.start_time }}</p>
+                                    </td>
+                                    <td class="px-5 py-4 text-center">
+                                        {% if record.status == 'Present' %}
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                                            Present
+                                        </span>
+                                        {% elif record.status == 'Late' %}
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                                            Late
+                                        </span>
+                                        {% else %}
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                                            Absent
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-5 py-4">
+                                        <div class="text-xs text-slate-600">
+                                            <span class="block mb-0.5"><strong class="text-slate-400">By:</strong> {{ record.marked_by_name }}</span>
+                                            {% if record.remarks %}
+                                            <span class="block text-slate-500 italic">"{{ record.remarks }}"</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 text-center">
+                        Showing last {{ attendance_records|length }} records
+                    </div>
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center justify-center py-12 bg-white border border-slate-200 rounded-xl border-dashed">
+                    <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-clipboard-list text-slate-300"></i>
+                    </div>
+                    <p class="text-slate-500 text-sm">No history found for this subject.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% endif %} </div>
+</div>
+{% endblock %}

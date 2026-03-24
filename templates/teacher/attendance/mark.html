@@ -1,0 +1,300 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Mark Attendance{% endblock %}
+{% block header_title %}Mark Attendance{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* smooth scroll behavior */
+    html { scroll-behavior: smooth; }
+    
+    /* Hide scrollbar for clean UI but allow scrolling */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Custom Radio Button Styles */
+    .radio-group label { transition: all 0.2s ease; }
+    .radio-group input:checked + label { transform: scale(1.02); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-50/50 pb-24 relative">
+    
+    <form method="POST" action="{{ url_for('attendance.save_attendance', timetable_id=lecture.timetable_id) }}" id="attendanceForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300" id="topHeader">
+            <div class="w-full px-4 py-3">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    
+                    <div class="flex items-center gap-3">
+                        <a href="{{ url_for('attendance.index') }}" class="p-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                            <i class="fas fa-arrow-left"></i>
+                        </a>
+                        <div>
+                            <h1 class="text-lg font-bold text-slate-800 leading-tight">
+                                {{ lecture.subject_name }}
+                            </h1>
+                            <p class="text-xs text-slate-500 font-medium flex items-center gap-2">
+                                <span>{{ lecture.class_name }} ({{ lecture.division_name }})</span>
+                                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                                <span>{{ attendance_date }}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                        <div class="px-3 py-1 rounded-md bg-white shadow-sm text-xs font-bold text-slate-600 border border-slate-200">
+                            Total: <span id="stat-total">{{ students|length }}</span>
+                        </div>
+                        <div class="px-3 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                            P: <span id="stat-present">0</span>
+                        </div>
+                        <div class="px-3 py-1 rounded-md bg-rose-50 text-rose-700 text-xs font-bold border border-rose-100">
+                            A: <span id="stat-absent">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 flex flex-col sm:flex-row gap-3">
+                    <div class="relative flex-1">
+                        <i class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                        <input type="text" id="searchInput" placeholder="Search student..." 
+                               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                    </div>
+                    
+                    <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+                        <button type="button" onclick="markAll('Present')" class="whitespace-nowrap px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold rounded-lg transition-colors">
+                            <i class="fas fa-check-double mr-1"></i> All Present
+                        </button>
+                        <button type="button" onclick="markAll('Absent')" class="whitespace-nowrap px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold rounded-lg transition-colors">
+                            <i class="fas fa-times mr-1"></i> All Absent
+                        </button>
+                        <select id="statusFilter" class="px-3 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg outline-none focus:border-indigo-500">
+                            <option value="all">Show All</option>
+                            <option value="unmarked">Unmarked</option>
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full px-4 py-6">
+            
+            {% if students %}
+            <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                <div class="col-span-4">Student Details</div>
+                <div class="col-span-5 text-center">Status</div>
+                <div class="col-span-3">Remarks</div>
+            </div>
+
+            <div class="space-y-3" id="studentList">
+                {% for student in students %}
+                <div class="student-row group bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                     data-student-name="{{ student.name|lower }}"
+                     data-roll-number="{{ student.roll_number|lower }}"
+                     data-status="{{ student.attendance_status|lower if student.attendance_status else 'unmarked' }}">
+                    
+                    <div class="md:grid md:grid-cols-12 md:items-center md:gap-4 p-4">
+                        
+                        <div class="md:col-span-4 flex items-center gap-3 mb-4 md:mb-0">
+                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm border border-slate-200">
+                                {{ student.roll_number }}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-bold text-slate-800 truncate">{{ student.name }}</p>
+                                <p class="text-xs text-slate-500 truncate">{{ student.email }}</p>
+                            </div>
+                        </div>
+
+                        <div class="md:col-span-5 flex justify-center mb-4 md:mb-0">
+                            <div class="flex w-full md:w-auto bg-slate-50 p-1 rounded-lg border border-slate-200 radio-group">
+                                
+                                <label class="flex-1 md:flex-none cursor-pointer relative">
+                                    <input type="radio" name="status_{{ student.id }}" value="Present" class="hidden peer status-radio" 
+                                           {% if student.attendance_status == 'Present' %}checked{% endif %} required>
+                                    <div class="px-4 py-2 rounded-md text-xs font-bold text-center text-slate-500 peer-checked:bg-emerald-500 peer-checked:text-white transition-all hover:bg-slate-200/50">
+                                        P
+                                    </div>
+                                </label>
+
+                                <label class="flex-1 md:flex-none cursor-pointer relative mx-1">
+                                    <input type="radio" name="status_{{ student.id }}" value="Late" class="hidden peer status-radio"
+                                           {% if student.attendance_status == 'Late' %}checked{% endif %}>
+                                    <div class="px-4 py-2 rounded-md text-xs font-bold text-center text-slate-500 peer-checked:bg-amber-500 peer-checked:text-white transition-all hover:bg-slate-200/50">
+                                        L
+                                    </div>
+                                </label>
+
+                                <label class="flex-1 md:flex-none cursor-pointer relative">
+                                    <input type="radio" name="status_{{ student.id }}" value="Absent" class="hidden peer status-radio"
+                                           {% if student.attendance_status == 'Absent' %}checked{% endif %}>
+                                    <div class="px-4 py-2 rounded-md text-xs font-bold text-center text-slate-500 peer-checked:bg-rose-500 peer-checked:text-white transition-all hover:bg-slate-200/50">
+                                        A
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="md:col-span-3">
+                            <input type="text" name="remarks_{{ student.id }}" value="{{ student.remarks or '' }}" 
+                                   placeholder="Add note..." 
+                                   class="w-full bg-slate-50 border-0 border-b-2 border-slate-100 focus:border-indigo-500 focus:ring-0 px-2 py-1.5 text-xs transition-colors rounded-t-sm">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="noResults" class="hidden flex-col items-center justify-center py-12 text-center">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-search text-slate-400 text-xl"></i>
+                </div>
+                <h3 class="text-slate-800 font-bold">No students found</h3>
+                <p class="text-slate-500 text-sm">Adjust your filters to see more results.</p>
+            </div>
+
+            {% else %}
+            <div class="text-center py-20">
+                <i class="fas fa-user-graduate text-slate-200 text-6xl mb-4"></i>
+                <h3 class="text-lg font-bold text-slate-700">No Students Enrolled</h3>
+                <p class="text-slate-500">Contact admin to add students to this class.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] p-4 z-40">
+            <div class="w-full flex items-center justify-between">
+                <div class="hidden sm:block text-xs text-slate-500">
+                    {% if attendance_already_marked %}
+                    <span class="text-amber-600 font-bold"><i class="fas fa-info-circle"></i> Update Mode</span>
+                    {% else %}
+                    <span class="text-emerald-600 font-bold"><i class="fas fa-plus-circle"></i> New Entry</span>
+                    {% endif %}
+                </div>
+                
+                <div class="flex gap-3 w-full sm:w-auto">
+                    <a href="{{ url_for('attendance.index') }}" class="flex-1 sm:flex-none px-6 py-2.5 text-center border border-slate-300 text-slate-700 font-bold text-sm rounded-xl hover:bg-slate-50 transition-colors">
+                        Cancel
+                    </a>
+                    <button type="submit" class="flex-1 sm:flex-none px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200 hover:shadow-xl transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-save"></i> 
+                        {{ 'Update Record' if attendance_already_marked else 'Save Attendance' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const rows = document.querySelectorAll('.student-row');
+    const noResults = document.getElementById('noResults');
+    const statPresent = document.getElementById('stat-present');
+    const statAbsent = document.getElementById('stat-absent');
+    
+    // --- Logic: Real-time Stats ---
+    function updateStats() {
+        let p = 0, a = 0;
+        document.querySelectorAll('.status-radio:checked').forEach(radio => {
+            const row = radio.closest('.student-row');
+            // Check if row is visible (optional, usually stats count everyone)
+            if(radio.value === 'Present') p++;
+            if(radio.value === 'Absent') a++;
+            
+            // Visual Row Update
+            row.classList.remove('border-emerald-200', 'border-rose-200', 'border-amber-200', 'bg-emerald-50/10', 'bg-rose-50/10');
+            if(radio.value === 'Present') row.classList.add('border-emerald-200', 'bg-emerald-50/10');
+            else if(radio.value === 'Absent') row.classList.add('border-rose-200', 'bg-rose-50/10');
+            else if(radio.value === 'Late') row.classList.add('border-amber-200');
+        });
+        statPresent.textContent = p;
+        statAbsent.textContent = a;
+    }
+
+    // --- Logic: Filtering ---
+    function filterList() {
+        const term = searchInput.value.toLowerCase();
+        const status = statusFilter.value;
+        let visible = 0;
+
+        rows.forEach(row => {
+            const name = row.dataset.studentName;
+            const roll = row.dataset.rollNumber;
+            // Get current checked status from DOM
+            const checkedRadio = row.querySelector('input[type="radio"]:checked');
+            const currentStatus = checkedRadio ? checkedRadio.value.toLowerCase() : 'unmarked';
+
+            const matchesSearch = name.includes(term) || roll.includes(term);
+            const matchesStatus = status === 'all' || currentStatus === status;
+
+            if (matchesSearch && matchesStatus) {
+                row.style.display = '';
+                visible++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        noResults.style.display = visible === 0 ? 'flex' : 'none';
+    }
+
+    // --- Logic: Bulk Action ---
+    window.markAll = function(status) {
+        // Only mark visible rows to respect search filters
+        rows.forEach(row => {
+            if (row.style.display !== 'none') {
+                const radio = row.querySelector(`input[value="${status}"]`);
+                if(radio) {
+                    radio.checked = true;
+                    // Trigger change event manually for stats update if needed
+                    const event = new Event('change', { bubbles: true });
+                    radio.dispatchEvent(event);
+                }
+            }
+        });
+        updateStats();
+    };
+
+    // --- Event Listeners ---
+    searchInput.addEventListener('keyup', filterList);
+    statusFilter.addEventListener('change', filterList);
+    
+    // Listen for any radio change to update stats/filters
+    document.getElementById('attendanceForm').addEventListener('change', function(e) {
+        if(e.target.type === 'radio') {
+            updateStats();
+            // If filtering by status, list might need refresh
+            if(statusFilter.value !== 'all') filterList();
+            
+            // Mark modified
+            window.isFormModified = true;
+        }
+    });
+
+    // Initial Run
+    updateStats();
+
+    // Prevent accidental navigation
+    window.isFormModified = false;
+    window.addEventListener('beforeunload', (e) => {
+        if (window.isFormModified) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    
+    document.getElementById('attendanceForm').addEventListener('submit', () => {
+        window.isFormModified = false;
+    });
+});
+</script>
+{% endblock %}

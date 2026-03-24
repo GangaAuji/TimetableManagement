@@ -128,6 +128,7 @@ update_passwords.py
 reset_passwords.py
 scripts/hash_passwords.py
 scripts/list_routes.py
+scripts/run_attendance_migration.ps1
 .vscode
 .DS_Store
 *.log

@@ -1,190 +1,266 @@
 {% extends "teacher/_layout.html" %}
 
 {% block title %}My Timetable{% endblock %}
-{% block header_title %}My Weekly Timetable{% endblock %}
+{% block header_title %}My Schedule{% endblock %}
 
 {% block extra_css %}
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
 <style>
-    .day-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.375rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
+    /* Timeline Connector Line */
+    .timeline-line::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 2rem;
+        width: 2px;
+        background: #e2e8f0;
+        z-index: 0;
     }
-    .day-monday { background-color: #FEF3C7; color: #92400E; }
-    .day-tuesday { background-color: #DBEAFE; color: #1E40AF; }
-    .day-wednesday { background-color: #D1FAE5; color: #065F46; }
-    .day-thursday { background-color: #FCE7F3; color: #9F1239; }
-    .day-friday { background-color: #E0E7FF; color: #3730A3; }
-    .day-saturday { background-color: #FEE2E2; color: #991B1B; }
-    .day-sunday { background-color: #F3F4F6; color: #374151; }
+    
+    /* Smooth Transitions */
+    .fade-enter {
+        animation: fadeEnter 0.4s ease-out forwards;
+    }
+    @keyframes fadeEnter {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Modern Scrollbar */
+    .hide-scroll::-webkit-scrollbar { display: none; }
+    .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4 py-4">
-    
-    <!-- Header Section -->
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-4 p-4">
-        <div class="flex justify-between items-center">
-            <div>
-                <h2 class="text-2xl font-bold text-gray-800 mb-1">My Weekly Timetable</h2>
-                <p class="text-sm text-gray-500">View and download your complete teaching schedule</p>
-            </div>
-            <div>
-                <a href="{{ url_for('teacher.download_timetable') }}" 
-                   class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow transition-colors inline-flex items-center">
-                    <i class="fas fa-download mr-2"></i>
-                    Download CSV
-                </a>
-            </div>
+<div class="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-6 fade-enter">
+
+    <div class="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Weekly Timetable</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage your teaching schedule effectively.</p>
+        </div>
+        
+        <div class="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            <button onclick="switchView('list')" id="btn-list" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all bg-indigo-50 text-indigo-600 shadow-sm">
+                <i class="fas fa-list-ul mr-2"></i> List View
+            </button>
+            <button onclick="switchView('grid')" id="btn-grid" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all">
+                <i class="fas fa-th-large mr-2"></i> Grid View
+            </button>
+            <div class="w-px h-6 bg-slate-200 mx-2"></div>
+            <a href="{{ url_for('teacher.download_timetable') }}" 
+               class="px-3 py-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Download CSV">
+                <i class="fas fa-download"></i>
+            </a>
         </div>
     </div>
 
-    <!-- Timetable Table -->
-    <div class="bg-white shadow-md rounded-lg border border-gray-200 overflow-hidden">
-        <div class="p-4 border-b border-gray-200">
-            <h3 class="text-lg font-bold text-gray-800">Class Schedule</h3>
-            <p class="text-xs text-gray-500">All your scheduled lectures for the week</p>
-        </div>
+    <div class="w-full">
         
-        <div class="p-4">
-            <table id="timetableTable" class="display responsive nowrap w-full">
-                <thead>
-                    <tr>
-                        <th>Day</th>
-                        <th>Time</th>
-                        <th>Subject</th>
-                        <th>Class</th>
-                        <th>Division</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Data loaded via AJAX -->
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Weekly View Grid -->
-    <div class="mt-6 bg-white shadow-md rounded-lg border border-gray-200 overflow-hidden">
-        <div class="p-4 border-b border-gray-200">
-            <h3 class="text-lg font-bold text-gray-800">Weekly Overview</h3>
-            <p class="text-xs text-gray-500">Visual representation of your weekly schedule</p>
-        </div>
-        
-        <div class="p-4">
-            <div id="weeklyGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <!-- Populated by JavaScript -->
+        <div id="view-list" class="space-y-8">
+            <div id="timeline-container" class="space-y-8 relative timeline-line">
+                <div class="animate-pulse pl-16 py-4">
+                    <div class="h-4 bg-slate-200 rounded w-1/4 mb-4"></div>
+                    <div class="h-24 bg-slate-100 rounded-xl border border-slate-200"></div>
+                </div>
             </div>
         </div>
+
+        <div id="view-grid" class="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            </div>
+
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<!-- jQuery (required for DataTables) -->
-<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-<!-- DataTables JS -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-
 <script>
-$(document).ready(function() {
-    // Initialize DataTable
-    var table = $('#timetableTable').DataTable({
-        ajax: {
-            url: '{{ url_for("teacher.timetable_data") }}',
-            dataSrc: 'data'
-        },
-        columns: [
-            { 
-                data: 'day',
-                render: function(data, type, row) {
-                    var dayClass = 'day-' + data.toLowerCase();
-                    return '<span class="day-badge ' + dayClass + '">' + data + '</span>';
-                }
-            },
-            { 
-                data: null,
-                render: function(data, type, row) {
-                    return '<div class="text-sm">' +
-                           '<div class="font-semibold text-gray-700">' + row.start_time + '</div>' +
-                           '<div class="text-gray-500">' + row.end_time + '</div>' +
-                           '</div>';
-                }
-            },
-            { 
-                data: 'subject',
-                render: function(data) {
-                    return '<span class="font-medium text-gray-800">' + data + '</span>';
-                }
-            },
-            { data: 'class' },
-            { data: 'division' }
-        ],
-        responsive: true,
-        pageLength: 25,
-        order: [[0, 'asc'], [1, 'asc']],
-        language: {
-            emptyTable: "No classes scheduled",
-            zeroRecords: "No matching classes found"
-        }
+    // --- State & Config ---
+    const daysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const colorMap = {
+        'Monday': 'border-indigo-500 bg-indigo-50 text-indigo-700',
+        'Tuesday': 'border-blue-500 bg-blue-50 text-blue-700',
+        'Wednesday': 'border-emerald-500 bg-emerald-50 text-emerald-700',
+        'Thursday': 'border-amber-500 bg-amber-50 text-amber-700',
+        'Friday': 'border-purple-500 bg-purple-50 text-purple-700',
+        'Saturday': 'border-rose-500 bg-rose-50 text-rose-700',
+        'Sunday': 'border-slate-500 bg-slate-50 text-slate-700'
+    };
+
+    // --- Core Logic ---
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchTimetable();
     });
 
-    // Populate weekly grid
-    $.getJSON('{{ url_for("teacher.timetable_data") }}', function(response) {
-        var data = response.data;
-        var weeklyGrid = $('#weeklyGrid');
-        var days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        
-        var dayGroups = {};
-        days.forEach(function(day) {
-            dayGroups[day] = [];
+    async function fetchTimetable() {
+        try {
+            // Using the existing endpoint
+            const response = await fetch('{{ url_for("teacher.timetable_data") }}'); 
+            const json = await response.json();
+            const data = json.data; // Assuming format: { data: [...] }
+
+            renderTimeline(data);
+            renderGrid(data);
+        } catch (error) {
+            console.error('Failed to load timetable', error);
+            document.getElementById('timeline-container').innerHTML = `
+                <div class="pl-12 text-slate-400 italic">Failed to load schedule. Please refresh.</div>
+            `;
+        }
+    }
+
+    function groupByDay(data) {
+        const groups = {};
+        daysOrder.forEach(day => groups[day] = []);
+        data.forEach(item => {
+            if(groups[item.day]) groups[item.day].push(item);
         });
-        
-        data.forEach(function(item) {
-            if (dayGroups[item.day]) {
-                dayGroups[item.day].push(item);
-            }
+        return groups;
+    }
+
+    // --- Render: List / Timeline View ---
+    function renderTimeline(data) {
+        const container = document.getElementById('timeline-container');
+        const grouped = groupByDay(data);
+        let html = '';
+
+        daysOrder.forEach(day => {
+            const classes = grouped[day];
+            if(classes.length === 0) return; // Skip empty days in list view
+
+            // Day Header
+            html += `
+                <div class="relative z-10">
+                    <div class="sticky top-20 z-20 flex items-center mb-4 bg-slate-50/90 backdrop-blur px-2 py-1 rounded-lg w-max -ml-2">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white border-2 border-slate-200 shadow-sm text-slate-600 mr-4">
+                            ${day.substring(0,3)}
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-800">${day}</h3>
+                        <span class="ml-3 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">${classes.length} Classes</span>
+                    </div>
+                    
+                    <div class="space-y-3 pl-14">
+            `;
+
+            // Class Cards
+            classes.sort((a,b) => a.start_time.localeCompare(b.start_time));
+            classes.forEach(cls => {
+                html += `
+                    <div class="group bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-300 transition-all duration-200 flex flex-col md:flex-row gap-4 items-start md:items-center">
+                        <div class="min-w-[100px] flex md:flex-col items-center gap-2 md:gap-0 border-r md:border-r-0 border-slate-100 pr-4 md:pr-0">
+                            <span class="text-sm font-bold text-slate-800">${cls.start_time}</span>
+                            <span class="text-xs text-slate-400">${cls.end_time}</span>
+                        </div>
+                        
+                        <div class="flex-1">
+                            <h4 class="font-bold text-indigo-900 text-base">${cls.subject}</h4>
+                            <div class="flex items-center gap-3 mt-1 text-xs font-medium text-slate-500">
+                                <span class="bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
+                                    <i class="fas fa-layer-group text-slate-400"></i> ${cls.class}
+                                </span>
+                                <span class="bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
+                                    <i class="fas fa-code-branch text-slate-400"></i> Div ${cls.division}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="hidden md:block">
+                            <a href="#" class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                <i class="fas fa-chevron-right text-xs"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
         });
-        
-        days.forEach(function(day) {
-            var classes = dayGroups[day];
-            var dayClass = 'day-' + day.toLowerCase();
+
+        if(html === '') {
+            html = `<div class="text-center py-12 text-slate-400">No classes scheduled for this week.</div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // --- Render: Grid View ---
+    function renderGrid(data) {
+        const container = document.getElementById('view-grid');
+        const grouped = groupByDay(data);
+        let html = '';
+
+        daysOrder.forEach(day => {
+            const classes = grouped[day];
+            const colorClass = colorMap[day] || 'border-slate-500 bg-slate-50 text-slate-700';
             
-            var cardHtml = '<div class="border rounded-lg overflow-hidden">' +
-                          '<div class="p-3 bg-gray-50 border-b">' +
-                          '<span class="day-badge ' + dayClass + '">' + day + '</span>' +
-                          '<span class="text-xs text-gray-500 ml-2">(' + classes.length + ' classes)</span>' +
-                          '</div>' +
-                          '<div class="p-3 space-y-2">';
-            
-            if (classes.length === 0) {
-                cardHtml += '<p class="text-sm text-gray-400 italic">No classes scheduled</p>';
+            html += `
+                <div class="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <span class="font-bold text-sm text-slate-700 uppercase tracking-wide">${day}</span>
+                        <span class="text-xs font-bold px-2 py-1 rounded bg-white border border-slate-200 text-slate-500">${classes.length}</span>
+                    </div>
+                    
+                    <div class="p-3 space-y-2 flex-1 overflow-y-auto max-h-[400px] custom-scroll">
+            `;
+
+            if(classes.length === 0) {
+                html += `
+                    <div class="h-32 flex flex-col items-center justify-center text-slate-300">
+                        <i class="fas fa-mug-hot text-2xl mb-2 opacity-50"></i>
+                        <span class="text-xs">No Classes</span>
+                    </div>
+                `;
             } else {
-                classes.forEach(function(cls) {
-                    cardHtml += '<div class="text-sm p-2 bg-gray-50 rounded border border-gray-200">' +
-                               '<div class="font-semibold text-gray-800">' + cls.subject + '</div>' +
-                               '<div class="text-xs text-gray-600 mt-1">' +
-                               '<i class="far fa-clock mr-1"></i>' + cls.start_time + ' - ' + cls.end_time +
-                               '</div>' +
-                               '<div class="text-xs text-gray-500 mt-1">' +
-                               cls.class + ' - ' + cls.division +
-                               '</div>' +
-                               '</div>';
+                classes.sort((a,b) => a.start_time.localeCompare(b.start_time));
+                classes.forEach(cls => {
+                    html += `
+                        <div class="p-3 rounded-xl border border-l-4 hover:shadow-md transition-shadow bg-white ${colorClass.replace('text-', 'border-').split(' ')[0]}">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-xs font-bold text-slate-500 font-mono">${cls.start_time}</span>
+                            </div>
+                            <h5 class="font-bold text-slate-800 text-sm leading-tight mb-1">${cls.subject}</h5>
+                            <p class="text-xs text-slate-500 flex items-center gap-1">
+                                <span>${cls.class}</span> &bull; <span>${cls.division}</span>
+                            </p>
+                        </div>
+                    `;
                 });
             }
-            
-            cardHtml += '</div></div>';
-            weeklyGrid.append(cardHtml);
+
+            html += `</div></div>`;
         });
-    });
-});
+
+        container.innerHTML = html;
+    }
+
+    // --- UI Actions ---
+    function switchView(viewName) {
+        const listView = document.getElementById('view-list');
+        const gridView = document.getElementById('view-grid');
+        const btnList = document.getElementById('btn-list');
+        const btnGrid = document.getElementById('btn-grid');
+
+        if(viewName === 'list') {
+            listView.classList.remove('hidden');
+            gridView.classList.add('hidden');
+            
+            btnList.classList.add('bg-indigo-50', 'text-indigo-600', 'shadow-sm');
+            btnList.classList.remove('text-slate-500', 'hover:bg-slate-50');
+            
+            btnGrid.classList.remove('bg-indigo-50', 'text-indigo-600', 'shadow-sm');
+            btnGrid.classList.add('text-slate-500', 'hover:bg-slate-50');
+        } else {
+            listView.classList.add('hidden');
+            gridView.classList.remove('hidden');
+            gridView.classList.add('grid'); // Restore grid display
+
+            btnGrid.classList.add('bg-indigo-50', 'text-indigo-600', 'shadow-sm');
+            btnGrid.classList.remove('text-slate-500', 'hover:bg-slate-50');
+            
+            btnList.classList.remove('bg-indigo-50', 'text-indigo-600', 'shadow-sm');
+            btnList.classList.add('text-slate-500', 'hover:bg-slate-50');
+        }
+    }
 </script>
 {% endblock %}

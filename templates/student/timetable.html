@@ -1,0 +1,163 @@
+{% extends "student/_layout.html" %}
+
+{% block title %}My Timetable{% endblock %}
+{% block header_title %}My Timetable{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800 tracking-tight">
+                Weekly Timetable
+            </h2>
+            <p class="text-gray-500 mt-1 text-sm">Your complete class schedule for the week.</p>
+        </div>
+        <div class="hidden md:block">
+            <button onclick="window.print()" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors">
+                <i class="fas fa-print mr-2"></i> Print Schedule
+            </button>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-circle text-red-500"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50/50 flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800 flex items-center">
+                <i class="fas fa-calendar-week mr-2 text-indigo-500"></i> Weekly Schedule
+            </h3>
+            <span class="text-xs text-gray-500">{{ timetable|length }} classes per week</span>
+        </div>
+
+        <!-- Desktop Table View -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-xs font-semibold tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50">
+                        <th class="px-6 py-4 w-32">Day</th>
+                        <th class="px-6 py-4 w-48">Time</th>
+                        <th class="px-6 py-4">Subject</th>
+                        <th class="px-6 py-4">Faculty</th>
+                        <th class="px-6 py-4 w-32">Room</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                    {% set current_day = namespace(value='') %}
+                    {% for entry in timetable %}
+                    <tr class="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                        <td class="px-6 py-4">
+                            {% if current_day.value != entry['day_of_week'] %}
+                            {% set current_day.value = entry['day_of_week'] %}
+                            <span class="text-sm font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                                {{ entry['day_of_week'][:3] }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <div class="flex items-center text-sm text-gray-600 group-hover:text-indigo-600 transition-colors">
+                                <i class="far fa-clock mr-2 text-gray-400 group-hover:text-indigo-500"></i>
+                                <span>{{ entry['start_time'] }} - {{ entry['end_time'] }}</span>
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                {{ entry['subject_name'] }}
+                            </span>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <div class="flex items-center text-sm text-gray-600">
+                                <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-2">
+                                    {{ entry['faculty_name'][0] if entry['faculty_name'] else '?' }}
+                                </div>
+                                {{ entry['faculty_name'] }}
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <span class="text-sm text-gray-500">{{ entry['room_number'] or '-' }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center">
+                            <div class="flex flex-col items-center justify-center">
+                                <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fas fa-mug-hot text-gray-400 text-xl"></i>
+                                </div>
+                                <p class="text-gray-900 font-medium">No classes found</p>
+                                <p class="text-sm text-gray-500 mt-1">Your timetable hasn't been generated yet.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Card View -->
+        <div class="md:hidden bg-gray-50/50 p-4 space-y-4">
+            {% set mobile_day = namespace(value='') %}
+            {% for entry in timetable %}
+            
+            {% if mobile_day.value != entry['day_of_week'] %}
+            {% set mobile_day.value = entry['day_of_week'] %}
+            <div class="flex items-center gap-2 mt-4 first:mt-0">
+                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wide">{{ entry['day_of_week'] }}</span>
+                <div class="flex-1 h-px bg-indigo-200"></div>
+            </div>
+            {% endif %}
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                
+                <div class="flex justify-between items-start mb-3 pl-2">
+                    <div class="flex flex-col">
+                        <span class="text-lg font-bold text-gray-800">{{ entry['subject_name'] }}</span>
+                    </div>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">
+                        {{ entry['start_time'] }} - {{ entry['end_time'] }}
+                    </span>
+                </div>
+                
+                <div class="flex items-center justify-between border-t border-gray-100 pt-3 pl-2">
+                    <div class="flex items-center text-sm text-gray-600">
+                        <i class="fas fa-chalkboard-teacher text-gray-400 mr-2"></i>
+                        <span class="truncate">{{ entry['faculty_name'] }}</span>
+                    </div>
+                    {% if entry['room_number'] %}
+                    <span class="text-xs text-gray-500">
+                        <i class="fas fa-door-open mr-1"></i>{{ entry['room_number'] }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-10 px-4">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-200 mb-4">
+                    <i class="fas fa-calendar-times text-gray-500 text-lg"></i>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900">No Schedule Yet</h3>
+                <p class="text-gray-500 text-sm mt-1">Check back later for updates.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

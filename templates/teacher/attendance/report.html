@@ -1,0 +1,273 @@
+{% extends "teacher/_layout.html" %}
+{% block title %}Attendance Reports{% endblock %}
+{% block header_title %}Attendance Reports{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header Section -->
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl shadow-xl p-8 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="flex items-center mb-2">
+                    <a href="{{ url_for('attendance.index') }}" 
+                       class="mr-4 hover:bg-white/20 p-2 rounded-lg transition-all">
+                        <i class="fas fa-arrow-left text-xl"></i>
+                    </a>
+                    <h2 class="text-3xl font-bold">Attendance Reports</h2>
+                </div>
+                <p class="text-blue-100 text-lg">View attendance statistics and analysis</p>
+            </div>
+            <div class="hidden md:block">
+                <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                    <i class="fas fa-chart-line text-5xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+        <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+            <i class="fas fa-filter mr-3 text-blue-600"></i>
+            Select Filters
+        </h3>
+        
+        <form method="GET" action="{{ url_for('attendance.attendance_report') }}" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Subject</label>
+                    <select name="subject_id" id="subject_select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+                        <option value="">Select Subject...</option>
+                        {% for option in filter_options %}
+                        <option value="{{ option.subject_id }}" 
+                                data-class-id="{{ option.class_id }}"
+                                data-class-name="{{ option.class_name }}"
+                                data-division-id="{{ option.division_id }}"
+                                data-division-name="{{ option.division_name }}"
+                                {% if selected_subject == option.subject_id %}selected{% endif %}>
+                            {{ option.subject_name }} - {{ option.class_name }} {{ option.division_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Class</label>
+                    <input type="hidden" name="class_id" id="class_id" value="{{ selected_class or '' }}">
+                    <input type="text" 
+                           id="class_display"
+                           value="{{ selected_class or '' }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 outline-none" 
+                           readonly placeholder="Auto-filled">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Division</label>
+                    <input type="hidden" name="division_id" id="division_id" value="{{ selected_division or '' }}">
+                    <input type="text" 
+                           id="division_display"
+                           value="{{ selected_division or '' }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 outline-none" 
+                           readonly placeholder="Auto-filled">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">From Date (Optional)</label>
+                    <input type="date" 
+                           name="date_from" 
+                           value="{{ date_from or '' }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">To Date (Optional)</label>
+                    <input type="date" 
+                           name="date_to" 
+                           value="{{ date_to or '' }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button type="submit" 
+                        class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all">
+                    <i class="fas fa-search mr-2"></i>View Report
+                </button>
+                {% if attendance_data %}
+                <a href="{{ url_for('attendance.attendance_report') }}" 
+                   class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all">
+                    <i class="fas fa-times mr-2"></i>Clear Filters
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Attendance Data Table -->
+    {% if attendance_data %}
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+        <div class="p-6 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-table mr-3 text-blue-600"></i>
+                        Attendance Report
+                    </h3>
+                    <p class="text-sm text-gray-600 mt-1">{{ attendance_data|length }} students</p>
+                </div>
+                <button onclick="exportToCSV()" 
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm hover:shadow-md transition-all">
+                    <i class="fas fa-download mr-2"></i>Export CSV
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <div class="overflow-x-auto">
+                <table class="min-w-full" id="attendanceTable">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Roll No</th>
+                            <th class="py-4 px-6 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Student Name</th>
+                            <th class="py-4 px-6 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Total</th>
+                            <th class="py-4 px-6 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Present</th>
+                            <th class="py-4 px-6 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Late</th>
+                            <th class="py-4 px-6 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Absent</th>
+                            <th class="py-4 px-6 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for data in attendance_data %}
+                        <tr class="hover:bg-gray-50 transition-all">
+                            <td class="py-4 px-6">
+                                <span class="text-sm font-semibold text-gray-700">{{ data.roll_number }}</span>
+                            </td>
+                            <td class="py-4 px-6">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold mr-3">
+                                        {{ data.student_name[0].upper() }}
+                                    </div>
+                                    <span class="text-sm font-semibold text-gray-800">{{ data.student_name }}</span>
+                                </div>
+                            </td>
+                            <td class="py-4 px-6 text-center">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-700">
+                                    {{ data.total_marked or 0 }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-center">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700">
+                                    {{ data.present_count or 0 }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-center">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-700">
+                                    {{ data.late_count or 0 }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-center">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-700">
+                                    {{ data.absent_count or 0 }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-center">
+                                {% set percentage = data.attendance_percentage or 0 %}
+                                <div class="flex flex-col items-center">
+                                    <span class="text-lg font-bold {% if percentage >= 75 %}text-green-600{% elif percentage >= 60 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                        {{ "%.2f"|format(percentage) }}%
+                                    </span>
+                                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                                        <div class="h-2 rounded-full {% if percentage >= 75 %}bg-green-500{% elif percentage >= 60 %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                                             style="width: {{ percentage }}%"></div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Auto-populate class and division when subject is selected
+document.getElementById('subject_select').addEventListener('change', function() {
+    const selected = this.options[this.selectedIndex];
+    if (selected.value) {
+        const classId = selected.getAttribute('data-class-id');
+        const className = selected.getAttribute('data-class-name');
+        const divisionId = selected.getAttribute('data-division-id');
+        const divisionName = selected.getAttribute('data-division-name');
+        
+        document.getElementById('class_id').value = classId;
+        document.getElementById('class_display').value = className;
+        document.getElementById('division_id').value = divisionId;
+        document.getElementById('division_display').value = divisionName;
+    } else {
+        document.getElementById('class_id').value = '';
+        document.getElementById('class_display').value = '';
+        document.getElementById('division_id').value = '';
+        document.getElementById('division_display').value = '';
+    }
+});
+
+// Initialize display fields on page load if filters are applied
+document.addEventListener('DOMContentLoaded', function() {
+    const subjectSelect = document.getElementById('subject_select');
+    if (subjectSelect.value) {
+        const selected = subjectSelect.options[subjectSelect.selectedIndex];
+        document.getElementById('class_display').value = selected.getAttribute('data-class-name');
+        document.getElementById('division_display').value = selected.getAttribute('data-division-name');
+    }
+});
+
+{% if attendance_data %}
+$(document).ready(function() {
+    $('#attendanceTable').DataTable({
+        "pageLength": 25,
+        "order": [[0, "asc"]],
+        "language": {
+            "search": "Search students:",
+            "lengthMenu": "Show _MENU_ students per page"
+        }
+    });
+});
+
+function exportToCSV() {
+    const table = document.getElementById('attendanceTable');
+    let csv = [];
+    
+    // Headers
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+        headers.push(th.textContent.trim());
+    });
+    csv.push(headers.join(','));
+    
+    // Data rows
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const row = [];
+        tr.querySelectorAll('td').forEach((td, index) => {
+            let text = td.textContent.trim().replace(/\s+/g, ' ');
+            row.push(`"${text}"`);
+        });
+        csv.push(row.join(','));
+    });
+    
+    // Download
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'attendance_report_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+}
+{% endif %}
+</script>
+
+{% endblock %}

@@ -1,0 +1,226 @@
+{% extends "teacher/_layout.html" %}
+
+{% block title %}Dashboard | Attendance{% endblock %}
+{% block header_title %}Attendance Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .glass-effect {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+    }
+    .hover-trigger .hover-target {
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    .hover-trigger:hover .hover-target {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-8 fade-in">
+
+    <div class="w-full space-y-6">
+        
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+                    Attendance Overview
+                </h1>
+                <p class="text-slate-500 mt-1 flex items-center gap-2">
+                    <i class="far fa-calendar-alt text-slate-400"></i>
+                    <span>{{ today if today else 'Today' }}</span>
+                </p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{{ url_for('attendance.attendance_report') }}" 
+                   class="inline-flex items-center px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all">
+                    <i class="fas fa-chart-pie mr-2 text-indigo-500"></i> View Reports
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-100 transition-all">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Lectures</p>
+                    <h3 class="text-3xl font-bold text-slate-800 mt-1">{{ lectures|length }}</h3>
+                </div>
+                <div class="h-12 w-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <i class="fas fa-chalkboard text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-100 transition-all">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Marked Today</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <h3 class="text-3xl font-bold text-slate-800">{{ marked_today_count }}</h3>
+                        <span class="text-xs text-slate-400 font-medium">/ {{ lectures|length }}</span>
+                    </div>
+                </div>
+                <div class="h-12 w-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <i class="fas fa-check-circle text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-5 shadow-lg shadow-indigo-200 text-white relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-2 -mr-2 w-20 h-20 bg-white/10 rounded-full blur-xl"></div>
+                <div class="relative z-10">
+                    <p class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Completion</p>
+                    <div class="flex items-center gap-3 mt-1">
+                        {% set percentage = (marked_today_count / lectures|length * 100) if lectures|length > 0 else 0 %}
+                        <h3 class="text-3xl font-bold">{{ "%.0f"|format(percentage) }}%</h3>
+                        <div class="flex-1 h-1.5 bg-black/20 rounded-full overflow-hidden max-w-[100px]">
+                            <div class="h-full bg-white/90 rounded-full" style="width: {{ percentage }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        
+        <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/30">
+            <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                <i class="fas fa-list-ul text-slate-400 text-sm"></i> Scheduled Lectures
+            </h3>
+            <div class="relative w-full sm:w-64">
+                <i class="fas fa-search absolute left-3 top-3 text-slate-400 text-sm"></i>
+                <input type="text" id="lectureSearch" placeholder="Search subject or class..." 
+                       class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+            </div>
+        </div>
+
+        <div class="bg-slate-50/50 min-h-[300px]">
+            {% if lectures %}
+                <div class="hidden md:grid grid-cols-12 gap-4 px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 bg-white">
+                    <div class="col-span-2">Time</div>
+                    <div class="col-span-4">Subject Info</div>
+                    <div class="col-span-3">Class Context</div>
+                    <div class="col-span-3 text-right">Action</div>
+                </div>
+
+                <div id="lecturesList" class="divide-y divide-slate-100">
+                    {% for lecture in lectures %}
+                    <div class="lecture-item group bg-white hover:bg-indigo-50/30 transition-colors duration-200 p-4 md:px-6 md:py-4 flex flex-col md:grid md:grid-cols-12 gap-4 md:items-center">
+                        
+                        <div class="md:col-span-2 flex items-center gap-3">
+                            <div class="md:hidden p-2 rounded-lg bg-slate-100 text-slate-500">
+                                <i class="far fa-clock"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800 font-mono">{{ lecture.start_time }}</p>
+                                <p class="text-xs text-slate-500 font-medium">{{ lecture.end_time }}</p>
+                            </div>
+                            <span class="md:hidden ml-auto px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase">
+                                {{ lecture.day_of_week[:3] }}
+                            </span>
+                        </div>
+
+                        <div class="md:col-span-4">
+                            <h4 class="text-base md:text-sm font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">
+                                {{ lecture.subject_name }}
+                            </h4>
+                            <p class="text-xs text-slate-500 hidden md:block">
+                                <i class="fas fa-calendar-day mr-1 opacity-70"></i> {{ lecture.day_of_week }}
+                            </p>
+                        </div>
+
+                        <div class="md:col-span-3 flex flex-wrap gap-2">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                <i class="fas fa-layer-group mr-1.5 opacity-50"></i> {{ lecture.class_name }}
+                            </span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                <i class="fas fa-code-branch mr-1.5 opacity-50"></i> {{ lecture.division_name }}
+                            </span>
+                        </div>
+
+                        <div class="md:col-span-3 flex items-center justify-between md:justify-end gap-3 mt-2 md:mt-0">
+                            
+                            <a href="{{ url_for('attendance.attendance_history', timetable_id=lecture.timetable_id) }}" 
+                               class="text-slate-400 hover:text-indigo-600 transition-colors p-2" title="History">
+                                <i class="fas fa-history text-lg"></i>
+                            </a>
+
+                            {% if lecture.attendance_marked_today %}
+                                <a href="{{ url_for('attendance.mark_attendance', timetable_id=lecture.timetable_id) }}" 
+                                   class="flex-1 md:flex-none justify-center inline-flex items-center px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-lg text-sm font-bold transition-all shadow-sm">
+                                    <i class="fas fa-pen mr-2 text-xs"></i> Update
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('attendance.mark_attendance', timetable_id=lecture.timetable_id) }}" 
+                                   class="flex-1 md:flex-none justify-center inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg shadow-indigo-200 group-hover:-translate-y-0.5 transform duration-200">
+                                    <i class="fas fa-check mr-2"></i> Mark Now
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div id="noResults" class="hidden flex-col items-center justify-center py-12 text-center">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-search text-slate-300 text-2xl"></i>
+                    </div>
+                    <h3 class="text-slate-600 font-bold">No lectures found</h3>
+                    <p class="text-slate-400 text-sm">Try adjusting your search query.</p>
+                </div>
+
+            {% else %}
+                <div class="flex flex-col items-center justify-center py-16 text-center">
+                    <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                        <i class="fas fa-mug-hot text-slate-400 text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-800">No Lectures Assigned</h3>
+                    <p class="text-slate-500 max-w-sm mt-1">You don't have any lectures scheduled. Enjoy your free time!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Lightweight Vanilla JS Search (Replaces heavy jQuery DataTables)
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.getElementById('lectureSearch');
+        const listContainer = document.getElementById('lecturesList');
+        const items = document.querySelectorAll('.lecture-item');
+        const noResults = document.getElementById('noResults');
+
+        if(searchInput && items.length > 0) {
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                let visibleCount = 0;
+
+                items.forEach(item => {
+                    // Search in the text content of the row
+                    const text = item.innerText.toLowerCase();
+                    if(text.includes(term)) {
+                        item.classList.remove('hidden');
+                        item.classList.add('flex', 'md:grid'); // Restore display classes
+                        visibleCount++;
+                    } else {
+                        item.classList.add('hidden');
+                        item.classList.remove('flex', 'md:grid');
+                    }
+                });
+
+                // Toggle empty state
+                if(visibleCount === 0) {
+                    noResults.classList.remove('hidden');
+                    noResults.classList.add('flex');
+                } else {
+                    noResults.classList.add('hidden');
+                    noResults.classList.remove('flex');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

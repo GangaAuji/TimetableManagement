@@ -38,7 +38,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto pb-6 fade-in-up">
+<div class="w-full pb-6 fade-in-up">
     
     <form method="POST" action="{{ url_for('profile.edit_profile') }}" enctype="multipart/form-data" id="profileForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

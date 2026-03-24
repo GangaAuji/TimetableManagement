@@ -1,0 +1,336 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Report Processor & Exports{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl shadow-xl p-6 mb-6 text-white">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center mb-2">
+                    <a href="{{ url_for('admin_reports.reports_index') }}" class="mr-4 hover:bg-white/20 p-2 rounded-lg transition-all">
+                        <i class="fas fa-arrow-left text-xl"></i>
+                    </a>
+                    <h2 class="text-3xl font-bold">Report Processor & Exports</h2>
+                </div>
+                <p class="text-slate-200">Process any report and download CSV from this single page only.</p>
+            </div>
+            <div class="hidden md:flex items-center gap-2 text-sm bg-white/10 px-4 py-2 rounded-lg border border-white/20">
+                <i class="fas fa-file-csv text-emerald-300"></i>
+                <span>Centralized CSV Exports</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section class="bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-user-check text-blue-600 mr-2"></i>Attendance CSV
+            </h3>
+            <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='attendance') }}" class="space-y-4 report-export-form" data-report-type="attendance" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='attendance') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                        <input type="date" name="start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                        <input type="date" name="end_date" value="{{ today }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Course</label>
+                        <select name="course_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Courses</option>
+                            {% for course in courses %}
+                            <option value="{{ course.id }}">{{ course.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Class</label>
+                        <select name="class_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Classes</option>
+                            {% for class in classes %}
+                            <option value="{{ class.id }}">{{ class.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Division</label>
+                        <select name="division_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Divisions</option>
+                            {% for division in divisions %}
+                            <option value="{{ division.id }}">{{ division.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3">
+                    <button type="button" class="preview-btn md:w-1/2 px-4 py-2.5 border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-lg font-semibold">
+                        <i class="fas fa-eye mr-2"></i>Preview Rows
+                    </button>
+                    <button type="submit" class="md:w-1/2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold">
+                        <i class="fas fa-download mr-2"></i>Process & Download Attendance CSV
+                    </button>
+                </div>
+                <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-calendar-week text-green-600 mr-2"></i>Timetable CSV
+            </h3>
+            <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='timetable') }}" class="space-y-4 report-export-form" id="timetableExportForm" data-report-type="timetable" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='timetable') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Report Type</label>
+                    <select name="report_type" id="processorReportType" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="class">By Class</option>
+                        <option value="faculty">By Faculty</option>
+                        <option value="room">By Room</option>
+                    </select>
+                </div>
+
+                <div id="processorClassSelect">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Class</label>
+                    <select name="entity_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="">Choose a class...</option>
+                        {% for class in classes %}
+                        <option value="{{ class.id }}">{{ class.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="processorFacultySelect" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Faculty</label>
+                    <select name="entity_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="">Choose faculty...</option>
+                        {% for fac in faculty %}
+                        <option value="{{ fac.user_id }}">{{ fac.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="processorRoomSelect" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Room</label>
+                    <select name="entity_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="">Choose a room...</option>
+                        {% for room in rooms %}
+                        <option value="{{ room.id }}">{{ room.room_number }} - {{ room.room_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-3">
+                    <button type="button" class="preview-btn md:w-1/2 px-4 py-2.5 border border-green-300 text-green-700 hover:bg-green-50 rounded-lg font-semibold">
+                        <i class="fas fa-eye mr-2"></i>Preview Rows
+                    </button>
+                    <button type="submit" class="md:w-1/2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold">
+                        <i class="fas fa-download mr-2"></i>Process & Download Timetable CSV
+                    </button>
+                </div>
+                <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-shield-alt text-purple-600 mr-2"></i>Audit Logs CSV
+            </h3>
+            <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='audit-logs') }}" class="space-y-4 report-export-form" data-report-type="audit-logs" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='audit-logs') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                        <input type="date" name="start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                        <input type="date" name="end_date" value="{{ today }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">User</label>
+                        <select name="user_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Users</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                        <select name="action" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Actions</option>
+                            {% for action in actions %}
+                            <option value="{{ action.action }}">{{ action.action }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3">
+                    <button type="button" class="preview-btn md:w-1/2 px-4 py-2.5 border border-purple-300 text-purple-700 hover:bg-purple-50 rounded-lg font-semibold">
+                        <i class="fas fa-eye mr-2"></i>Preview Rows
+                    </button>
+                    <button type="submit" class="md:w-1/2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold">
+                        <i class="fas fa-download mr-2"></i>Process & Download Audit CSV
+                    </button>
+                </div>
+                <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-user-friends text-rose-600 mr-2"></i>Proxy Log CSV
+            </h3>
+            <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='proxy-log') }}" class="space-y-4 report-export-form" data-report-type="proxy-log" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='proxy-log') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                        <input type="date" name="start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                        <input type="date" name="end_date" value="{{ today }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3">
+                    <button type="button" class="preview-btn md:w-1/2 px-4 py-2.5 border border-rose-300 text-rose-700 hover:bg-rose-50 rounded-lg font-semibold">
+                        <i class="fas fa-eye mr-2"></i>Preview Rows
+                    </button>
+                    <button type="submit" class="md:w-1/2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold">
+                        <i class="fas fa-download mr-2"></i>Process & Download Proxy CSV
+                    </button>
+                </div>
+                <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+            </form>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-lg p-6 xl:col-span-2">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-layer-group text-orange-600 mr-2"></i>One-Click CSV Exports
+            </h3>
+            <p class="text-sm text-gray-600 mb-4">These exports do not require filters and are processed immediately.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='shifts') }}" class="report-export-form" data-report-type="shifts" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='shifts') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="space-y-3">
+                        <button type="button" class="preview-btn w-full px-4 py-2.5 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg font-semibold">
+                            <i class="fas fa-eye mr-2"></i>Preview Rows
+                        </button>
+                        <button type="submit" class="w-full px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold">
+                            <i class="fas fa-download mr-2"></i>Process & Download Shifts CSV
+                        </button>
+                        <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+                    </div>
+                </form>
+                <form method="POST" action="{{ url_for('admin_reports.export_report', report_type='invitations') }}" class="report-export-form" data-report-type="invitations" data-preview-url="{{ url_for('admin_reports.preview_report', report_type='invitations') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="space-y-3">
+                        <button type="button" class="preview-btn w-full px-4 py-2.5 border border-teal-300 text-teal-700 hover:bg-teal-50 rounded-lg font-semibold">
+                            <i class="fas fa-eye mr-2"></i>Preview Rows
+                        </button>
+                        <button type="submit" class="w-full px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold">
+                            <i class="fas fa-download mr-2"></i>Process & Download Invitations CSV
+                        </button>
+                        <div class="preview-result hidden text-sm rounded-lg px-3 py-2 border"></div>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+(function () {
+    const reportTypeSelect = document.getElementById('processorReportType');
+    const classBlock = document.getElementById('processorClassSelect');
+    const facultyBlock = document.getElementById('processorFacultySelect');
+    const roomBlock = document.getElementById('processorRoomSelect');
+    const reportForms = document.querySelectorAll('.report-export-form');
+
+    function setPreviewState(container, text, isError) {
+        container.classList.remove('hidden', 'border-red-200', 'bg-red-50', 'text-red-700', 'border-green-200', 'bg-green-50', 'text-green-700');
+        if (isError) {
+            container.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+            container.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>' + text;
+            return;
+        }
+
+        container.classList.add('border-green-200', 'bg-green-50', 'text-green-700');
+        container.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + text;
+    }
+
+    function applyTimetableSelection(type) {
+        const classSelect = classBlock.querySelector('select[name="entity_id"]');
+        const facultySelect = facultyBlock.querySelector('select[name="entity_id"]');
+        const roomSelect = roomBlock.querySelector('select[name="entity_id"]');
+
+        classBlock.classList.add('hidden');
+        facultyBlock.classList.add('hidden');
+        roomBlock.classList.add('hidden');
+        classSelect.disabled = true;
+        facultySelect.disabled = true;
+        roomSelect.disabled = true;
+
+        if (type === 'faculty') {
+            facultyBlock.classList.remove('hidden');
+            facultySelect.disabled = false;
+        } else if (type === 'room') {
+            roomBlock.classList.remove('hidden');
+            roomSelect.disabled = false;
+        } else {
+            classBlock.classList.remove('hidden');
+            classSelect.disabled = false;
+        }
+    }
+
+    reportForms.forEach(function (form) {
+        const previewButton = form.querySelector('.preview-btn');
+        const previewResult = form.querySelector('.preview-result');
+        if (!previewButton || !previewResult) {
+            return;
+        }
+
+        previewButton.addEventListener('click', async function () {
+            const previewUrl = form.dataset.previewUrl;
+            const payload = new FormData(form);
+
+            previewButton.disabled = true;
+            previewButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing Preview...';
+
+            try {
+                const response = await fetch(previewUrl, {
+                    method: 'POST',
+                    body: payload,
+                    headers: {
+                        'X-CSRFToken': payload.get('csrf_token') || ''
+                    }
+                });
+
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    setPreviewState(previewResult, result.error || 'Preview failed. Please check filters and try again.', true);
+                    return;
+                }
+
+                const rowCount = Number(result.row_count || 0);
+                setPreviewState(previewResult, rowCount + ' row(s) will be included in this CSV export.', false);
+            } catch (error) {
+                setPreviewState(previewResult, 'Preview failed due to a network or server error.', true);
+            } finally {
+                previewButton.disabled = false;
+                previewButton.innerHTML = '<i class="fas fa-eye mr-2"></i>Preview Rows';
+            }
+        });
+    });
+
+    applyTimetableSelection(reportTypeSelect.value);
+    reportTypeSelect.addEventListener('change', function () {
+        applyTimetableSelection(this.value);
+    });
+})();
+</script>
+{% endblock %}

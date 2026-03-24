@@ -12,6 +12,7 @@ class Config:
     # General Config
     SECRET_KEY = os.environ.get('SECRET_KEY')
     DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+    FLASK_ENV = 'development'
     
     # Base URL for production
     BASE_URL = os.environ.get('BASE_URL')
