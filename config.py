@@ -12,8 +12,8 @@ class Config:
     # General Config
     SECRET_KEY = os.environ.get('SECRET_KEY')
     DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-    FLASK_ENV = 'development'
-    
+    FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
+
     # Base URL for production
     BASE_URL = os.environ.get('BASE_URL')
     
@@ -28,6 +28,13 @@ class Config:
     
     # Logging
     LOG_FILE = os.environ.get('LOG_FILE')
+
+    # Timetable quality model
+    QUALITY_MODEL_PATH = os.environ.get(
+        'QUALITY_MODEL_PATH',
+        os.path.join(basedir, 'ml', 'models', 'timetable_quality_model.json')
+    )
+    QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES = int(os.environ.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 5))
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(basedir, 'uploads')

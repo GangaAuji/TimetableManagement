@@ -3,11 +3,13 @@ Admin API Routes
 Provides JSON endpoints for dynamic data loading, previews, and exports
 """
 
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, current_app
 from datetime import datetime
 import io
 import csv
 import math as _math
+import os
+from flask import session
 
 from database import get_db_connection
 from routes.admin_utils import admin_required
@@ -102,66 +104,60 @@ def get_faculty_by_subject():
 def generate_preview():
     """Generate a preview of the timetable without saving to database"""
     data = request.get_json()
-    
-    course_id = data.get('course_id')
-    class_id = data.get('class_id')
-    division_id = data.get('division_id')
+
+    try:
+        current_app.logger.info('Preview request received by user_id=%s; payload keys=%s', session.get('user_id'), list((data or {}).keys()))
+    except Exception:
+        current_app.logger.info('Preview request received; unable to log payload keys')
+
+    course_id = data.get('course_id') or data.get('course')
+    class_id = data.get('class_id') or data.get('class')
+    division_id = data.get('division_id') or data.get('division')
     week_start_date_str = data.get('week_start_date')
     day_start_str = data.get('day_start')
     day_end_str = data.get('day_end')
     lecture_minutes = data.get('lecture_minutes')
     break_start_str = data.get('break_start')
     break_duration = data.get('break_duration')
-    working_days_str = data.get('working_days', '')
+    working_days_raw = data.get('working_days', '')
 
     # Validate required fields
     if not all([course_id, class_id, division_id]):
+        current_app.logger.warning('Preview validation failed: missing required identifiers (course/class/division)')
         return jsonify({
             'status': 'error',
             'message': 'course_id, class_id, and division_id are required'
         }), 400
 
-    # Parse dates and times
-    try:
-        week_start_date = datetime.strptime(week_start_date_str, '%Y-%m-%d').date() if week_start_date_str else None
-    except Exception:
-        week_start_date = None
-
-    try:
-        day_start = datetime.strptime(day_start_str, '%H:%M').time() if day_start_str else None
-    except Exception:
-        day_start = None
-
-    try:
-        day_end = datetime.strptime(day_end_str, '%H:%M').time() if day_end_str else None
-    except Exception:
-        day_end = None
-
-    try:
-        break_start = datetime.strptime(break_start_str, '%H:%M').time() if break_start_str else None
-    except Exception:
-        break_start = None
-
-    try:
-        working_days = [d.strip() for d in working_days_str.split(',') if d.strip()] if working_days_str else None
-    except Exception:
-        working_days = None
+    if isinstance(working_days_raw, list):
+        working_days = [str(d).strip() for d in working_days_raw if str(d).strip()]
+    else:
+        working_days = [d.strip() for d in str(working_days_raw or '').split(',') if d.strip()] or None
 
     result = generate_timetable_for_class(
         course_id,
         class_id,
         division_id,
-        week_start_date=week_start_date,
-        day_start=day_start,
-        day_end=day_end,
+        week_start_date=week_start_date_str,
+        day_start=day_start_str or '09:00',
+        day_end=day_end_str or '15:00',
         lecture_minutes=lecture_minutes,
-        break_start=break_start,
+        break_start=break_start_str,
         break_duration=break_duration,
         working_days=working_days,
         preview_only=True,
+        candidate_count=5,
+        created_by=session.get('user_id'),
     )
 
     status = result.get('status')
+    current_app.logger.info(
+        'Preview result status=%s assigned=%s unassigned=%s quality_score=%s',
+        status,
+        len(result.get('assigned') or []),
+        len(result.get('unassigned') or []),
+        result.get('quality_score'),
+    )
     if status in ('error',):
         return jsonify(result), 400
     return jsonify(result)
@@ -351,3 +347,97 @@ def coverage_csv():
     resp.headers['Content-Disposition'] = f'attachment; filename=coverage_class_{course_id}_{class_id}_{division_id}.csv'
     resp.headers['Content-Type'] = 'text/csv'
     return resp
+
+
+@api_bp.route('/quality_model_status', methods=['GET'])
+@admin_required
+def quality_model_status():
+    """Return quality-model health details for admin UI."""
+
+    model_path = current_app.config.get('QUALITY_MODEL_PATH')
+    interval_minutes = int(current_app.config.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 180) or 180)
+
+    training_samples = 0
+    accepted_samples = 0
+    rejected_samples = 0
+    last_run_at = None
+    last_run_score = None
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        try:
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_samples,
+                    SUM(CASE WHEN is_selected = 1 THEN 1 ELSE 0 END) AS accepted_samples,
+                    SUM(CASE WHEN is_selected = 0 THEN 1 ELSE 0 END) AS rejected_samples
+                FROM timetable_quality_candidates
+                """
+            )
+            sample_row = cursor.fetchone() or {}
+            training_samples = int(sample_row.get('total_samples') or 0)
+            accepted_samples = int(sample_row.get('accepted_samples') or 0)
+            rejected_samples = int(sample_row.get('rejected_samples') or 0)
+        except Exception:
+            # Candidates table may not exist yet in older databases.
+            training_samples = 0
+            accepted_samples = 0
+            rejected_samples = 0
+
+        try:
+            cursor.execute(
+                """
+                SELECT created_at, quality_score
+                FROM timetable_quality_runs
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            )
+            latest_row = cursor.fetchone() or {}
+            last_run_at = latest_row.get('created_at')
+            if latest_row.get('quality_score') is not None:
+                last_run_score = float(latest_row.get('quality_score'))
+        except Exception:
+            last_run_at = None
+            last_run_score = None
+    finally:
+
+        cursor.close()
+
+        connection.close()
+
+    model_exists = bool(model_path and os.path.exists(model_path))
+    last_retrain_at = None
+    model_metadata = {}
+
+    if model_exists:
+        try:
+            last_retrain_at = datetime.fromtimestamp(os.path.getmtime(model_path))
+            from ml.scoring.learned_predictor import _load_model  # pylint: disable=protected-access
+
+            loaded_model = _load_model(model_path=model_path)
+            if isinstance(loaded_model, dict):
+                model_metadata = {
+                    'model_type': loaded_model.get('model_type'),
+                    'training_accuracy': loaded_model.get('training_accuracy'),
+                    'sample_count': loaded_model.get('sample_count'),
+                }
+        except Exception as model_error:
+            current_app.logger.debug('Unable to read quality model metadata: %s', str(model_error))
+
+    response = {
+        'status': 'ok',
+        'model_source': 'learned_predictor' if model_exists else 'rule_fallback',
+        'model_path': model_path,
+        'retrain_interval_minutes': interval_minutes,
+        'last_retrain_at': last_retrain_at.isoformat() if last_retrain_at else None,
+        'training_samples': training_samples,
+        'accepted_samples': accepted_samples,
+        'rejected_samples': rejected_samples,
+        'last_generation_run_at': last_run_at.isoformat() if last_run_at else None,
+        'last_generation_quality_score': last_run_score,
+        'model_metadata': model_metadata,
+    }
+    return jsonify(response)

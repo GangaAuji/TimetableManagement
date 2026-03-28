@@ -390,13 +390,38 @@ const API = {
 
     async post(url, data) {
         try {
+            const csrfInput = document.querySelector('input[name="csrf_token"]');
+            const csrfTokenFromInput = csrfInput ? csrfInput.value : '';
+            const csrfTokenFromCookie = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || '';
+            const csrfToken = csrfTokenFromInput || csrfTokenFromCookie;
+
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: JSON.stringify(data)
             });
-            if (!response.ok) throw new Error('Network response was not ok');
-            return await response.json();
+
+            const contentType = response.headers.get('content-type') || '';
+            const isJson = contentType.includes('application/json');
+            const payload = isJson ? await response.json() : await response.text();
+
+            if (!response.ok) {
+                const details = isJson
+                    ? (payload && (payload.error || payload.message)) || 'Request failed'
+                    : String(payload || '').slice(0, 180);
+                throw new Error(`HTTP ${response.status}: ${details}`);
+            }
+
+            if (!isJson) {
+                throw new Error('Expected JSON response but received HTML/text response');
+            }
+
+            return payload;
         } catch (error) {
             console.error('POST request failed:', error);
             this.showError('Failed to submit data');
@@ -593,6 +618,7 @@ const TimetablePreview = {
         const previewContent = document.getElementById('previewContent');
 
         if (!previewBtn || !previewModal) return;
+        if (previewBtn.dataset.inlinePreview === 'true') return;
 
         previewBtn.addEventListener('click', async () => {
             const course = document.getElementById('course')?.value;

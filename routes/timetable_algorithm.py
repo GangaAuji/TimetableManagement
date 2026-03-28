@@ -1,12 +1,14 @@
 from flask import Blueprint, current_app
 from collections import defaultdict
 from datetime import time, timedelta,datetime, date
+from uuid import uuid4
 import math
 import os
 import random
 import secrets
 
 from database import get_db_connection
+from services.timetable_quality_service import score_timetable_candidate
 
 timetable_algorithm_bp = Blueprint('timetable_algorithm', __name__, url_prefix='/admin')
 
@@ -16,6 +18,10 @@ WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturd
 
 
 def _parse_time(value: str, field: str) -> time:
+    if isinstance(value, time):
+        return value
+    if hasattr(value, 'hour') and hasattr(value, 'minute'):
+        return time(value.hour, value.minute)
     try:
         return datetime.strptime(value, '%H:%M').time()
     except (TypeError, ValueError):
@@ -83,6 +89,8 @@ def generate_timetable_for_class(
     break_duration: int = 0,
     working_days: list[str] | None = None,
     preview_only: bool = False,
+    candidate_count: int = 7,
+    created_by: int | None = None,
 ):
     """Generate a weekly timetable for the given class/division respecting availability, holidays, and proxies."""
 
@@ -116,10 +124,13 @@ def generate_timetable_for_class(
 
     # Determine the start date of the scheduling window (defaults to upcoming Monday)
     if week_start_date:
-        try:
-            week_start = datetime.strptime(week_start_date, '%Y-%m-%d').date()
-        except ValueError:
-            return {'status': 'error', 'message': 'Week start date must be in YYYY-MM-DD format.'}
+        if isinstance(week_start_date, date):
+            week_start = week_start_date
+        else:
+            try:
+                week_start = datetime.strptime(week_start_date, '%Y-%m-%d').date()
+            except ValueError:
+                return {'status': 'error', 'message': 'Week start date must be in YYYY-MM-DD format.'}
     else:
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
@@ -453,19 +464,19 @@ def generate_timetable_for_class(
             has_room_column = False
             existing_room_usage = defaultdict(lambda: defaultdict(list))
 
-        assigned_entries: list[dict[str, object]] = []
-        unassigned_slots: list[dict[str, object]] = []
-        proxy_suggestions: list[dict[str, object]] = []
-        # Sessions assigned but missing a room (fallback list) — these require post-generation room allocation
-        needs_room_entries: list[dict[str, object]] = []
-
-        def faculty_is_available(faculty_id: int, day_name: str, slot_group: list[tuple[time, time]], day_date: date) -> tuple[bool, str | None]:
+        def faculty_is_available(
+            faculty_id: int,
+            day_name: str,
+            slot_group: list[tuple[time, time]],
+            day_date: date,
+            faculty_busy_state: dict[int, dict[str, list[tuple[time, time]]]],
+        ) -> tuple[bool, str | None]:
             # Check if faculty is absent on this date
             if (faculty_id, day_date) in faculty_absences:
                 return False, 'absent'
 
             # Check for scheduling conflicts with already assigned classes
-            for busy_start, busy_end in faculty_busy.get(faculty_id, {}).get(day_name, []):
+            for busy_start, busy_end in faculty_busy_state.get(faculty_id, {}).get(day_name, []):
                 if any(_times_overlap(busy_start, busy_end, start, end) for start, end in slot_group):
                     return False, 'conflict'
 
@@ -491,24 +502,32 @@ def generate_timetable_for_class(
 
             return True, None
 
-        # Sort sessions for balanced distribution across subjects
-        # Group by subject_id to count sessions per subject, then distribute evenly
-        from collections import Counter
-        subject_session_counts = Counter(s['subject_id'] for s in sessions)
-        
-        # Create session distribution order: round-robin through subjects
-        # This ensures each subject gets sessions distributed evenly across the week
-        subject_order = sorted(subject_session_counts.keys())
-        distributed_sessions = []
-        max_sessions = max(subject_session_counts.values())
-        
-        for session_index in range(max_sessions):
-            for subject_id in subject_order:
-                subject_sessions = [s for s in sessions if s['subject_id'] == subject_id]
-                if session_index < len(subject_sessions):
-                    distributed_sessions.append(subject_sessions[session_index])
-        
-        sessions = distributed_sessions
+        def build_distributed_sessions(candidate_sessions: list[dict[str, object]], seed_value: int) -> list[dict[str, object]]:
+            # Round-robin by subject with seed-driven shuffle for candidate diversity.
+            from collections import Counter
+
+            randomizer = random.Random(seed_value)
+            for item in candidate_sessions:
+                randomizer.shuffle(item['faculty_candidates'])
+
+            subject_session_counts = Counter(s['subject_id'] for s in candidate_sessions)
+            subject_order = sorted(subject_session_counts.keys())
+            randomizer.shuffle(subject_order)
+
+            subject_buckets: dict[int, list[dict[str, object]]] = defaultdict(list)
+            for item in candidate_sessions:
+                subject_buckets[item['subject_id']].append(item)
+            for subject_id in subject_buckets:
+                randomizer.shuffle(subject_buckets[subject_id])
+
+            distributed: list[dict[str, object]] = []
+            max_sessions = max(subject_session_counts.values())
+            for session_index in range(max_sessions):
+                for subject_id in subject_order:
+                    subject_sessions = subject_buckets[subject_id]
+                    if session_index < len(subject_sessions):
+                        distributed.append(subject_sessions[session_index])
+            return distributed
 
         # Determine expected group size for capacity matching
         required_capacity = 0
@@ -524,7 +543,14 @@ def generate_timetable_for_class(
             required_capacity = 0
 
         # Helper: find available room for the given slot span and type
-        def find_available_room(required_type: str, day_name: str, slot_start: time, slot_end: time, assigned_room_usage_day: dict[int, list[tuple[time, time]]]):
+        def find_available_room(
+            required_type: str,
+            day_name: str,
+            slot_start: time,
+            slot_end: time,
+            assigned_room_usage_day: dict[int, list[tuple[time, time]]],
+            persisted_room_usage: dict[str, dict[int, list[tuple[time, time]]]],
+        ):
             # Flexible mapping of required_type to available room_type keys in rooms_by_type
             want_practical = (required_type or '').lower().startswith('practical')
             # Candidate buckets: prefer matching labels (lab, laboratory) for practical; (room, classroom, class) for theory
@@ -557,7 +583,7 @@ def generate_timetable_for_class(
             for room in candidates:
                 times = []
                 # Existing persisted usage
-                for (st, et) in existing_room_usage.get(day_name, {}).get(room['id'], []):
+                for (st, et) in persisted_room_usage.get(day_name, {}).get(room['id'], []):
                     times.append((st, et))
                 # Already assigned in this run
                 for (st, et) in assigned_room_usage_day.get(room['id'], []):
@@ -567,320 +593,427 @@ def generate_timetable_for_class(
                 return room
             return None
 
-        for day_name, day_date in days_with_dates:
-            current_app.logger.info('Scheduling for day %s (%s) - %d sessions remaining', day_name, day_date, len(sessions))
-            used_subjects_for_day: set[int] = set()
-            # Track last 2 scheduled subjects to prevent 3+ consecutive sessions of same subject
-            last_scheduled_subjects = []  # List of (subject_id, slot_index) tuples
-            slot_index = 0
-            iterations = 0
-            assigned_today = 0
-            # Track assigned room usage per day for conflict checks among new assignments
-            assigned_room_usage_day: dict[int, list[tuple[time, time]]] = defaultdict(list)
-            while slot_index < len(slots) and assigned_today < max_lectures_per_day:
-                iterations += 1
-                if iterations > 2000:
-                    current_app.logger.error('Scheduling loop exceeded max iterations on day %s; aborting to avoid infinite loop', day_name)
-                    break
-                # log progress at each slot for debugging (throttle by small days)
-                current_app.logger.debug('Day %s: processing slot_index=%d assigned_today=%d/%d sessions_remaining=%d', day_name, slot_index, assigned_today, max_lectures_per_day, len(sessions))
-                session_chosen = None
-                candidate_faculty = None
-                proxy_info = None
-                paired_session = None
+        def clone_faculty_busy_state(source: dict[int, dict[str, list[tuple[time, time]]]]):
+            cloned: dict[int, dict[str, list[tuple[time, time]]]] = defaultdict(lambda: defaultdict(list))
+            for faculty_id, day_map in source.items():
+                for day_name, spans in day_map.items():
+                    cloned[faculty_id][day_name] = list(spans)
+            return cloned
 
-                for session in sessions:
-                    block_slots = session['block_slots']
-                    if block_slots > len(slots) - slot_index:
-                        continue
-                    slot_span = [slots[slot_index + i] for i in range(block_slots)]
+        def clone_room_usage_state(source: dict[str, dict[int, list[tuple[time, time]]]]):
+            cloned: dict[str, dict[int, list[tuple[time, time]]]] = defaultdict(lambda: defaultdict(list))
+            for day_name, room_map in source.items():
+                for room_id, spans in room_map.items():
+                    cloned[day_name][room_id] = list(spans)
+            return cloned
 
-                    # NOTE: Removed used_subjects_for_day restriction to allow same subject multiple times per day
-                    # This enables proper scheduling when subjects have 4+ lectures per week
-                    
-                    # NEW: Limit consecutive sessions per subject to max 2 sessions
-                    # Check if last 2 scheduled slots were the same subject
-                    subject_id = session['subject_id']
-                    
-                    # Count consecutive sessions of this subject at current position
-                    consecutive_count = 0
-                    for subj_id, slot_idx in reversed(last_scheduled_subjects):
-                        if slot_idx == slot_index - consecutive_count - 1 and subj_id == subject_id:
-                            consecutive_count += 1
-                        else:
-                            break
-                    
-                    if consecutive_count >= 2:
-                        # Skip - already have 2 consecutive sessions of this subject
-                        current_app.logger.info('Skipping %s (subject %s) - already %d consecutive sessions at slot %d', 
-                                                session['subject_name'], subject_id, consecutive_count, slot_index)
-                        continue
+        base_faculty_busy = clone_faculty_busy_state(faculty_busy)
+        base_existing_room_usage = clone_room_usage_state(existing_room_usage)
+        slots_per_day = {day_name: len(slots) for day_name, _ in days_with_dates}
 
-                    for faculty in session['faculty_candidates']:
-                        is_available, reason = faculty_is_available(faculty['faculty_id'], day_name, slot_span, day_date)
-                        if not is_available:
-                            current_app.logger.info(
-                                'Faculty %s not available for %s on %s at %s-%s: %s',
-                                faculty['name'],
-                                session['subject_name'],
+        candidate_count = max(5, min(10, int(candidate_count or 7)))
+        if preview_only:
+            candidate_count = min(candidate_count, 7)
+
+        def run_candidate(candidate_index: int):
+            candidate_seed = int(secrets.randbelow(1_000_000) + candidate_index)
+            candidate_sessions = [
+                {
+                    **session,
+                    'faculty_candidates': list(session['faculty_candidates']),
+                }
+                for session in sessions
+            ]
+            candidate_sessions = build_distributed_sessions(candidate_sessions, candidate_seed)
+
+            faculty_busy_state = clone_faculty_busy_state(base_faculty_busy)
+            room_usage_state = clone_room_usage_state(base_existing_room_usage)
+            assigned_entries: list[dict[str, object]] = []
+            unassigned_slots: list[dict[str, object]] = []
+            proxy_suggestions: list[dict[str, object]] = []
+            needs_room_entries: list[dict[str, object]] = []
+
+            for day_name, day_date in days_with_dates:
+                current_app.logger.info(
+                    'Candidate %d scheduling for day %s (%s) - %d sessions remaining',
+                    candidate_index,
+                    day_name,
+                    day_date,
+                    len(candidate_sessions),
+                )
+                used_subjects_for_day: set[int] = set()
+                last_scheduled_subjects = []
+                slot_index = 0
+                iterations = 0
+                assigned_today = 0
+                assigned_room_usage_day: dict[int, list[tuple[time, time]]] = defaultdict(list)
+
+                while slot_index < len(slots) and assigned_today < max_lectures_per_day:
+                    iterations += 1
+                    if iterations > 2000:
+                        current_app.logger.error(
+                            'Scheduling loop exceeded max iterations on day %s; candidate=%d',
+                            day_name,
+                            candidate_index,
+                        )
+                        break
+
+                    session_chosen = None
+                    candidate_faculty = None
+                    proxy_info = None
+                    paired_session = None
+
+                    for session in candidate_sessions:
+                        block_slots = session['block_slots']
+                        if block_slots > len(slots) - slot_index:
+                            continue
+                        slot_span = [slots[slot_index + i] for i in range(block_slots)]
+                        subject_id = session['subject_id']
+
+                        consecutive_count = 0
+                        for subj_id, slot_idx in reversed(last_scheduled_subjects):
+                            if slot_idx == slot_index - consecutive_count - 1 and subj_id == subject_id:
+                                consecutive_count += 1
+                            else:
+                                break
+
+                        if consecutive_count >= 2:
+                            continue
+
+                        for faculty in session['faculty_candidates']:
+                            is_available, _ = faculty_is_available(
+                                faculty['faculty_id'],
                                 day_name,
-                                slot_span[0][0].strftime('%H:%M'),
-                                slot_span[-1][1].strftime('%H:%M'),
-                                reason
+                                slot_span,
+                                day_date,
+                                faculty_busy_state,
                             )
-                        if is_available:
-                            # Try to pair Theory+Practical as continuous if both single-slot and available
-                            pair_attempted = False
-                            if session['type'] == 'Theory':
-                                # look for a 1-slot Practical for same subject
-                                for other in sessions:
-                                    if other is session:
-                                        continue
-                                    if other['subject_id'] == session['subject_id'] and other['type'] == 'Practical' and int(other['block_slots']) == 1:
-                                        # check next slot availability and daily cap
-                                        next_index = slot_index + block_slots
-                                        if next_index < len(slots) and (assigned_today + 2) <= max_lectures_per_day:
-                                            next_slot_span = [slots[next_index]]
-                                            is_avail_both, reason2 = faculty_is_available(faculty['faculty_id'], day_name, next_slot_span, day_date)
-                                            if is_avail_both:
-                                                # Room assignment: Theory uses Classroom, Practical uses Laboratory
-                                                room1 = room2 = None
-                                                if rooms_by_type:
-                                                    room1 = find_available_room('Theory', day_name, slot_span[0][0], slot_span[-1][1], assigned_room_usage_day)  # Theory → Classroom
-                                                    room2 = find_available_room('Practical', day_name, next_slot_span[0][0], next_slot_span[0][1], assigned_room_usage_day)  # Practical → Laboratory
-                                                    if not room1 or not room2:
-                                                        # Rooms not found — we'll still attempt pairing but record that rooms are missing
-                                                        current_app.logger.warning('Pairing proceeding without both rooms for subject %s on %s', session['subject_id'], day_name)
+                            if is_available:
+                                pair_attempted = False
+                                if session['type'] == 'Theory':
+                                    for other in candidate_sessions:
+                                        if other is session:
+                                            continue
+                                        if (
+                                            other['subject_id'] == session['subject_id']
+                                            and other['type'] == 'Practical'
+                                            and int(other['block_slots']) == 1
+                                        ):
+                                            next_index = slot_index + block_slots
+                                            if next_index < len(slots) and (assigned_today + 2) <= max_lectures_per_day:
+                                                next_slot_span = [slots[next_index]]
+                                                is_avail_both, _ = faculty_is_available(
+                                                    faculty['faculty_id'],
+                                                    day_name,
+                                                    next_slot_span,
+                                                    day_date,
+                                                    faculty_busy_state,
+                                                )
+                                                if is_avail_both:
+                                                    room1 = room2 = None
+                                                    if rooms_by_type:
+                                                        room1 = find_available_room(
+                                                            'Theory',
+                                                            day_name,
+                                                            slot_span[0][0],
+                                                            slot_span[-1][1],
+                                                            assigned_room_usage_day,
+                                                            room_usage_state,
+                                                        )
+                                                        room2 = find_available_room(
+                                                            'Practical',
+                                                            day_name,
+                                                            next_slot_span[0][0],
+                                                            next_slot_span[0][1],
+                                                            assigned_room_usage_day,
+                                                            room_usage_state,
+                                                        )
                                                         pair_attempted = True
                                                     else:
                                                         pair_attempted = True
-                                                else:
-                                                    pair_attempted = True
-                                                if pair_attempted:
-                                                    session_chosen = session
-                                                    candidate_faculty = faculty
-                                                    proxy_info = None
-                                                    paired_session = other
-                                                    # Attach preselected rooms into tuple for later use via closure-level vars (may be None)
-                                                    chosen_pair_rooms = (room1, room2)
-                                                    break
-                                        # if can't pair, continue to try single assignment below
-                                if session_chosen and paired_session:
+                                                    if pair_attempted:
+                                                        session_chosen = session
+                                                        candidate_faculty = faculty
+                                                        paired_session = other
+                                                        chosen_pair_rooms = (room1, room2)
+                                                        break
+                                    if session_chosen and paired_session:
+                                        break
+                                if not session_chosen:
+                                    session_chosen = session
+                                    candidate_faculty = faculty
+                                    paired_session = None
                                     break
-                            # If no pairing or not applicable, accept single assignment for this faculty
-                            if not session_chosen:
-                                session_chosen = session
-                                candidate_faculty = faculty
-                                proxy_info = None
-                                paired_session = None
-                                break
-                    if session_chosen:
-                        break
+                        if session_chosen:
+                            break
 
-                    # Gather proxy suggestions when none of the allotted faculty are free
-                    alternative_faculty = []
-                    for proxy in proxy_faculty_map.get(session['subject_id'], []):
-                        if any(option['faculty_id'] == proxy['faculty_id'] for option in session['faculty_candidates']):
-                            continue
-                        is_available, reason = faculty_is_available(proxy['faculty_id'], day_name, slot_span, day_date)
-                        if is_available:
-                            alternative_faculty.append(proxy)
+                        alternative_faculty = []
+                        for proxy in proxy_faculty_map.get(session['subject_id'], []):
+                            if any(option['faculty_id'] == proxy['faculty_id'] for option in session['faculty_candidates']):
+                                continue
+                            is_available, _ = faculty_is_available(
+                                proxy['faculty_id'],
+                                day_name,
+                                slot_span,
+                                day_date,
+                                faculty_busy_state,
+                            )
+                            if is_available:
+                                alternative_faculty.append(proxy)
 
-                    if alternative_faculty:
-                        session_chosen = session
-                        candidate_faculty = alternative_faculty[0]
-                        proxy_info = {
-                            'day': day_name,
-                            'date': day_date.isoformat(),
-                            'time': f"{slot_span[0][0].strftime('%H:%M')} - {slot_span[-1][1].strftime('%H:%M')}",
-                            'subject_name': session['subject_name'],
-                            'primary_faculty': session['faculty_candidates'][0]['name'],
-                            'replacement_faculty': candidate_faculty['name'],
-                            'reason': 'Allocated faculty unavailable',
-                        }
-                        break
-
-                if session_chosen and candidate_faculty:
-                    current_app.logger.debug('Selected session subject_id=%s type=%s block_slots=%s candidate_faculty=%s', session_chosen.get('subject_id'), session_chosen.get('type'), session_chosen.get('block_slots'), candidate_faculty.get('faculty_id'))
-                    # Assign main session (and optional paired next session)
-                    def assign_single(session_obj, idx, preselected_room=None):
-                        slot_start, slot_end = slots[idx]
-                        # Room selection if configured
-                        room_assigned = preselected_room
-                        if rooms_by_type and not room_assigned:
-                            room_assigned = find_available_room(session_obj['type'], day_name, slot_start, slot_end, assigned_room_usage_day)
-                            if not room_assigned:
-                                # FALLBACK: when rooms exist but none match, allow scheduling without room
-                                current_app.logger.warning('No room available for subject %s on %s %s-%s; scheduling without room', session_obj['subject_id'], day_name, slot_start.strftime('%H:%M'), slot_end.strftime('%H:%M'))
-                                # Record entry that needs room later
-                                needs_room_entries.append({
-                                    'day': day_name,
-                                    'date': day_date.isoformat(),
-                                    'start_time': slot_start.strftime('%H:%M'),
-                                    'end_time': slot_end.strftime('%H:%M'),
-                                    'subject_id': session_obj['subject_id'],
-                                    'subject_name': session_obj.get('subject_name'),
-                                    'faculty_id': candidate_faculty['faculty_id'],
-                                    'faculty_name': candidate_faculty['name'],
-                                    'session_type': session_obj['type'],
-                                    'reason': 'No room available',
-                                })
-                                room_assigned = None
-                        # Mark faculty busy
-                        faculty_busy[candidate_faculty['faculty_id']][day_name].append((slot_start, slot_end))
-                        if room_assigned:
-                            assigned_room_usage_day[room_assigned['id']].append((slot_start, slot_end))
-                        assigned_entries.append(
-                            {
+                        if alternative_faculty:
+                            session_chosen = session
+                            candidate_faculty = alternative_faculty[0]
+                            proxy_info = {
                                 'day': day_name,
                                 'date': day_date.isoformat(),
-                                'start_time': slot_start.strftime('%H:%M'),
-                                'end_time': slot_end.strftime('%H:%M'),
-                                'subject_id': session_obj['subject_id'],
-                                'subject_name': session_obj['subject_name'],
-                                'faculty_id': candidate_faculty['faculty_id'],
-                                'faculty_name': candidate_faculty['name'],
-                                'session_type': session_obj['type'],
-                                'room_id': (room_assigned and room_assigned['id']) or None,
-                                'room_number': (room_assigned and room_assigned.get('room_number')) or None,
-                                'is_proxy': not any(
-                                    option['faculty_id'] == candidate_faculty['faculty_id']
-                                    for option in session_obj['faculty_candidates']
-                                ),
+                                'time': f"{slot_span[0][0].strftime('%H:%M')} - {slot_span[-1][1].strftime('%H:%M')}",
+                                'subject_name': session['subject_name'],
+                                'primary_faculty': session['faculty_candidates'][0]['name'],
+                                'replacement_faculty': candidate_faculty['name'],
+                                'reason': 'Allocated faculty unavailable',
                             }
-                        )
-                        room_display = None
-                        if room_assigned:
-                            if isinstance(room_assigned, dict):
-                                room_display = room_assigned.get('room_number')
-                            else:
-                                room_display = str(room_assigned)
-                        current_app.logger.info(
-                            'Assigned subject %s to faculty %s on %s %s-%s (room=%s)',
-                            session_obj['subject_id'],
-                            candidate_faculty['faculty_id'],
-                            day_name,
-                            slot_start.strftime('%H:%M'),
-                            slot_end.strftime('%H:%M'),
-                            room_display
-                        )
-                        return True, None, room_assigned
+                            break
 
-                    # Handle paired assignment (Theory + Practical consecutive) if selected
-                    if paired_session:
-                        # Use tentative rooms from earlier calculation if available
-                        pre_room1 = pre_room2 = None
-                        try:
-                            pre_room1, pre_room2 = chosen_pair_rooms  # may not exist if rooms disabled
-                        except Exception:
-                            pre_room1 = pre_room2 = None
-                        ok1, err1, r1 = assign_single(session_chosen, slot_index, pre_room1)
-                        if not ok1:
-                            # fall back: try as single session only
-                            paired_session = None
-                        else:
-                            ok2, err2, r2 = assign_single(paired_session, slot_index + 1, pre_room2)
-                            if not ok2:
-                                # rollback first assignment in memory (remove entry and busy marks)
-                                # remove last assigned entry
-                                last = assigned_entries.pop()
-                                # remove busy marks and room usage added
-                                fb = faculty_busy[candidate_faculty['faculty_id']][day_name]
-                                if fb and fb[-1] == (slots[slot_index][0], slots[slot_index][1]):
-                                    fb.pop()
-                                if r1:
-                                    ru = assigned_room_usage_day.get(r1['id'], [])
-                                    if ru and ru[-1] == (slots[slot_index][0], slots[slot_index][1]):
-                                        ru.pop()
-                                paired_session = None
-                            else:
-                                # Success: remove both sessions
-                                sessions.remove(session_chosen)
-                                try:
-                                    sessions.remove(paired_session)
-                                except ValueError:
-                                    pass
-                                used_subjects_for_day.add(session_chosen['subject_id'])
-                                # Track last scheduled subjects for consecutive limit (2 paired sessions)
-                                last_scheduled_subjects.append((session_chosen['subject_id'], slot_index))
-                                if paired_session:
-                                    last_scheduled_subjects.append((paired_session['subject_id'], slot_index + 1))
-                                slot_index += 2
-                                assigned_today += 2
-                                if proxy_info:
-                                    proxy_suggestions.append(proxy_info)
-                                continue
+                    if session_chosen and candidate_faculty:
+                        def assign_single(session_obj, idx, preselected_room=None):
+                            slot_start, slot_end = slots[idx]
+                            room_assigned = preselected_room
+                            if rooms_by_type and not room_assigned:
+                                room_assigned = find_available_room(
+                                    session_obj['type'],
+                                    day_name,
+                                    slot_start,
+                                    slot_end,
+                                    assigned_room_usage_day,
+                                    room_usage_state,
+                                )
+                                if not room_assigned:
+                                    current_app.logger.warning(
+                                        'No room available for subject %s on %s %s-%s; scheduling without room',
+                                        session_obj['subject_id'],
+                                        day_name,
+                                        slot_start.strftime('%H:%M'),
+                                        slot_end.strftime('%H:%M'),
+                                    )
+                                    needs_room_entries.append(
+                                        {
+                                            'day': day_name,
+                                            'date': day_date.isoformat(),
+                                            'start_time': slot_start.strftime('%H:%M'),
+                                            'end_time': slot_end.strftime('%H:%M'),
+                                            'subject_id': session_obj['subject_id'],
+                                            'subject_name': session_obj.get('subject_name'),
+                                            'faculty_id': candidate_faculty['faculty_id'],
+                                            'faculty_name': candidate_faculty['name'],
+                                            'session_type': session_obj['type'],
+                                            'reason': 'No room available',
+                                        }
+                                    )
+                                    room_assigned = None
 
-                    # Single session path
-                    block_slots = session_chosen['block_slots']
-                    assigned_any = False
-                    for offset in range(block_slots):
-                        slot_start, slot_end = slots[slot_index + offset]
-                        # Room selection for each slot in the block
-                        pre_room = None
-                        ok, err, room_sel = assign_single(session_chosen, slot_index + offset, pre_room)
-                        if not ok:
-                            # couldn't assign due to room, mark unassigned for this slot and break the block
-                            unassigned_slots.append(
+                            faculty_busy_state[candidate_faculty['faculty_id']][day_name].append((slot_start, slot_end))
+                            if room_assigned:
+                                assigned_room_usage_day[room_assigned['id']].append((slot_start, slot_end))
+                                room_usage_state[day_name][room_assigned['id']].append((slot_start, slot_end))
+
+                            assigned_entries.append(
                                 {
                                     'day': day_name,
                                     'date': day_date.isoformat(),
                                     'start_time': slot_start.strftime('%H:%M'),
                                     'end_time': slot_end.strftime('%H:%M'),
-                                    'reason': err or 'No available faculty',
+                                    'subject_id': session_obj['subject_id'],
+                                    'subject_name': session_obj['subject_name'],
+                                    'faculty_id': candidate_faculty['faculty_id'],
+                                    'faculty_name': candidate_faculty['name'],
+                                    'session_type': session_obj['type'],
+                                    'room_id': (room_assigned and room_assigned['id']) or None,
+                                    'room_number': (room_assigned and room_assigned.get('room_number')) or None,
+                                    'is_proxy': not any(
+                                        option['faculty_id'] == candidate_faculty['faculty_id']
+                                        for option in session_obj['faculty_candidates']
+                                    ),
                                 }
                             )
-                            break
-                        assigned_any = True
-                    if assigned_any:
-                        if proxy_info:
-                            proxy_suggestions.append(proxy_info)
-                        sessions.remove(session_chosen)
-                        used_subjects_for_day.add(session_chosen['subject_id'])
-                        # Track last scheduled subjects for consecutive limit
-                        for i in range(block_slots):
-                            last_scheduled_subjects.append((session_chosen['subject_id'], slot_index + i))
-                        slot_index += block_slots
-                        assigned_today += block_slots
-                else:
-                    slot_start, slot_end = slots[slot_index]
-                    # Log why no session could be assigned to this slot
-                    if sessions:
-                        # Log details about remaining sessions and why they can't be scheduled
-                        remaining_subjects = {}
-                        for sess in sessions:
-                            subj_id = sess['subject_id']
-                            subj_name = sess['subject_name']
-                            if subj_name not in remaining_subjects:
-                                remaining_subjects[subj_name] = 0
-                            remaining_subjects[subj_name] += 1
-                        
-                        current_app.logger.warning(
-                            'No faculty available for remaining %d sessions on %s at %s-%s. Remaining: %s',
-                            len(sessions),
-                            day_name,
-                            slot_start.strftime('%H:%M'),
-                            slot_end.strftime('%H:%M'),
-                            remaining_subjects
+                            return True, None, room_assigned
+
+                        if paired_session:
+                            pre_room1 = pre_room2 = None
+                            try:
+                                pre_room1, pre_room2 = chosen_pair_rooms
+                            except Exception:
+                                pre_room1 = pre_room2 = None
+                            ok1, _, r1 = assign_single(session_chosen, slot_index, pre_room1)
+                            if not ok1:
+                                paired_session = None
+                            else:
+                                ok2, _, _ = assign_single(paired_session, slot_index + 1, pre_room2)
+                                if not ok2:
+                                    assigned_entries.pop()
+                                    fb = faculty_busy_state[candidate_faculty['faculty_id']][day_name]
+                                    if fb and fb[-1] == (slots[slot_index][0], slots[slot_index][1]):
+                                        fb.pop()
+                                    if r1:
+                                        ru = assigned_room_usage_day.get(r1['id'], [])
+                                        if ru and ru[-1] == (slots[slot_index][0], slots[slot_index][1]):
+                                            ru.pop()
+                                        persisted_ru = room_usage_state.get(day_name, {}).get(r1['id'], [])
+                                        if persisted_ru and persisted_ru[-1] == (slots[slot_index][0], slots[slot_index][1]):
+                                            persisted_ru.pop()
+                                    paired_session = None
+                                else:
+                                    candidate_sessions.remove(session_chosen)
+                                    try:
+                                        candidate_sessions.remove(paired_session)
+                                    except ValueError:
+                                        pass
+                                    used_subjects_for_day.add(session_chosen['subject_id'])
+                                    last_scheduled_subjects.append((session_chosen['subject_id'], slot_index))
+                                    if paired_session:
+                                        last_scheduled_subjects.append((paired_session['subject_id'], slot_index + 1))
+                                    slot_index += 2
+                                    assigned_today += 2
+                                    if proxy_info:
+                                        proxy_suggestions.append(proxy_info)
+                                    continue
+
+                        block_slots = session_chosen['block_slots']
+                        assigned_any = False
+                        for offset in range(block_slots):
+                            slot_start, slot_end = slots[slot_index + offset]
+                            ok, err, _ = assign_single(session_chosen, slot_index + offset, None)
+                            if not ok:
+                                unassigned_slots.append(
+                                    {
+                                        'day': day_name,
+                                        'date': day_date.isoformat(),
+                                        'start_time': slot_start.strftime('%H:%M'),
+                                        'end_time': slot_end.strftime('%H:%M'),
+                                        'reason': err or 'No available faculty',
+                                    }
+                                )
+                                break
+                            assigned_any = True
+                        if assigned_any:
+                            if proxy_info:
+                                proxy_suggestions.append(proxy_info)
+                            candidate_sessions.remove(session_chosen)
+                            used_subjects_for_day.add(session_chosen['subject_id'])
+                            for i in range(block_slots):
+                                last_scheduled_subjects.append((session_chosen['subject_id'], slot_index + i))
+                            slot_index += block_slots
+                            assigned_today += block_slots
+                    else:
+                        slot_start, slot_end = slots[slot_index]
+                        if candidate_sessions:
+                            remaining_subjects = {}
+                            for sess in candidate_sessions:
+                                subject_name = sess['subject_name']
+                                remaining_subjects[subject_name] = remaining_subjects.get(subject_name, 0) + 1
+                            current_app.logger.warning(
+                                'No faculty available for candidate=%d on %s at %s-%s. Remaining: %s',
+                                candidate_index,
+                                day_name,
+                                slot_start.strftime('%H:%M'),
+                                slot_end.strftime('%H:%M'),
+                                remaining_subjects,
+                            )
+                        unassigned_slots.append(
+                            {
+                                'day': day_name,
+                                'date': day_date.isoformat(),
+                                'start_time': slot_start.strftime('%H:%M'),
+                                'end_time': slot_end.strftime('%H:%M'),
+                                'reason': 'No available faculty',
+                            }
                         )
-                    unassigned_slots.append(
-                        {
-                            'day': day_name,
-                            'date': day_date.isoformat(),
-                            'start_time': slot_start.strftime('%H:%M'),
-                            'end_time': slot_end.strftime('%H:%M'),
-                            'reason': 'No available faculty',
-                        }
-                    )
-                    slot_index += 1
-            
-            # Log end of day summary
-            current_app.logger.info(
-                'Day %s completed: %d sessions assigned, %d sessions remaining, %d slots used',
-                day_name,
-                assigned_today,
-                len(sessions),
-                slot_index
+                        slot_index += 1
+
+            assigned_entries.sort(key=lambda e: (WEEKDAY_ORDER.index(e['day']), e['start_time']))
+
+            score_info = None
+            warnings = []
+            quality_score = 0.0
+            baseline_quality_score = 0.0
+            model_source = 'rule_fallback'
+            feature_snapshot = {}
+            score_breakdown = {
+                'clash_risk': 1.0,
+                'faculty_fatigue': 1.0,
+                'room_overuse': 1.0,
+                'student_load_imbalance': 1.0,
+            }
+            try:
+                score_info = score_timetable_candidate(
+                    assigned=assigned_entries,
+                    unassigned=unassigned_slots,
+                    proxy_suggestions=proxy_suggestions,
+                    needs_room=needs_room_entries,
+                    slots_per_day=slots_per_day,
+                )
+                quality_score = float(score_info.get('quality_score', 0.0))
+                baseline_quality_score = float(score_info.get('baseline_quality_score', quality_score))
+                model_source = str(score_info.get('model_source', model_source))
+                feature_snapshot = score_info.get('features', {}) if isinstance(score_info.get('features'), dict) else {}
+                score_breakdown = score_info.get('score_breakdown', score_breakdown)
+                warnings = score_info.get('warnings', [])
+            except Exception as scoring_error:
+                current_app.logger.warning(
+                    'Timetable quality scoring failed for candidate %d: %s',
+                    candidate_index,
+                    str(scoring_error),
+                )
+                warnings = ['Quality scoring failed; using baseline candidate ranking fallback.']
+
+            return {
+                'candidate_index': candidate_index,
+                'candidate_seed': candidate_seed,
+                'assigned': assigned_entries,
+                'unassigned': unassigned_slots,
+                'proxy_suggestions': proxy_suggestions,
+                'needs_room': needs_room_entries,
+                'quality_score': round(quality_score, 2),
+                'baseline_quality_score': round(baseline_quality_score, 2),
+                'score_breakdown': score_breakdown,
+                'warnings': warnings,
+                'model_source': model_source,
+                'features': feature_snapshot,
+            }
+
+        candidate_results = [run_candidate(index + 1) for index in range(candidate_count)]
+        candidate_results.sort(
+            key=lambda item: (
+                float(item.get('quality_score') or 0.0),
+                -len(item.get('unassigned') or []),
+                -len(item.get('needs_room') or []),
+            ),
+            reverse=True,
+        )
+
+        best_candidate = candidate_results[0]
+        assigned_entries = best_candidate['assigned']
+        unassigned_slots = best_candidate['unassigned']
+        proxy_suggestions = best_candidate['proxy_suggestions']
+        needs_room_entries = best_candidate['needs_room']
+        current_app.logger.info(
+            'Selected candidate=%s quality_score=%.2f baseline=%.2f model_source=%s',
+            best_candidate.get('candidate_index', 1),
+            float(best_candidate.get('quality_score') or 0.0),
+            float(best_candidate.get('baseline_quality_score') or 0.0),
+            best_candidate.get('model_source', 'unknown'),
+        )
+
+        top_candidates = []
+        for item in candidate_results[:3]:
+            top_candidates.append(
+                {
+                    'candidate_index': item['candidate_index'],
+                    'quality_score': item['quality_score'],
+                    'assigned_count': len(item.get('assigned') or []),
+                    'unassigned_count': len(item.get('unassigned') or []),
+                    'needs_room_count': len(item.get('needs_room') or []),
+                }
             )
 
         # Persist timetable if not previewing
@@ -942,7 +1075,85 @@ def generate_timetable_for_class(
                     )
             connection.commit()
 
-        assigned_entries.sort(key=lambda e: (WEEKDAY_ORDER.index(e['day']), e['start_time']))
+            # Persist quality scoring metadata for phase-2 ML data.
+            try:
+                run_id = str(uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO timetable_quality_runs
+                    (
+                        run_id,
+                        course_id,
+                        class_id,
+                        division_id,
+                        week_start,
+                        quality_score,
+                        clash_risk,
+                        faculty_fatigue,
+                        room_overuse,
+                        student_load_imbalance,
+                        candidate_count,
+                        selected_candidate_index,
+                        created_by,
+                        created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    """,
+                    (
+                        run_id,
+                        course_id,
+                        class_id,
+                        division_id,
+                        week_start,
+                        best_candidate.get('quality_score', 0.0),
+                        best_candidate.get('score_breakdown', {}).get('clash_risk', 1.0),
+                        best_candidate.get('score_breakdown', {}).get('faculty_fatigue', 1.0),
+                        best_candidate.get('score_breakdown', {}).get('room_overuse', 1.0),
+                        best_candidate.get('score_breakdown', {}).get('student_load_imbalance', 1.0),
+                        candidate_count,
+                        best_candidate.get('candidate_index', 1),
+                        created_by,
+                    ),
+                )
+
+                for item in candidate_results:
+                    candidate_breakdown = item.get('score_breakdown', {}) if isinstance(item.get('score_breakdown'), dict) else {}
+                    cursor.execute(
+                        """
+                        INSERT INTO timetable_quality_candidates
+                        (
+                            run_id,
+                            candidate_index,
+                            is_selected,
+                            quality_score,
+                            clash_risk,
+                            faculty_fatigue,
+                            room_overuse,
+                            student_load_imbalance,
+                            assigned_count,
+                            unassigned_count,
+                            needs_room_count,
+                            created_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        """,
+                        (
+                            run_id,
+                            int(item.get('candidate_index') or 0),
+                            1 if int(item.get('candidate_index') or 0) == int(best_candidate.get('candidate_index') or 0) else 0,
+                            float(item.get('quality_score') or 0.0),
+                            float(candidate_breakdown.get('clash_risk', 1.0) or 1.0),
+                            float(candidate_breakdown.get('faculty_fatigue', 1.0) or 1.0),
+                            float(candidate_breakdown.get('room_overuse', 1.0) or 1.0),
+                            float(candidate_breakdown.get('student_load_imbalance', 1.0) or 1.0),
+                            len(item.get('assigned') or []),
+                            len(item.get('unassigned') or []),
+                            len(item.get('needs_room') or []),
+                        ),
+                    )
+                connection.commit()
+            except Exception as quality_save_error:
+                current_app.logger.warning('Could not persist timetable_quality_runs metadata: %s', str(quality_save_error))
 
         message = f"Scheduled {len(assigned_entries)} session(s) across {len(days_with_dates)} day(s)."
         if unassigned_slots:
@@ -956,6 +1167,14 @@ def generate_timetable_for_class(
             'proxy_suggestions': proxy_suggestions,
             'skipped_holidays': skipped_holidays,
             'needs_room': needs_room_entries,
+            'quality_score': best_candidate.get('quality_score', 0.0),
+            'baseline_quality_score': best_candidate.get('baseline_quality_score', best_candidate.get('quality_score', 0.0)),
+            'model_source': best_candidate.get('model_source', 'rule_fallback'),
+            'score_breakdown': best_candidate.get('score_breakdown', {}),
+            'warnings': best_candidate.get('warnings', []),
+            'candidate_count': candidate_count,
+            'selected_candidate_index': best_candidate.get('candidate_index', 1),
+            'top_candidates': top_candidates,
         }
     finally:
 

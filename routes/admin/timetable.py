@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, current_app
+from flask import Blueprint, render_template, request, flash, current_app, session
 from routes.timetable_algorithm import WEEKDAY_ORDER, generate_timetable_for_class
 from routes.admin_utils import format_time
 from security import has_permission
@@ -81,6 +81,8 @@ def generate_timetable():
                 break_duration=form_state['break_duration'] or 0,
                 working_days=form_state['working_days'],
                 preview_only=False,
+                candidate_count=7,
+                created_by=session.get('user_id'),
             )
             duration = (datetime.now() - start_ts).total_seconds()
             current_app.logger.info('Timetable generation finished in %.2fs; status=%s', duration, result.get('status') if isinstance(result, dict) else type(result))

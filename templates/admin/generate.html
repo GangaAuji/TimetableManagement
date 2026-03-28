@@ -194,6 +194,24 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <h3 class="font-bold text-slate-800 flex items-center">
+                            <span class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center mr-3 text-sm">
+                                <i class="fas fa-brain"></i>
+                            </span>
+                            Quality Model Status
+                        </h3>
+                        <span class="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Auto Refresh</span>
+                    </div>
+                    <div id="qualityModelStatusPanel" class="p-5">
+                        <div class="flex items-center text-sm text-slate-500">
+                            <i class="fas fa-circle-notch fa-spin mr-2"></i>
+                            Loading model status...
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="lg:col-span-8 space-y-6">
@@ -219,7 +237,7 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 items-center justify-end">
-                    <button type="button" id="previewBtn" class="w-full sm:w-auto px-5 py-2.5 bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl border border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-center">
+                    <button type="button" id="previewBtn" data-inline-preview="true" class="w-full sm:w-auto px-5 py-2.5 bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl border border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-center">
                         <i class="fas fa-eye mr-2 text-slate-500"></i> Preview
                     </button>
                     <button type="button" id="coverageBtn" class="w-full sm:w-auto px-5 py-2.5 bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl border border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-center">
@@ -258,6 +276,69 @@
                                 <span class="text-xs text-slate-500 font-medium uppercase tracking-wide">Proxies</span>
                             </div>
                         </div>
+
+                        {% if generation_result.quality_score is defined %}
+                        <div class="mt-5 bg-white rounded-xl border border-emerald-100 p-4 shadow-sm">
+                            <div class="flex items-center justify-between mb-3">
+                                <div>
+                                    <h4 class="text-sm font-bold text-slate-800">Quality Score</h4>
+                                    <p class="text-xs text-slate-500">Weighted timetable quality across clash risk, fatigue, room pressure and load balance.</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-3xl font-extrabold text-emerald-600">{{ generation_result.quality_score }}</span>
+                                    <span class="text-sm text-slate-500">/ 100</span>
+                                </div>
+                            </div>
+
+                            {% set sb = generation_result.score_breakdown or {} %}
+                            <div class="space-y-2.5">
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600">Clash Risk</span><span class="text-slate-500">{{ '%.0f'|format((1 - (sb.clash_risk or 0)) * 100) }}%</span></div>
+                                    <div class="h-2 rounded bg-slate-100 overflow-hidden"><div class="h-2 bg-emerald-500" style="width: {{ (1 - (sb.clash_risk or 0)) * 100 }}%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600">Faculty Fatigue</span><span class="text-slate-500">{{ '%.0f'|format((1 - (sb.faculty_fatigue or 0)) * 100) }}%</span></div>
+                                    <div class="h-2 rounded bg-slate-100 overflow-hidden"><div class="h-2 bg-teal-500" style="width: {{ (1 - (sb.faculty_fatigue or 0)) * 100 }}%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600">Room Overuse</span><span class="text-slate-500">{{ '%.0f'|format((1 - (sb.room_overuse or 0)) * 100) }}%</span></div>
+                                    <div class="h-2 rounded bg-slate-100 overflow-hidden"><div class="h-2 bg-blue-500" style="width: {{ (1 - (sb.room_overuse or 0)) * 100 }}%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600">Student Load Balance</span><span class="text-slate-500">{{ '%.0f'|format((1 - (sb.student_load_imbalance or 0)) * 100) }}%</span></div>
+                                    <div class="h-2 rounded bg-slate-100 overflow-hidden"><div class="h-2 bg-indigo-500" style="width: {{ (1 - (sb.student_load_imbalance or 0)) * 100 }}%"></div></div>
+                                </div>
+                            </div>
+
+                            {% if generation_result.warnings %}
+                            <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <h5 class="text-xs uppercase tracking-wide font-bold text-amber-700 mb-1.5">Top Warnings</h5>
+                                <ul class="space-y-1">
+                                    {% for warning in generation_result.warnings[:3] %}
+                                    <li class="text-xs text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>{{ warning }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+
+                            {% if generation_result.top_candidates %}
+                            <div class="mt-4">
+                                <h5 class="text-xs uppercase tracking-wide font-bold text-slate-600 mb-2">Top Candidates</h5>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    {% for candidate in generation_result.top_candidates %}
+                                    <div class="rounded-lg border border-slate-200 p-2.5 bg-slate-50">
+                                        <div class="flex justify-between text-xs text-slate-600 mb-1">
+                                            <span class="font-semibold">#{{ candidate.candidate_index }}</span>
+                                            <span>Score {{ candidate.quality_score }}</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">Assigned {{ candidate.assigned_count }}, Conflicts {{ candidate.unassigned_count }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -361,42 +442,117 @@
     </form>
 </div>
 
-<div id="previewModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
-    <div class="fixed inset-0 z-10 overflow-y-auto">
-        <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl border border-slate-200">
-                
-                <div class="bg-white px-4 py-3 sm:px-6 border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
-                    <h3 class="text-lg font-bold text-slate-800 flex items-center">
-                        <i class="fas fa-calendar-alt text-indigo-600 mr-2.5"></i> Timetable Preview
-                    </h3>
-                    <button id="closePreview" type="button" class="text-slate-400 hover:text-slate-600 transition-colors bg-slate-100 hover:bg-slate-200 rounded-full w-8 h-8 flex items-center justify-center">
-                        <i class="fas fa-times"></i>
-                    </button>
+<div id="previewModal" class="hidden fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-label="Timetable Preview">
+    <div id="previewBackdrop" class="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]"></div>
+    <div class="relative mx-auto mt-3 sm:mt-6 mb-3 sm:mb-6 w-[96vw] max-w-6xl min-h-[280px] max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] rounded-xl sm:rounded-2xl bg-white shadow-[0_30px_80px_rgba(15,23,42,0.45)] border border-slate-300/80 flex flex-col overflow-hidden">
+        
+        <div class="bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 sm:px-5 border-b border-slate-200 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="hidden sm:flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
                 </div>
-
-                <div id="previewContent" class="px-4 py-5 sm:p-6 max-h-[70vh] overflow-y-auto custom-scrollbar bg-slate-50">
-                    <div class="flex flex-col items-center justify-center py-12">
-                        <i class="fas fa-circle-notch fa-spin text-3xl text-indigo-500 mb-4"></i>
-                        <p class="text-slate-500 font-medium">Generating preview...</p>
-                    </div>
-                </div>
-
-                <div class="bg-white px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-slate-100">
-                    <button type="button" class="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto" onclick="document.getElementById('previewModal').classList.add('hidden')">Close</button>
-                </div>
+                <h3 class="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+                    <i class="fas fa-calendar-alt text-indigo-600 mr-2"></i> Timetable Preview
+                </h3>
             </div>
+            <button id="closePreview" type="button" class="text-slate-400 hover:text-slate-700 transition-colors bg-slate-100 hover:bg-slate-200 rounded-full w-8 h-8 flex items-center justify-center">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div id="previewContent" class="px-2 sm:px-4 py-3 sm:py-4 flex-1 min-h-0 overflow-auto custom-scrollbar bg-slate-50">
+            <div class="flex flex-col items-center justify-center py-12">
+                <i class="fas fa-circle-notch fa-spin text-3xl text-indigo-500 mb-4"></i>
+                <p class="text-slate-500 font-medium">Generating preview...</p>
+            </div>
+        </div>
+
+        <div class="bg-white px-3 sm:px-5 py-2.5 border-t border-slate-200 shrink-0 flex justify-end">
+            <button type="button" class="w-full sm:w-auto px-4 py-2 bg-white text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 hover:bg-slate-50 transition-all" onclick="document.getElementById('previewModal').classList.add('hidden')">Close</button>
         </div>
     </div>
 </div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        function getCookie(name) {
+            const cookieValue = `; ${document.cookie}`;
+            const parts = cookieValue.split(`; ${name}=`);
+            if (parts.length === 2) {
+                return parts.pop().split(';').shift();
+            }
+            return null;
+        }
+
         // --- Core Data Loading Logic (Preserved) ---
         const courseSelect = document.getElementById('course');
         const classSelect = document.getElementById('class');
         const divisionSelect = document.getElementById('division');
+        const qualityModelStatusPanel = document.getElementById('qualityModelStatusPanel');
+
+        async function refreshQualityModelStatus() {
+            if (!qualityModelStatusPanel) {
+                return;
+            }
+
+            try {
+                const resp = await fetch('/admin/api/quality_model_status', { credentials: 'same-origin' });
+                const data = await resp.json();
+
+                if (!resp.ok || data.status !== 'ok') {
+                    throw new Error(data.message || 'Unable to load model status');
+                }
+
+                const modelSource = data.model_source || 'rule_fallback';
+                const modelBadgeClass = modelSource === 'learned_predictor'
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-100 text-amber-700 border-amber-200';
+
+                const trainingAccuracy = data.model_metadata && data.model_metadata.training_accuracy !== undefined
+                    ? `${(Number(data.model_metadata.training_accuracy) * 100).toFixed(1)}%`
+                    : 'N/A';
+
+                const lastRetrain = data.last_retrain_at
+                    ? new Date(data.last_retrain_at).toLocaleString()
+                    : 'Not yet retrained';
+
+                const lastRun = data.last_generation_run_at
+                    ? new Date(data.last_generation_run_at).toLocaleString()
+                    : 'No timetable run yet';
+
+                qualityModelStatusPanel.innerHTML = `
+                    <div class="space-y-3 text-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500 font-semibold uppercase tracking-wide text-xs">Current Source</span>
+                            <span class="px-2 py-1 text-xs font-bold rounded-full border ${modelBadgeClass}">${modelSource}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                                <div class="text-[11px] text-slate-500 uppercase font-semibold">Training Samples</div>
+                                <div class="text-lg font-bold text-slate-800">${Number(data.training_samples || 0)}</div>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                                <div class="text-[11px] text-slate-500 uppercase font-semibold">Model Accuracy</div>
+                                <div class="text-lg font-bold text-slate-800">${trainingAccuracy}</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-slate-600 space-y-1.5">
+                            <div><span class="font-semibold text-slate-700">Accepted/Rejected:</span> ${Number(data.accepted_samples || 0)} / ${Number(data.rejected_samples || 0)}</div>
+                            <div><span class="font-semibold text-slate-700">Last Retrain:</span> ${lastRetrain}</div>
+                            <div><span class="font-semibold text-slate-700">Last Generated:</span> ${lastRun}</div>
+                            <div><span class="font-semibold text-slate-700">Retrain Interval:</span> every ${Number(data.retrain_interval_minutes || 0)} minute(s)</div>
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                console.error(err);
+                qualityModelStatusPanel.innerHTML = '<div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm"><strong>Error:</strong> Could not load quality model status.</div>';
+            }
+        }
+
+        refreshQualityModelStatus();
 
         courseSelect.addEventListener('change', async function () {
             const courseId = this.value;
@@ -553,6 +709,7 @@
         const previewBtn = document.getElementById('previewBtn');
         const coverageBtn = document.getElementById('coverageBtn');
         const previewModal = document.getElementById('previewModal');
+        const previewBackdrop = document.getElementById('previewBackdrop');
         const closePreview = document.getElementById('closePreview');
         const previewContent = document.getElementById('previewContent');
 
@@ -571,6 +728,11 @@
                 const form = document.getElementById('generateForm');
                 const formData = new FormData(form);
                 const data = Object.fromEntries(formData.entries());
+                
+                // Extract CSRF token and remove from data object
+                const csrfToken = data.csrf_token || getCookie('csrftoken') || '';
+                delete data.csrf_token;
+                
                 // Handle Checkboxes manually for array
                 data.working_days = Array.from(document.querySelectorAll('input[name="working_days"]:checked')).map(i => i.value);
 
@@ -581,13 +743,55 @@
                 try {
                     const resp = await fetch('/admin/api/generate_preview', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken || '',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
                         body: JSON.stringify(data)
                     });
-                    const json = await resp.json();
+
+                    if (resp.redirected) {
+                        console.warn('Preview request was redirected to:', resp.url);
+                    }
+
+                    const contentType = resp.headers.get('content-type') || '';
+                    if (!contentType.includes('application/json')) {
+                        const textBody = await resp.text();
+                        console.error('Preview API returned non-JSON response:', {
+                            status: resp.status,
+                            statusText: resp.statusText,
+                            redirected: resp.redirected,
+                            url: resp.url,
+                            csrfToken: csrfToken ? csrfToken.substring(0, 10) + '...' : 'MISSING',
+                            bodySnippet: textBody.slice(0, 500)
+                        });
+                        let errorMsg = 'Preview request failed. ';
+                        if (resp.status === 500) {
+                            errorMsg += 'Server error occurred (HTTP 500). Check browser console for details and server logs.';
+                        } else if (resp.status === 403) {
+                            errorMsg += 'Session or CSRF token issue. The token might be missing or expired. Please refresh page and try again.';
+                        } else if (resp.status === 400) {
+                            errorMsg += 'Invalid request data. Check that all required fields are selected.';
+                        } else if (resp.redirected) {
+                            errorMsg += 'Request was redirected (likely authentication issue). Please login again.';
+                        }
+                        previewContent.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm"><strong>Error:</strong> ${errorMsg}</div>`;
+                        return;
+                    }
+
+                    let json;
+                    try {
+                        json = await resp.json();
+                    } catch (parseErr) {
+                        console.error('Failed to parse JSON response:', parseErr, 'Response:', resp);
+                        previewContent.innerHTML = '<div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm"><strong>Error:</strong> Invalid response format from server. Please check server logs.</div>';
+                        return;
+                    }
                     
                     if (!resp.ok) {
-                        previewContent.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">${json.error || 'Preview generation failed'}</div>`;
+                        previewContent.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm"><strong>Generation Failed:</strong> ${json.error || 'Unknown error'}</div>`;
                         return;
                     }
 
@@ -599,41 +803,64 @@
                     });
                     
                     const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                    let html = '<div class="space-y-8">';
-                    
-                    dayOrder.forEach(day => {
-                        if (!byDay[day]) return;
-                        
-                        html += `
-                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                            <div class="bg-slate-50 px-4 py-2 border-b border-slate-100 font-bold text-slate-700 text-sm uppercase tracking-wide">
-                                ${day}
-                            </div>
-                            <div class="divide-y divide-slate-100">`;
-                            
-                        byDay[day].forEach(s => {
-                            html += `
-                            <div class="p-3 flex items-center hover:bg-slate-50 transition-colors">
-                                <div class="w-24 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded text-center mr-4">
-                                    ${s.start_time}<br><span class="text-slate-400 font-normal">to ${s.end_time}</span>
-                                </div>
-                                <div class="flex-1">
-                                    <div class="text-sm font-bold text-slate-800">${s.subject_name}</div>
-                                    <div class="text-xs text-slate-500 mt-0.5">
-                                        ${s.faculty_name} ${s.is_proxy ? '<span class="text-amber-500 font-bold ml-1">(Proxy)</span>' : ''}
-                                        ${s.room_number ? ` • Room ${s.room_number}` : ''}
-                                    </div>
-                                </div>
-                            </div>`;
+                    const allSessions = json.assigned || [];
+                    const timePairs = Array.from(new Set(allSessions.map(s => `${s.start_time}|${s.end_time}`)))
+                        .sort((a, b) => {
+                            const [as] = a.split('|');
+                            const [bs] = b.split('|');
+                            return as.localeCompare(bs);
                         });
-                        html += `</div></div>`;
-                    });
 
-                    // Add Unassigned/Proxy Info sections if needed...
-                    if (json.unassigned && json.unassigned.length > 0) {
-                        html += `<div class="bg-red-50 border border-red-100 rounded-xl p-4"><h4 class="font-bold text-red-700 mb-2">Unassigned Slots</h4><ul class="list-disc ml-5 text-sm text-red-600 space-y-1">`;
-                        json.unassigned.forEach(u => html += `<li><strong>${u.day} ${u.start_time}</strong>: ${u.reason}</li>`);
-                        html += `</ul></div>`;
+                    const selectedWorkingDays = Array.isArray(data.working_days)
+                        ? data.working_days
+                        : dayOrder;
+                    const workingDays = selectedWorkingDays.length
+                        ? selectedWorkingDays
+                        : dayOrder.filter(day => (byDay[day] || []).length > 0);
+                    let html = '<div class="space-y-6">';
+
+                    if (workingDays.length && timePairs.length) {
+                        html += `
+                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
+                            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+                                <h4 class="text-sm font-bold text-slate-700">Grid Preview</h4>
+                                <span class="text-xs text-slate-500">${allSessions.length} scheduled session(s)</span>
+                            </div>
+                            <div class="overflow-x-auto overflow-y-auto flex-1 min-w-0">
+                                <table class="w-full text-[10px] border-collapse">
+                                    <thead class="bg-slate-100 sticky top-0 z-20">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left font-semibold text-slate-700 border border-slate-200 sticky left-0 z-30 bg-slate-100 min-w-[90px]">Day</th>
+                                            ${timePairs.map(tp => {
+                                                const [st, et] = tp.split('|');
+                                                return `<th class="px-2 py-2 text-left font-semibold text-slate-700 border border-slate-200 min-w-[120px] whitespace-nowrap">${st} - ${et}</th>`;
+                                            }).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${workingDays.map(day => {
+                                            return `
+                                            <tr class="odd:bg-white even:bg-slate-50/40">
+                                                <td class="px-3 py-2 font-semibold text-slate-700 border border-slate-200 sticky left-0 z-10 bg-inherit min-w-[90px]">${day}</td>
+                                                ${timePairs.map(tp => {
+                                                    const [st, et] = tp.split('|');
+                                                    const slot = (byDay[day] || []).find(s => s.start_time === st && s.end_time === et);
+                                                    if (!slot) {
+                                                        return '<td class="px-2 py-2 border border-slate-200 text-slate-300 text-center align-middle">-</td>';
+                                                    }
+                                                    return `
+                                                        <td class="px-2 py-2 border border-slate-200 align-top min-w-[120px]">
+                                                            <div class="font-semibold text-slate-800 text-[10px] leading-tight">${slot.subject_name}</div>
+                                                            <div class="text-slate-600 text-[9px] mt-0.5 leading-tight">${slot.faculty_name || ''}${slot.is_proxy ? ' <span class="text-amber-600 font-semibold">(Proxy)</span>' : ''}</div>
+                                                            ${slot.room_number ? `<div class="text-[9px] text-blue-600 mt-0.5 leading-tight">Room ${slot.room_number}</div>` : ''}
+                                                        </td>`;
+                                                }).join('')}
+                                            </tr>`;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>`;
                     }
 
                     html += '</div>';
@@ -648,6 +875,10 @@
 
         if (closePreview) {
             closePreview.addEventListener('click', () => previewModal.classList.add('hidden'));
+        }
+
+        if (previewBackdrop) {
+            previewBackdrop.addEventListener('click', () => previewModal.classList.add('hidden'));
         }
 
         if (coverageBtn) {

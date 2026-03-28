@@ -6,10 +6,51 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import secrets
+import threading
+import time
 from datetime import timedelta
 
 # Initialize extensions
 csrf = CSRFProtect()
+
+
+def _start_quality_model_retrainer(app):
+    """Run periodic quality-model retraining in a background daemon thread."""
+
+    interval_minutes = int(app.config.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 180) or 180)
+    if interval_minutes <= 0:
+        app.logger.info('Quality model retrainer disabled (interval=%s).', interval_minutes)
+        return
+
+    model_path = app.config.get('QUALITY_MODEL_PATH')
+
+    def retrain_loop():
+        while True:
+            try:
+                with app.app_context():
+                    from ml.scoring.learned_predictor import train_quality_model_from_database
+
+                    result = train_quality_model_from_database(
+                        model_path=model_path,
+                        logger=app.logger,
+                    )
+                    if result.get('status') == 'trained':
+                        app.logger.info(
+                            'Quality model retrained: samples=%s acc=%s path=%s',
+                            result.get('sample_count'),
+                            result.get('training_accuracy'),
+                            result.get('model_path'),
+                        )
+                    else:
+                        app.logger.debug('Quality model retrain skipped: %s', result)
+            except Exception as retrain_error:
+                app.logger.warning('Periodic quality model retrain failed: %s', str(retrain_error))
+
+            time.sleep(max(60, interval_minutes * 60))
+
+    worker = threading.Thread(target=retrain_loop, name='quality-model-retrainer', daemon=True)
+    worker.start()
+    app.logger.info('Started quality model retrainer thread (interval=%d min).', interval_minutes)
 
 def format_time_filter(time_obj):
     """Jinja filter to format time/timedelta objects to HH:MM string"""
@@ -365,6 +406,10 @@ def create_app():
             "base_url": app.config.get('BASE_URL', ''),
             "institution": app.config.get('INSTITUTION_NAME', '')
         })
+
+    should_start_worker = (not app.config.get('DEBUG', False)) or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    if should_start_worker:
+        _start_quality_model_retrainer(app)
     
     app.logger.info("College Timetable Management System application created.")
     return app
