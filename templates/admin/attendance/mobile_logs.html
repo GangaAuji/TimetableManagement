@@ -1,0 +1,162 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Mobile Attendance Logs{% endblock %}
+{% block header_title %}Mobile Sync Logs{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">Mobile Attendance Logs</h2>
+            <p class="text-gray-500 mt-1 text-sm">View attendance received from APK sync (`attendance_logs` table)</p>
+        </div>
+        <form method="POST" action="{{ url_for('attendance_admin.reprocess_mobile_sync_logs') }}" class="flex items-center gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="limit" min="1" max="500" value="100" class="w-24 rounded-lg border-gray-300 text-sm" title="Reprocess limit">
+            <button type="submit" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+                <i class="fas fa-sync-alt mr-2"></i>Reprocess Pending/Failed
+            </button>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Total</p>
+            <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.total }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Processed</p>
+            <p class="text-2xl font-bold text-green-600 mt-1">{{ stats.processed }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Pending</p>
+            <p class="text-2xl font-bold text-amber-600 mt-1">{{ stats.pending }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Failed</p>
+            <p class="text-2xl font-bold text-red-600 mt-1">{{ stats.failed }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                <input type="date" name="date" value="{{ filters.date }}" class="w-full rounded-lg border-gray-300 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select name="processing_status" class="w-full rounded-lg border-gray-300 text-sm">
+                    <option value="" {% if not filters.processing_status %}selected{% endif %}>All</option>
+                    <option value="processed" {% if filters.processing_status == 'processed' %}selected{% endif %}>Processed</option>
+                    <option value="pending" {% if filters.processing_status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="failed" {% if filters.processing_status == 'failed' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Device ID</label>
+                <input type="text" name="device_id" value="{{ filters.device_id }}" placeholder="device..." class="w-full rounded-lg border-gray-300 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Student Search</label>
+                <input type="text" name="student_query" value="{{ filters.student_query }}" placeholder="name / roll / id" class="w-full rounded-lg border-gray-300 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Limit</label>
+                <div class="flex gap-2">
+                    <input type="number" min="1" max="500" name="limit" value="{{ filters.limit }}" class="w-full rounded-lg border-gray-300 text-sm">
+                    <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700">Apply</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">Synced Events</h3>
+            <span class="text-sm text-gray-500">{{ logs|length }} rows shown</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Class/Subject</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Attendance</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Processing</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Device</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Meta</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in logs %}
+                    <tr class="hover:bg-gray-50 align-top">
+                        <td class="px-4 py-3 whitespace-nowrap text-gray-700">
+                            <div>{{ row.created_at or '-' }}</div>
+                            <div class="text-xs text-gray-500">Event: {{ row.event_uuid }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="font-medium text-gray-900">{{ row.student_name or 'Unknown Student' }}</div>
+                            <div class="text-xs text-gray-500">Roll: {{ row.roll_number or '-' }} | ID: {{ row.student_id }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="text-gray-900">{{ row.course_name or '-' }} {{ row.class_name or '' }} {{ row.division_name or '' }}</div>
+                            <div class="text-xs text-gray-500">{{ row.subject_name or 'Unknown Subject' }} | TT: {{ row.timetable_id }}</div>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <div>
+                                {% if row.status == 'Present' %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">Present</span>
+                                {% elif row.status == 'Late' %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Late</span>
+                                {% else %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">Absent</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">Date: {{ row.attendance_date }}</div>
+                            <div class="text-xs text-gray-500">Captured: {{ row.captured_at or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div>
+                                {% if row.processing_status == 'processed' %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">Processed</span>
+                                {% elif row.processing_status == 'pending' %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Pending</span>
+                                {% else %}
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">Failed</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">Processed at: {{ row.processed_at or '-' }}</div>
+                            {% if row.error_message %}
+                            <div class="text-xs text-red-600 mt-1 max-w-xs break-words">{{ row.error_message }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="text-gray-900">{{ row.device_id }}</div>
+                            <div class="text-xs text-gray-500">By: {{ row.marked_by_faculty or row.marked_by_username or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="text-xs text-gray-600">Confidence: {{ row.confidence if row.confidence is not none else '-' }}</div>
+                            <div class="text-xs text-gray-600">Face: {{ row.face_model or '-' }}</div>
+                            <div class="text-xs text-gray-600">Detector: {{ row.detector_model or '-' }}</div>
+                            {% if row.remarks %}
+                            <div class="text-xs text-gray-600 mt-1">{{ row.remarks }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                            <i class="fas fa-mobile-alt text-4xl text-gray-300 mb-3"></i>
+                            <p>No synced attendance logs found for current filters.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

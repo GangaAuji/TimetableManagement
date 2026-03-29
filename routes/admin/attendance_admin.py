@@ -14,6 +14,49 @@ import io
 attendance_admin_bp = Blueprint('attendance_admin', __name__, url_prefix='/admin/attendance')
 
 
+def _table_exists(cursor, table_name):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+        LIMIT 1
+        """,
+        (table_name,),
+    )
+    return cursor.fetchone() is not None
+
+
+def _decimal_to_number(value):
+    if isinstance(value, Decimal):
+        return int(value) if value == int(value) else float(value)
+    return value
+
+
+def _promote_log_to_attendance(cursor, log_row):
+    cursor.execute(
+        """
+        INSERT INTO attendance (student_id, timetable_id, attendance_date, status, marked_by, remarks)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            marked_by = VALUES(marked_by),
+            remarks = VALUES(remarks),
+            marked_at = NOW(),
+            updated_at = NOW()
+        """,
+        (
+            log_row["student_id"],
+            log_row["timetable_id"],
+            log_row["attendance_date"],
+            log_row["status"],
+            log_row["marked_by_faculty_id"],
+            log_row.get("remarks"),
+        ),
+    )
+
+
 @attendance_admin_bp.route('/')
 @has_permission('attendance_view')
 def attendance_overview():
@@ -628,6 +671,230 @@ def charts_data():
         
         return jsonify({'error': 'Invalid chart type'}), 400
     
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/mobile-logs')
+@has_permission('attendance_view')
+def mobile_sync_logs():
+    """Show mobile synced attendance events from attendance_logs."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'attendance_logs'):
+            flash("attendance_logs table not found. Run mobile attendance migration first.", "warning")
+            return render_template(
+                'admin/attendance/mobile_logs.html',
+                logs=[],
+                stats={'total': 0, 'processed': 0, 'pending': 0, 'failed': 0},
+                filters={'date': '', 'processing_status': '', 'device_id': '', 'student_query': '', 'limit': 100},
+            )
+
+        filter_date = (request.args.get('date') or '').strip()
+        processing_status = (request.args.get('processing_status') or '').strip().lower()
+        device_id = (request.args.get('device_id') or '').strip()
+        student_query = (request.args.get('student_query') or '').strip()
+        limit = request.args.get('limit', 100, type=int) or 100
+        limit = max(1, min(limit, 500))
+
+        where_clauses = ['1=1']
+        params = []
+
+        if filter_date:
+            where_clauses.append('al.attendance_date = %s')
+            params.append(filter_date)
+
+        if processing_status in ('processed', 'pending', 'failed'):
+            where_clauses.append('al.processing_status = %s')
+            params.append(processing_status)
+
+        if device_id:
+            where_clauses.append('al.device_id LIKE %s')
+            params.append(f'%{device_id}%')
+
+        if student_query:
+            where_clauses.append(
+                '(st.name LIKE %s OR st.roll_number LIKE %s OR CAST(al.student_id AS CHAR) LIKE %s)'
+            )
+            like_student = f'%{student_query}%'
+            params.extend([like_student, like_student, like_student])
+
+        where_sql = ' AND '.join(where_clauses)
+
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN al.processing_status = 'processed' THEN 1 ELSE 0 END) AS processed,
+                SUM(CASE WHEN al.processing_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                SUM(CASE WHEN al.processing_status = 'failed' THEN 1 ELSE 0 END) AS failed
+            FROM attendance_logs al
+            LEFT JOIN students st ON st.id = al.student_id
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        stats = cursor.fetchone() or {}
+        stats = {
+            'total': int(stats.get('total') or 0),
+            'processed': int(stats.get('processed') or 0),
+            'pending': int(stats.get('pending') or 0),
+            'failed': int(stats.get('failed') or 0),
+        }
+
+        cursor.execute(
+            f"""
+            SELECT
+                al.id,
+                al.event_uuid,
+                al.device_id,
+                al.student_id,
+                al.timetable_id,
+                al.attendance_date,
+                al.status,
+                al.processing_status,
+                al.confidence,
+                al.face_model,
+                al.detector_model,
+                al.remarks,
+                al.error_message,
+                al.created_at,
+                al.captured_at,
+                al.processed_at,
+                st.name AS student_name,
+                st.roll_number,
+                u.username AS marked_by_username,
+                f.name AS marked_by_faculty,
+                sub.name AS subject_name,
+                c.name AS course_name,
+                cl.name AS class_name,
+                d.name AS division_name
+            FROM attendance_logs al
+            LEFT JOIN students st ON st.id = al.student_id
+            LEFT JOIN users u ON u.id = al.marked_by_user_id
+            LEFT JOIN faculty f ON f.id = al.marked_by_faculty_id
+            LEFT JOIN timetable t ON t.id = al.timetable_id
+            LEFT JOIN subjects sub ON sub.id = t.subject_id
+            LEFT JOIN courses c ON c.id = t.course_id
+            LEFT JOIN classes cl ON cl.id = t.class_id
+            LEFT JOIN divisions d ON d.id = t.division_id
+            WHERE {where_sql}
+            ORDER BY al.created_at DESC
+            LIMIT %s
+            """,
+            tuple(params + [limit]),
+        )
+        logs = cursor.fetchall() or []
+
+        for row in logs:
+            row['confidence'] = _decimal_to_number(row.get('confidence'))
+            for key in ('attendance_date', 'created_at', 'captured_at', 'processed_at'):
+                value = row.get(key)
+                if isinstance(value, datetime):
+                    if key == 'attendance_date':
+                        row[key] = value.strftime('%Y-%m-%d')
+                    else:
+                        row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        return render_template(
+            'admin/attendance/mobile_logs.html',
+            logs=logs,
+            stats=stats,
+            filters={
+                'date': filter_date,
+                'processing_status': processing_status,
+                'device_id': device_id,
+                'student_query': student_query,
+                'limit': limit,
+            },
+        )
+    except Exception as e:
+        print(f"Error fetching mobile sync logs: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("Unable to load mobile sync attendance logs.", "danger")
+        return render_template(
+            'admin/attendance/mobile_logs.html',
+            logs=[],
+            stats={'total': 0, 'processed': 0, 'pending': 0, 'failed': 0},
+            filters={'date': '', 'processing_status': '', 'device_id': '', 'student_query': '', 'limit': 100},
+        )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/mobile-logs/reprocess', methods=['POST'])
+@has_permission('attendance_manage')
+def reprocess_mobile_sync_logs():
+    """Reprocess pending/failed mobile logs into attendance table."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'attendance_logs'):
+            flash('attendance_logs table not found. Run migration first.', 'warning')
+            return redirect(url_for('attendance_admin.mobile_sync_logs'))
+
+        limit = request.form.get('limit', 100, type=int) or 100
+        limit = max(1, min(limit, 500))
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM attendance_logs
+            WHERE processing_status IN ('pending', 'failed')
+            ORDER BY created_at ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        log_rows = cursor.fetchall() or []
+
+        retried = 0
+        processed = 0
+        failed = 0
+
+        for log_row in log_rows:
+            retried += 1
+            try:
+                _promote_log_to_attendance(cursor, log_row)
+                cursor.execute(
+                    """
+                    UPDATE attendance_logs
+                    SET processing_status = 'processed',
+                        processed_at = NOW(),
+                        error_message = NULL
+                    WHERE id = %s
+                    """,
+                    (log_row['id'],),
+                )
+                processed += 1
+            except Exception as process_error:
+                failed += 1
+                cursor.execute(
+                    """
+                    UPDATE attendance_logs
+                    SET processing_status = 'failed',
+                        error_message = %s
+                    WHERE id = %s
+                    """,
+                    (str(process_error)[:500], log_row['id']),
+                )
+
+        connection.commit()
+        flash(
+            f"Reprocess complete: retried={retried}, processed={processed}, failed={failed}",
+            'success' if failed == 0 else 'warning',
+        )
+        return redirect(url_for('attendance_admin.mobile_sync_logs'))
+    except Exception as e:
+        connection.rollback()
+        flash(f'Failed to reprocess mobile sync logs: {str(e)}', 'danger')
+        return redirect(url_for('attendance_admin.mobile_sync_logs'))
     finally:
         cursor.close()
         connection.close()

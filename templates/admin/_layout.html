@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Admin Panel{% endblock %} - {{ branding.site_title or 'Timetable Pro' }}</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     {% if branding.favicon %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
@@ -14,7 +15,7 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -32,46 +33,83 @@
             }
         }
     </script>
-    
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <style>
         /* Custom Scrollbar for Sidebar */
-        .sidebar-scroll::-webkit-scrollbar { width: 5px; }
-        .sidebar-scroll::-webkit-scrollbar-track { background: #0f172a; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
-        
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
         /* Transitions */
-        .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .sidebar-transition {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
         /* DataTables Overrides */
-        .dataTables_wrapper .dataTables_length select, 
+        .dataTables_wrapper .dataTables_length select,
         .dataTables_wrapper .dataTables_filter input {
-            border: 1px solid #e2e8f0; border-radius: 0.375rem; padding: 0.25rem 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            padding: 0.25rem 0.5rem;
         }
     </style>
-    
+
     {% block extra_css %}{% endblock %}
 </head>
+
 <body class="bg-gray-100 font-sans text-gray-800 antialiased">
 
-    <div id="mobile-overlay" class="fixed inset-0 bg-gray-900/50 z-40 hidden transition-opacity opacity-0 backdrop-blur-sm md:hidden"></div>
+    <div id="mobile-overlay"
+        class="fixed inset-0 bg-gray-900/50 z-40 hidden transition-opacity opacity-0 backdrop-blur-sm md:hidden"></div>
 
-    <aside id="sidebar" class="fixed top-0 left-0 z-50 h-screen w-64 bg-sidebar text-white sidebar-transition transform -translate-x-full md:translate-x-0 flex flex-col shadow-2xl">
-        
+    <aside id="sidebar"
+        class="fixed top-0 left-0 z-50 h-screen w-64 bg-sidebar text-white sidebar-transition transform -translate-x-full md:translate-x-0 flex flex-col shadow-2xl">
+
         <div class="h-16 flex items-center px-4 border-b border-gray-700/50 bg-gray-900 shrink-0">
             <a href="{{ url_for('admin.dashboard') }}" class="flex items-center space-x-2 flex-1 min-w-0">
                 {% if branding.site_logo %}
-                <img src="{{ url_for('static', filename=branding.site_logo) }}" alt="Logo" class="h-8 w-8 object-contain flex-shrink-0">
+                <img src="{{ url_for('static', filename=branding.site_logo) }}" alt="Logo"
+                    class="h-8 w-8 object-contain flex-shrink-0">
                 {% else %}
-                <div class="w-8 h-8 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                <div
+                    class="w-8 h-8 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
                     <i class="fas fa-calendar-alt text-white text-xs"></i>
                 </div>
                 {% endif %}
-                <span class="text-base font-bold tracking-wide text-gray-100 truncate" title="{{ branding.site_title or 'Timetable Pro' }}">{{ branding.site_title or 'Timetable Pro' }}</span>
+                <span class="text-base font-bold tracking-wide text-gray-100 truncate"
+                    title="{{ branding.site_title or 'Timetable Pro' }}">{{ branding.site_title or 'Timetable Pro'
+                    }}</span>
             </a>
             <button id="close-sidebar" class="ml-2 md:hidden text-gray-400 hover:text-white flex-shrink-0">
                 <i class="fas fa-times"></i>
@@ -79,9 +117,9 @@
         </div>
 
         <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-4 px-3 space-y-1 sidebar-scroll pb-24">
-            
-            <a href="{{ url_for('admin.dashboard') }}" 
-               class="nav-item flex items-center px-3 py-2.5 rounded-lg transition-colors mb-4
+
+            <a href="{{ url_for('admin.dashboard') }}"
+                class="nav-item flex items-center px-3 py-2.5 rounded-lg transition-colors mb-4
                {% if request.endpoint == 'admin.dashboard' %}bg-accent text-white shadow-md active-nav-link{% else %}text-gray-400 hover:bg-sidebarHover hover:text-gray-100{% endif %}">
                 <i class="fas fa-tachometer-alt w-6 text-center"></i>
                 <span class="ml-3 font-medium">Dashboard</span>
@@ -90,23 +128,27 @@
             {% if can_view_module('students') or can_view_module('faculty') or can_view_module('courses') %}
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Academic</p>
-                
+
                 {% if can_view_module('students') %}
-                <a href="{{ url_for('students.manage_students') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'students.manage_students' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('students.manage_students') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'students.manage_students' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-user-graduate w-6 text-center"></i>
                     <span class="ml-3 text-sm">Students</span>
                 </a>
                 {% endif %}
 
                 {% if can_view_module('faculty') %}
-                <a href="{{ url_for('faculty.manage_faculty') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'faculty.manage_faculty' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('faculty.manage_faculty') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'faculty.manage_faculty' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-chalkboard-teacher w-6 text-center"></i>
                     <span class="ml-3 text-sm">Faculty</span>
                 </a>
                 {% endif %}
 
-                {% if user_has_any_perm(['academicyears_view', 'semesters_view', 'departments_view', 'courses_view_course', 'subjects_view_subject', 'batches_view', 'allocations_view']) %}
-                <a href="{{ url_for('academic.manage_academics') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'academic.manage_academics' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                {% if user_has_any_perm(['academicyears_view', 'semesters_view', 'departments_view',
+                'courses_view_course', 'subjects_view_subject', 'batches_view', 'allocations_view']) %}
+                <a href="{{ url_for('academic.manage_academics') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'academic.manage_academics' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-book w-6 text-center"></i>
                     <span class="ml-3 text-sm">Academics</span>
                 </a>
@@ -114,23 +156,27 @@
             </div>
             {% endif %}
 
-            {% if user_has_perm('faculty_view_proxy') or user_has_perm('faculty_approve_proxy') or user_has_perm('shifts_view') %}
+            {% if user_has_perm('faculty_view_proxy') or user_has_perm('faculty_approve_proxy') or
+            user_has_perm('shifts_view') %}
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Faculty Ops</p>
-                
+
                 {% if user_has_perm('faculty_view_proxy') or user_has_perm('faculty_approve_proxy') %}
-                <a href="{{ url_for('proxy.proxy_log') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'proxy.proxy_log' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('proxy.proxy_log') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'proxy.proxy_log' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-user-clock w-6 text-center"></i>
                     <span class="ml-3 text-sm">Proxy Log</span>
                 </a>
                 {% endif %}
 
                 {% if user_has_perm('shifts_view') %}
-                <a href="{{ url_for('shifts.manage_shifts') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint in ['shifts.manage_shifts', 'shifts.faculty_availability'] %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('shifts.manage_shifts') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint in ['shifts.manage_shifts', 'shifts.faculty_availability'] %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-clock w-6 text-center"></i>
                     <span class="ml-3 text-sm">Shifts</span>
                 </a>
-                <a href="{{ url_for('shifts.view_change_requests') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'shifts.view_change_requests' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('shifts.view_change_requests') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'shifts.view_change_requests' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-exchange-alt w-6 text-center"></i>
                     <span class="ml-3 text-sm">Shift Requests</span>
                 </a>
@@ -141,30 +187,34 @@
             {% if can_view_module('timetable') or can_view_module('rooms') or can_view_module('holidays') %}
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Timetable</p>
-                
+
                 {% if user_has_perm('timetable_generate') %}
-                <a href="{{ url_for('timetable.generate_timetable') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'timetable.generate_timetable' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('timetable.generate_timetable') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'timetable.generate_timetable' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-cogs w-6 text-center"></i>
                     <span class="ml-3 text-sm">Generate</span>
                 </a>
                 {% endif %}
 
                 {% if can_view_module('holidays') %}
-                <a href="{{ url_for('holiday.holidays_index') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'holiday.holidays_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('holiday.holidays_index') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'holiday.holidays_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-umbrella-beach w-6 text-center"></i>
                     <span class="ml-3 text-sm">Holidays</span>
                 </a>
                 {% endif %}
 
                 {% if user_has_perm('timetable_view') %}
-                <a href="{{ url_for('timetable.timetable_manage') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'timetable.timetable_manage' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('timetable.timetable_manage') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'timetable.timetable_manage' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-calendar-week w-6 text-center"></i>
                     <span class="ml-3 text-sm">View Timetable</span>
                 </a>
                 {% endif %}
 
                 {% if can_view_module('rooms') %}
-                <a href="{{ url_for('rooms.rooms_index') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'rooms.rooms_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('rooms.rooms_index') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'rooms.rooms_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-door-open w-6 text-center"></i>
                     <span class="ml-3 text-sm">Rooms</span>
                 </a>
@@ -173,74 +223,80 @@
             {% endif %}
 
             {% set can_view_any_report = user_has_any_perm([
-                'reports_view',
-                'reports_view_attendance',
-                'reports_view_timetable',
-                'reports_view_audit',
-                'reports_view_shifts',
-                'reports_view_proxy',
-                'reports_view_invitations'
+            'reports_view',
+            'reports_view_attendance',
+            'reports_view_timetable',
+            'reports_view_audit',
+            'reports_view_shifts',
+            'reports_view_proxy',
+            'reports_view_invitations'
             ]) %}
             {% if can_view_any_report %}
             <div class="mt-4 mb-2">
-                <button
-                    id="reports-menu-toggle"
-                    type="button"
+                <button id="reports-menu-toggle" type="button"
                     aria-expanded="{{ 'true' if request.endpoint and request.endpoint.startswith('admin_reports.') else 'false' }}"
-                    class="w-full nav-item flex items-center justify-between px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint and request.endpoint.startswith('admin_reports.') %}bg-white/10 text-white border-l-4 border-accent{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}"
-                >
+                    class="w-full nav-item flex items-center justify-between px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint and request.endpoint.startswith('admin_reports.') %}bg-white/10 text-white border-l-4 border-accent{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <span class="flex items-center">
                         <i class="fas fa-chart-pie w-6 text-center"></i>
                         <span class="ml-3 text-sm">Reports</span>
                     </span>
-                    <i id="reports-menu-chevron" class="fas fa-chevron-down text-xs transition-transform duration-200 {% if not (request.endpoint and request.endpoint.startswith('admin_reports.')) %}-rotate-90{% endif %}"></i>
+                    <i id="reports-menu-chevron"
+                        class="fas fa-chevron-down text-xs transition-transform duration-200 {% if not (request.endpoint and request.endpoint.startswith('admin_reports.')) %}-rotate-90{% endif %}"></i>
                 </button>
 
-                <div id="reports-menu-items" class="mt-1 ml-4 pl-2 border-l border-white/10 space-y-1 {% if not (request.endpoint and request.endpoint.startswith('admin_reports.')) %}hidden{% endif %}">
+                <div id="reports-menu-items"
+                    class="mt-1 ml-4 pl-2 border-l border-white/10 space-y-1 {% if not (request.endpoint and request.endpoint.startswith('admin_reports.')) %}hidden{% endif %}">
                     {% if user_has_perm('reports_view') %}
-                    <a href="{{ url_for('admin_reports.reports_index') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.reports_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.reports_index') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.reports_index' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-table-cells-large w-6 text-center"></i>
                         <span class="ml-3 text-sm">Report Center</span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_attendance') %}
-                    <a href="{{ url_for('admin_reports.attendance_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.attendance_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.attendance_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.attendance_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-user-check w-6 text-center"></i>
                         <span class="ml-3 text-sm">Attendance</span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_timetable') %}
-                    <a href="{{ url_for('admin_reports.timetable_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.timetable_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.timetable_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.timetable_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-calendar-week w-6 text-center"></i>
                         <span class="ml-3 text-sm">Timetable </span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_audit') %}
-                    <a href="{{ url_for('admin_reports.audit_logs_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.audit_logs_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.audit_logs_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.audit_logs_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-shield-alt w-6 text-center"></i>
                         <span class="ml-3 text-sm">Audit Logs</span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_shifts') %}
-                    <a href="{{ url_for('admin_reports.shifts_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.shifts_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.shifts_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.shifts_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-clock w-6 text-center"></i>
                         <span class="ml-3 text-sm">Shifts</span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_proxy') %}
-                    <a href="{{ url_for('admin_reports.proxy_log_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.proxy_log_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.proxy_log_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.proxy_log_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-user-friends w-6 text-center"></i>
                         <span class="ml-3 text-sm">Proxy Log </span>
                     </a>
                     {% endif %}
 
                     {% if user_has_perm('reports_view_invitations') %}
-                    <a href="{{ url_for('admin_reports.invitations_report') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.invitations_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <a href="{{ url_for('admin_reports.invitations_report') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'admin_reports.invitations_report' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                         <i class="fas fa-envelope-open-text w-6 text-center"></i>
                         <span class="ml-3 text-sm">Invitations </span>
                     </a>
@@ -252,20 +308,29 @@
             {% if user_has_perm('attendance_view') %}
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Attendance</p>
-                
-                <a href="{{ url_for('attendance_admin.attendance_overview') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_overview' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+
+                <a href="{{ url_for('attendance_admin.attendance_overview') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_overview' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-chart-line w-6 text-center"></i>
                     <span class="ml-3 text-sm">Overview</span>
                 </a>
-                
-                <a href="{{ url_for('attendance_admin.manage_attendance') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.manage_attendance' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+
+                <a href="{{ url_for('attendance_admin.manage_attendance') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.manage_attendance' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-tasks w-6 text-center"></i>
                     <span class="ml-3 text-sm">Manage</span>
                 </a>
-                
-                <a href="{{ url_for('attendance_admin.attendance_defaulters') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_defaulters' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+
+                <a href="{{ url_for('attendance_admin.attendance_defaulters') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_defaulters' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-exclamation-triangle w-6 text-center"></i>
                     <span class="ml-3 text-sm">Defaulters</span>
+                </a>
+
+                <a href="{{ url_for('attendance_admin.mobile_sync_logs') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.mobile_sync_logs' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <i class="fas fa-mobile-alt w-6 text-center"></i>
+                    <span class="ml-3 text-sm">Mobile Sync Logs</span>
                 </a>
             </div>
             {% endif %}
@@ -274,15 +339,24 @@
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Administration</p>
                 {% if can_view_module('users') %}
-                <a href="{{ url_for('user_mgmt_bp.manage_users') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'user_mgmt_bp.manage_users' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('user_mgmt_bp.manage_users') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'user_mgmt_bp.manage_users' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-users w-6 text-center"></i>
                     <span class="ml-3 text-sm">Users</span>
                 </a>
                 {% endif %}
                 {% if can_view_module('roles') %}
-                <a href="{{ url_for('user_mgmt_bp.manage_roles') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'user_mgmt_bp.manage_roles' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('user_mgmt_bp.manage_roles') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'user_mgmt_bp.manage_roles' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-user-shield w-6 text-center"></i>
                     <span class="ml-3 text-sm">Roles</span>
+                </a>
+                {% endif %}
+                {% if session.get('role') in ('Super Admin') %}
+                <a href="{{ url_for('mobile_devices.manage_mobile_devices') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'mobile_devices.manage_mobile_devices' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                    <i class="fas fa-mobile-alt w-6 text-center"></i>
+                    <span class="ml-3 text-sm">Mobile Devices</span>
                 </a>
                 {% endif %}
             </div>
@@ -292,59 +366,68 @@
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">System</p>
                 {% if can_view_module('invitations') %}
-                <a href="{{ url_for('invitations.manage_invitations') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'invitations.manage_invitations' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('invitations.manage_invitations') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'invitations.manage_invitations' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-envelope-open-text w-6 text-center"></i>
                     <span class="ml-3 text-sm">Invitations</span>
                 </a>
                 {% endif %}
-                
+
                 {% if user_has_perm('admin_view_settings') %}
-                <a href="{{ url_for('branding.manage_branding') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'branding.manage_branding' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                <a href="{{ url_for('branding.manage_branding') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'branding.manage_branding' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-palette w-6 text-center"></i>
                     <span class="ml-3 text-sm">Settings</span>
                 </a>
                 {% endif %}
-                
-                <a href="{{ url_for('audit_logs.audit_logs_view') }}" class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'audit_logs.audit_logs_view' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+
+                <a href="{{ url_for('audit_logs.audit_logs_view') }}"
+                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'audit_logs.audit_logs_view' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
                     <i class="fas fa-shield-alt w-6 text-center"></i>
                     <span class="ml-3 text-sm">Audit Logs</span>
                 </a>
             </div>
             {% endif %}
-            
+
         </nav>
 
         <div class="p-4 border-t border-gray-700/50 bg-gray-900/30 shrink-0">
-            <a href="{{ url_for('profile.view_profile') }}" class="flex items-center w-full p-2 rounded-lg hover:bg-white/5 transition-colors mb-3 group">
+            <a href="{{ url_for('profile.view_profile') }}"
+                class="flex items-center w-full p-2 rounded-lg hover:bg-white/5 transition-colors mb-3 group">
                 <!-- Debug: {{ session.get('profile_photo', 'NOT_SET') }} -->
                 <div class="relative shrink-0">
-                    {% if session.get('profile_photo') and session.profile_photo not in ['default-avatar.svg', 'default-avatar.png', '', None] %}
-                        <img id="profile-img" src="{{ url_for('static', filename=session.profile_photo) }}" 
-                             alt="Profile" 
-                             class="w-9 h-9 rounded-full object-cover border border-gray-600">
-                        <div id="profile-fallback" class="hidden w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
-                            {{ session.username[0].upper() if session.username else 'U' }}
-                        </div>
+                    {% if session.get('profile_photo') and session.profile_photo not in ['default-avatar.svg',
+                    'default-avatar.png', '', None] %}
+                    <img id="profile-img" src="{{ url_for('static', filename=session.profile_photo) }}" alt="Profile"
+                        class="w-9 h-9 rounded-full object-cover border border-gray-600">
+                    <div id="profile-fallback"
+                        class="hidden w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
+                        {{ session.username[0].upper() if session.username else 'U' }}
+                    </div>
                     {% else %}
-                        <div class="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
-                            {{ session.username[0].upper() if session.username else 'U' }}
-                        </div>
+                    <div
+                        class="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold border border-gray-600">
+                        {{ session.username[0].upper() if session.username else 'U' }}
+                    </div>
                     {% endif %}
                 </div>
                 <div class="ml-3 overflow-hidden">
-                    <p class="text-sm font-medium text-gray-200 group-hover:text-white truncate">{{ session.username }}</p>
+                    <p class="text-sm font-medium text-gray-200 group-hover:text-white truncate">{{ session.username }}
+                    </p>
                     <p class="text-xs text-gray-500">Administrator</p>
                 </div>
             </a>
-            <a href="{{ url_for('auth.logout') }}" class="flex items-center justify-center w-full py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors shadow-lg">
+            <a href="{{ url_for('auth.logout') }}"
+                class="flex items-center justify-center w-full py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors shadow-lg">
                 <i class="fas fa-sign-out-alt mr-2"></i> Logout
             </a>
         </div>
     </aside>
 
     <div class="flex flex-col min-h-screen md:ml-64 transition-all duration-300">
-        
-        {% set header_title %}{% block header_title %}{{ branding.admin_title or 'Admin Panel' }}{% endblock %}{% endset %}
+
+        {% set header_title %}{% block header_title %}{{ branding.admin_title or 'Admin Panel' }}{% endblock %}{% endset
+        %}
         {% set header_show_sidebar_toggle = true %}
         {% set header_show_clock = true %}
         {% set header_clock_icon_color = 'text-indigo-500' %}
@@ -352,32 +435,36 @@
 
         <main class="flex-1 p-3 sm:p-4 lg:p-5 xl:p-6 overflow-y-auto w-full">
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <div class="mb-6 space-y-2 w-full">
-                        {% for category, message in messages %}
-                            {% set is_err = category == 'danger' or category == 'error' %}
-                            <div class="flex items-start p-4 rounded-lg border shadow-sm animate-fade-in-down {{ 'bg-red-50 border-red-200 text-red-800' if is_err else 'bg-green-50 border-green-200 text-green-800' }}">
-                                <i class="fas {{ 'fa-exclamation-circle' if is_err else 'fa-check-circle' }} mt-0.5 mr-3 text-lg"></i>
-                                <span>{{ message }}</span>
-                                <button onclick="this.parentElement.remove()" class="ml-auto opacity-50 hover:opacity-100"><i class="fas fa-times"></i></button>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
+            {% if messages %}
+            <div class="mb-6 space-y-2 w-full">
+                {% for category, message in messages %}
+                {% set is_err = category == 'danger' or category == 'error' %}
+                <div
+                    class="flex items-start p-4 rounded-lg border shadow-sm animate-fade-in-down {{ 'bg-red-50 border-red-200 text-red-800' if is_err else 'bg-green-50 border-green-200 text-green-800' }}">
+                    <i
+                        class="fas {{ 'fa-exclamation-circle' if is_err else 'fa-check-circle' }} mt-0.5 mr-3 text-lg"></i>
+                    <span>{{ message }}</span>
+                    <button onclick="this.parentElement.remove()" class="ml-auto opacity-50 hover:opacity-100"><i
+                            class="fas fa-times"></i></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% endwith %}
 
             <div class="fade-in w-full">
                 {% block content %}{% endblock %}
             </div>
         </main>
-        
+
         {% set footer_icon_bg = 'bg-gray-100' %}
         {% set footer_icon_border = 'border-gray-200' %}
         {% set footer_icon_color = 'text-accent' %}
         {% set footer_icon_class = 'fa-shield-alt' %}
         {% set footer_title = branding.site_title or 'Timetable Pro' %}
         {% set footer_caption_before_year = branding.copyright_text or '&copy;' %}
-        {% set footer_caption_after_year = (institution_name or 'College Timetable Management System') ~ '. All rights reserved.' %}
+        {% set footer_caption_after_year = (institution_name or 'College Timetable Management System') ~ '. All rights
+        reserved.' %}
         {% set footer_pill_icon_class = 'fa-bolt' %}
         {% set footer_pill_icon_color = 'text-amber-500' %}
         {% set footer_pill_text = branding.footer_text or 'Powered by Timetable Management System' %}
@@ -388,9 +475,9 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-    
+
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // -- 1. Mobile Sidebar Logic --
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('mobile-overlay');
@@ -411,17 +498,17 @@
                 document.body.style.overflow = '';
             }
 
-            if(toggleBtn) toggleBtn.addEventListener('click', openSidebar);
-            if(closeBtn) closeBtn.addEventListener('click', closeSidebar);
-            if(overlay) overlay.addEventListener('click', closeSidebar);
+            if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+            if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+            if (overlay) overlay.addEventListener('click', closeSidebar);
 
             // -- 2. AUTO-SCROLL TO ACTIVE LINK (DISABLED to prevent scrollbar movement) --
             // Auto-scroll has been disabled to keep navbar position static
             // If you need to re-enable, uncomment the code below:
-            
+
             const sidebarNav = document.getElementById('sidebar-nav');
             const activeLink = document.querySelector('.active-nav-link');
-            
+
             if (sidebarNav && activeLink) {
                 requestAnimationFrame(() => {
                     const navScrollTop = sidebarNav.scrollTop;
@@ -429,13 +516,13 @@
                     const linkTop = activeLink.offsetTop;
                     const linkHeight = activeLink.clientHeight;
                     const linkBottom = linkTop + linkHeight;
-                    
+
                     const visibleTop = navScrollTop;
                     const visibleBottom = navScrollTop + navHeight;
-                    
+
                     const isCompletelyAbove = linkBottom < visibleTop;
                     const isCompletelyBelow = linkTop > visibleBottom;
-                    
+
                     if (isCompletelyAbove) {
                         sidebarNav.scrollTop = linkTop - 20;
                     } else if (isCompletelyBelow) {
@@ -443,13 +530,13 @@
                     }
                 });
             }
-            
+
             // -- 3. Time Display --
             function updateTime() {
                 const now = new Date();
                 const timeEl = document.getElementById('current-time');
-                if(timeEl) {
-                    timeEl.innerText = now.toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' }) + ' • ' + now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+                if (timeEl) {
+                    timeEl.innerText = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' • ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 }
             }
             setInterval(updateTime, 1000);
@@ -464,7 +551,7 @@
             const profileFallback = document.getElementById('profile-fallback');
             if (profileImg && profileFallback) {
                 console.log('Profile image found:', profileImg.src);
-                profileImg.onerror = function() {
+                profileImg.onerror = function () {
                     console.log('Profile image failed to load:', this.src);
                     this.style.display = 'none';
                     profileFallback.style.display = 'flex';
@@ -488,7 +575,7 @@
             const reportsMenuChevron = document.getElementById('reports-menu-chevron');
 
             if (reportsMenuToggle && reportsMenuItems && reportsMenuChevron) {
-                reportsMenuToggle.addEventListener('click', function() {
+                reportsMenuToggle.addEventListener('click', function () {
                     const isExpanded = reportsMenuToggle.getAttribute('aria-expanded') === 'true';
                     reportsMenuToggle.setAttribute('aria-expanded', (!isExpanded).toString());
                     reportsMenuItems.classList.toggle('hidden');
@@ -497,8 +584,9 @@
             }
         });
     </script>
-    
+
     {% block scripts %}{% endblock %}
     {% block extra_js %}{% endblock %}
 </body>
+
 </html>

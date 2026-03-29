@@ -77,7 +77,7 @@
                 {% endif %}
             {% endwith %}
 
-            <form method="POST" action="{{ url_for('auth.register', token=token) }}" class="space-y-6">
+            <form id="registrationForm" method="POST" action="{{ url_for('auth.register', token=token) }}" class="space-y-6" enctype="multipart/form-data">
                 {{ form.hidden_tag() }}
                 
                 <div>
@@ -125,8 +125,35 @@
                     <p id="password-match-text" class="text-xs mt-1 h-4 transition-all"></p>
                 </div>
 
+                <div class="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-sm font-semibold text-gray-800">Capture Face Image</h4>
+                        <span class="text-[11px] text-gray-500">Required for device attendance sync</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-2">Face Camera</label>
+                        <div class="rounded-md overflow-hidden border border-gray-300 bg-black">
+                            <video id="faceCamera" autoplay playsinline muted class="w-full h-56 object-cover"></video>
+                        </div>
+                        <canvas id="faceCanvas" class="hidden"></canvas>
+                        <input type="hidden" id="face_capture_data" name="face_capture_data">
+                        <input type="hidden" id="face_template_json" name="face_template_json">
+                        <input type="hidden" id="face_template_version" name="face_template_version" value="mobilefacenet_192_l2_v1">
+                        <input type="hidden" id="face_detector_model" name="face_detector_model" value="yolov8n_float32.tflite">
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button type="button" id="startCameraBtn" class="px-3 py-2 text-xs rounded-md bg-slate-700 hover:bg-slate-800 text-white">Open Camera</button>
+                            <button type="button" id="captureBtn" class="px-3 py-2 text-xs rounded-md bg-indigo-600 hover:bg-indigo-700 text-white">Capture</button>
+                            <button type="button" id="retakeBtn" class="px-3 py-2 text-xs rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800">Retake</button>
+                        </div>
+
+                        <p id="faceCaptureStatus" class="mt-2 text-[11px] text-gray-600">Open camera and capture a clear front-facing image.</p>
+                    </div>
+                </div>
+
                 <div class="pt-2">
-                    <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.01]">
+                    <button id="submitBtn" type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.01]">
                         Complete Registration
                     </button>
                 </div>
@@ -158,6 +185,17 @@
         const confirmInput = document.getElementById('confirm_password');
         const matchText = document.getElementById('password-match-text');
 
+        const cameraEl = document.getElementById('faceCamera');
+        const canvasEl = document.getElementById('faceCanvas');
+        const faceCaptureDataEl = document.getElementById('face_capture_data');
+        const registrationForm = document.getElementById('registrationForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const faceCaptureStatus = document.getElementById('faceCaptureStatus');
+        let mediaStream = null;
+
         function validatePassword() {
             if(confirmInput.value === '') {
                 confirmInput.classList.remove('border-red-300', 'border-green-300', 'focus:ring-red-500', 'focus:ring-green-500');
@@ -180,6 +218,74 @@
 
         confirmInput.addEventListener('input', validatePassword);
         passwordInput.addEventListener('input', validatePassword);
+
+        async function startCamera() {
+            try {
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                }
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+                cameraEl.srcObject = mediaStream;
+                faceCaptureStatus.textContent = 'Camera ready. Tap Capture.';
+                faceCaptureStatus.className = 'mt-2 text-[11px] text-green-700';
+            } catch (error) {
+                faceCaptureStatus.textContent = 'Unable to access camera. Please allow camera permission.';
+                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
+            }
+        }
+
+        function captureFaceImage() {
+            if (!cameraEl.videoWidth || !cameraEl.videoHeight) {
+                faceCaptureStatus.textContent = 'Camera not ready yet. Please try again.';
+                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
+                return;
+            }
+
+            canvasEl.width = cameraEl.videoWidth;
+            canvasEl.height = cameraEl.videoHeight;
+            const ctx = canvasEl.getContext('2d');
+            ctx.drawImage(cameraEl, 0, 0, canvasEl.width, canvasEl.height);
+            const dataUrl = canvasEl.toDataURL('image/jpeg', 0.9);
+            faceCaptureDataEl.value = dataUrl;
+
+            faceCaptureStatus.textContent = 'Face image captured successfully.';
+            faceCaptureStatus.className = 'mt-2 text-[11px] text-green-700';
+        }
+
+        function clearCapture() {
+            faceCaptureDataEl.value = '';
+            faceCaptureStatus.textContent = 'Capture cleared. Capture again before submitting.';
+            faceCaptureStatus.className = 'mt-2 text-[11px] text-amber-700';
+        }
+
+        function hasCapturedFace() {
+            return Boolean(faceCaptureDataEl.value && faceCaptureDataEl.value.startsWith('data:image/'));
+        }
+
+        startCameraBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', captureFaceImage);
+        retakeBtn.addEventListener('click', clearCapture);
+
+        registrationForm.addEventListener('submit', (event) => {
+            if (!hasCapturedFace()) {
+                event.preventDefault();
+                faceCaptureStatus.textContent = 'Face capture is required. Please capture your image before submitting.';
+                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
+                submitBtn.classList.add('ring-2', 'ring-red-400');
+                setTimeout(() => submitBtn.classList.remove('ring-2', 'ring-red-400'), 1200);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        startCamera();
     </script>
 </body>
 </html>

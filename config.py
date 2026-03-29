@@ -64,4 +64,25 @@ class Config:
     INSTITUTION_PHONE = os.environ.get('INSTITUTION_PHONE')
     INSTITUTION_ADDRESS = os.environ.get('INSTITUTION_ADDRESS')
 
+    # Mobile sync integration
+    MOBILE_SYNC_API_KEY = os.environ.get('MOBILE_SYNC_API_KEY')
+    MOBILE_SYNC_ALLOW_LEGACY_API_KEY = os.environ.get('MOBILE_SYNC_ALLOW_LEGACY_API_KEY', 'False') == 'True'
+    MOBILE_SYNC_SIGNATURE_WINDOW_SECONDS = int(os.environ.get('MOBILE_SYNC_SIGNATURE_WINDOW_SECONDS', 300))
+    MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE = int(os.environ.get('MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE', 120))
+    MOBILE_SYNC_ATTENDANCE_RATE_LIMIT_MULTIPLIER = int(os.environ.get('MOBILE_SYNC_ATTENDANCE_RATE_LIMIT_MULTIPLIER', 5))
+
+    # Face embedding generation (registration/backend ML)
+    MOBILE_FACE_EMBEDDING_ENABLED = os.environ.get('MOBILE_FACE_EMBEDDING_ENABLED', 'True') == 'True'
+    MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = os.environ.get('MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS', 'True') == 'True'
+    MOBILEFACENET_MODEL_PATH = os.environ.get(
+        'MOBILEFACENET_MODEL_PATH',
+        os.path.join(basedir, 'assets', 'mobilefacenet.tflite')
+    )
+    YOLO_FACE_DETECTOR_MODEL_PATH = os.environ.get(
+        'YOLO_FACE_DETECTOR_MODEL_PATH',
+        os.path.join(basedir, 'assets', 'yolov8n_float32.tflite')
+    )
+    FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD', 0.35))
+    FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD', 0.45))
+
 

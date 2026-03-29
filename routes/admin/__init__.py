@@ -13,6 +13,7 @@ from .dashboard import dashboard_bp
 from .departments import departments_bp
 from .api import api_bp
 from .permissions import permissions_bp
+from .mobile_devices import mobile_devices_bp
 
 # Export all blueprints for registration
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     'dashboard_bp',
     'departments_bp',
     'api_bp',
-    'permissions_bp'
+    'permissions_bp',
+    'mobile_devices_bp'
 ]

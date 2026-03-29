@@ -9,12 +9,15 @@ Flask==2.0.1
 flask-cors==6.0.2
 Flask-MySQLdb==2.0.0
 Flask-WTF==0.15.1
+ai-edge-litert==2.0.3
 idna==3.11
 itsdangerous==2.0.1
 Jinja2==3.0.1
 MarkupSafe==3.0.3
 mysql-connector-python==8.3.0
 mysqlclient==2.2.7
+numpy==2.2.6
+opencv-python-headless==4.11.0.86
 pycparser==2.23
 python-dotenv==0.19.0
 setuptools==80.9.0

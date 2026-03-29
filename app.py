@@ -282,6 +282,7 @@ def create_app():
         from routes.faculty import teacher_bp
         from routes.faculty.attendance import attendance_bp
         from routes.students import student_bp
+        from routes.mobile import mobile_sync_bp
         
         # Import modular admin routes
         from routes.admin import (
@@ -298,7 +299,8 @@ def create_app():
             api_bp,
             permissions_bp,
             shift_management,
-            branding
+            branding,
+            mobile_devices_bp
         )
         from routes.admin.attendance_admin import attendance_admin_bp
         from routes.admin.reports import reports_bp
@@ -313,6 +315,8 @@ def create_app():
         app.register_blueprint(teacher_bp)
         app.register_blueprint(attendance_bp)
         app.register_blueprint(student_bp)
+        app.register_blueprint(mobile_sync_bp)
+        csrf.exempt(mobile_sync_bp)
         
         # Register modular admin blueprints
         app.register_blueprint(admin_students_bp)
@@ -333,6 +337,7 @@ def create_app():
         app.register_blueprint(api_bp)
         app.register_blueprint(permissions_bp)
         app.register_blueprint(branding.branding_bp)
+        app.register_blueprint(mobile_devices_bp)
         
         # Initialize branding settings
         branding.init_app(app)

@@ -1,0 +1,116 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Mobile Devices{% endblock %}
+{% block header_title %}Mobile API Security{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {% if new_secret %}
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-amber-800">New Secret Generated for {{ new_secret_device }}</h3>
+        <p class="text-xs text-amber-700 mt-1">Copy this once and store securely. It will not be shown again.</p>
+        <div class="mt-3 p-3 bg-white border border-amber-200 rounded-lg font-mono text-xs break-all">{{ new_secret }}</div>
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 class="text-base font-semibold text-gray-800 mb-4">Register New Mobile Device</h2>
+        <form method="POST" action="{{ url_for('mobile_devices.create_mobile_device') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Device ID</label>
+                <input name="device_id" required placeholder="android-lab1-tab01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Device Name</label>
+                <input name="device_name" placeholder="Lab Tablet 01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Platform</label>
+                <input name="platform" placeholder="Android / Flutter" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Owner User (optional)</label>
+                <select name="owner_user_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Unassigned</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.username }} ({{ user.role }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Rate Limit per Minute</label>
+                <input type="number" name="rate_limit_per_minute" min="10" value="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="md:col-span-2">
+                <button type="submit" class="inline-flex items-center px-4 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-sm font-medium">
+                    <i class="fas fa-plus mr-2"></i>Create Device Key
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 class="text-base font-semibold text-gray-800 mb-4">Registered Devices</h2>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                        <th class="px-3 py-2 border-b">Device</th>
+                        <th class="px-3 py-2 border-b">Owner</th>
+                        <th class="px-3 py-2 border-b">Rate Limit</th>
+                        <th class="px-3 py-2 border-b">Last Used</th>
+                        <th class="px-3 py-2 border-b">Status</th>
+                        <th class="px-3 py-2 border-b text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for device in devices %}
+                    <tr class="border-b hover:bg-gray-50/70">
+                        <td class="px-3 py-2">
+                            <div class="font-medium text-gray-800">{{ device.device_id }}</div>
+                            <div class="text-xs text-gray-500">{{ device.device_name or 'No name' }}{% if device.platform %} - {{ device.platform }}{% endif %}</div>
+                        </td>
+                        <td class="px-3 py-2 text-gray-700">{{ device.owner_username or '-' }}</td>
+                        <td class="px-3 py-2 text-gray-700">{{ device.rate_limit_per_minute }} req/min</td>
+                        <td class="px-3 py-2 text-gray-700">{{ device.last_used_at or 'Never' }}</td>
+                        <td class="px-3 py-2">
+                            {% if device.is_active %}
+                            <span class="inline-flex px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">Active</span>
+                            {% else %}
+                            <span class="inline-flex px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-xs">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-right">
+                            <div class="inline-flex gap-2">
+                                <form method="POST" action="{{ url_for('mobile_devices.rotate_mobile_device_key', device_pk=device.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs">Rotate Key</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('mobile_devices.toggle_mobile_device', device_pk=device.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="px-3 py-1.5 rounded-md {% if device.is_active %}bg-amber-600 hover:bg-amber-700{% else %}bg-emerald-600 hover:bg-emerald-700{% endif %} text-white text-xs">
+                                        {% if device.is_active %}Disable{% else %}Enable{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-3 py-8 text-center text-gray-500">No mobile devices configured yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

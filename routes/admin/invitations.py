@@ -124,7 +124,7 @@ def create_invitation():
     
     if not email or not name or not role:
         flash('Email, name, and role are required.', 'danger')
-        return redirect(url_for('admin.manage_invitations'))
+        return redirect(url_for('invitations.manage_invitations'))
     
     connection = get_db_connection()
 
@@ -139,7 +139,7 @@ def create_invitation():
     if cursor.fetchone():
         flash('A pending invitation already exists for this email.', 'warning')
         cursor.close()
-        return redirect(url_for('admin.manage_invitations'))
+        return redirect(url_for('invitations.manage_invitations'))
     
     # Check if email already registered
     if role == 'Student':
@@ -150,7 +150,7 @@ def create_invitation():
     if cursor.fetchone():
         flash('This email is already registered in the system.', 'warning')
         cursor.close()
-        return redirect(url_for('admin.manage_invitations'))
+        return redirect(url_for('invitations.manage_invitations'))
     
     # Generate secure token
     token = secrets.token_urlsafe(32)
@@ -180,7 +180,7 @@ def create_invitation():
         flash('Error creating invitation. Please try again.', 'danger')
     
     cursor.close()
-    return redirect(url_for('admin.manage_invitations'))
+    return redirect(url_for('invitations.manage_invitations'))
 
 
 @invitations_bp.route('/revoke/<int:invitation_id>', methods=['POST'])
@@ -198,7 +198,7 @@ def revoke_invitation(invitation_id):
     connection.commit()
     cursor.close()
     flash('Invitation revoked successfully.', 'success')
-    return redirect(url_for('admin.manage_invitations'))
+    return redirect(url_for('invitations.manage_invitations'))
 
 
 @invitations_bp.route('/resend/<int:invitation_id>', methods=['POST'])
@@ -216,12 +216,12 @@ def resend_invitation(invitation_id):
     if not invitation:
         flash('Invitation not found.', 'danger')
         cursor.close()
-        return redirect(url_for('admin.manage_invitations'))
+        return redirect(url_for('invitations.manage_invitations'))
     
     if invitation['status'] == 'used':
         flash('Cannot resend a used invitation.', 'warning')
         cursor.close()
-        return redirect(url_for('admin.manage_invitations'))
+        return redirect(url_for('invitations.manage_invitations'))
     
     # Generate new token and extend expiry
     new_token = secrets.token_urlsafe(32)
@@ -238,7 +238,7 @@ def resend_invitation(invitation_id):
     flash(f'Invitation regenerated! New link: {registration_url}', 'success')
     
     cursor.close()
-    return redirect(url_for('admin.manage_invitations'))
+    return redirect(url_for('invitations.manage_invitations'))
 
 
 @invitations_bp.route('/copy_link/<int:invitation_id>')
