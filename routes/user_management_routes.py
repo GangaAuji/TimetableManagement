@@ -151,7 +151,7 @@ def get_user(user_id):
     cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, username, role, status, last_login, is_hod, department_id FROM users WHERE id = %s",
+            "SELECT id, username, email, role, status, last_login, is_hod, department_id FROM users WHERE id = %s",
             [user_id]
         )
         user = cursor.fetchone()
@@ -167,7 +167,7 @@ def get_user(user_id):
                 'role': user['role'],
                 'status': user['status'],
                 'display_name': user['username'],
-                'email': None,
+                'email': user.get('email'),
                 'is_hod': user['is_hod'],
                 'department_id': user['department_id'],
                 'available_roles': available_roles
@@ -182,27 +182,49 @@ def get_user(user_id):
 @user_mgmt_bp.route('/edit/<int:user_id>', methods=['POST'])
 @has_permission('users_change_user')
 def edit_user(user_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def error_response(message, status_code=400):
+        if is_ajax:
+            return jsonify({'error': message}), status_code
+        flash(message, 'danger')
+        return redirect(url_for('user_mgmt_bp.manage_users'))
+
     # Get form data directly from request to handle extra fields not in UserForm
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
-    role = request.form.get('role', '')
+    role = request.form.get('role', '').strip()
     status = request.form.get('status', 'active')
-    email = request.form.get('email', '')
+    email = request.form.get('email', '').strip()
     department_id = request.form.get('department_id')
     is_hod = request.form.get('is_hod') == 'on'
+
+    # Normalize common plural labels from role UI/table to values accepted by users.role enum.
+    role_aliases = {
+        'teachers': 'Teacher',
+        'teacher': 'Teacher',
+        'students': 'Student',
+        'student': 'Student',
+        'admins': 'Admin',
+        'admin': 'Admin',
+        'super admins': 'Super Admin',
+        'super admin': 'Super Admin'
+    }
+    role = role_aliases.get(role.lower(), role)
     
     # Validate required fields
     if not username or len(username) < 3:
-        flash('Username must be at least 3 characters.', 'danger')
-        return redirect(url_for('user_mgmt_bp.manage_users'))
+        return error_response('Username must be at least 3 characters.')
     
     if not role:
-        flash('Role is required.', 'danger')
-        return redirect(url_for('user_mgmt_bp.manage_users'))
+        return error_response('Role is required.')
+
+    allowed_roles = {'Super Admin', 'Admin', 'Teacher', 'Student'}
+    if role not in allowed_roles:
+        return error_response('Invalid role selected. Use Super Admin, Admin, Teacher, or Student.')
     
     if password and len(password) < 8:
-        flash('Password must be at least 8 characters.', 'danger')
-        return redirect(url_for('user_mgmt_bp.manage_users'))
+        return error_response('Password must be at least 8 characters.')
     
     if True:  # Replace form.validate_on_submit() block
         username = username
@@ -222,8 +244,12 @@ def edit_user(user_id):
             cursor.execute('SELECT id FROM users WHERE username = %s AND id != %s', 
                          [username, user_id])
             if cursor.fetchone():
-                flash('Username already exists.', 'danger')
-                return redirect(url_for('user_mgmt_bp.manage_users'))
+                return error_response('Username already exists.', 409)
+
+            if email:
+                cursor.execute('SELECT id FROM users WHERE email = %s AND id != %s', [email, user_id])
+                if cursor.fetchone():
+                    return error_response('Email already exists.', 409)
             
             # Prepare department_id (None if empty string)
             dept_id = int(department_id) if department_id and department_id != '' else None
@@ -233,15 +259,20 @@ def edit_user(user_id):
                 hashed = generate_password_hash(password)
                 cursor.execute('''
                     UPDATE users 
-                    SET username=%s, password=%s, role=%s, status=%s, department_id=%s, is_hod=%s
+                    SET username=%s, email=%s, password=%s, role=%s, status=%s, department_id=%s, is_hod=%s
                     WHERE id=%s
-                ''', [username, hashed, role, status, dept_id, is_hod, user_id])
+                ''', [username, email or None, hashed, role, status, dept_id, is_hod, user_id])
             else:
                 cursor.execute('''
                     UPDATE users 
-                    SET username=%s, role=%s, status=%s, department_id=%s, is_hod=%s
+                    SET username=%s, email=%s, role=%s, status=%s, department_id=%s, is_hod=%s
                     WHERE id=%s
-                ''', [username, role, status, dept_id, is_hod, user_id])
+                ''', [username, email or None, role, status, dept_id, is_hod, user_id])
+
+            if role == 'Teacher':
+                cursor.execute('UPDATE faculty SET email=%s WHERE user_id=%s', [email or None, user_id])
+            elif role == 'Student':
+                cursor.execute('UPDATE students SET email=%s WHERE user_id=%s', [email or None, user_id])
             
             # Log activity
             log_activity(
@@ -251,11 +282,15 @@ def edit_user(user_id):
             )
             
             connection.commit()
+            if is_ajax:
+                return jsonify({'message': 'User updated successfully.'})
             flash('User updated successfully.', 'success')
             
         except Exception as e:
             connection.rollback()
             current_app.logger.error(f"Error updating user: {str(e)}")
+            if is_ajax:
+                return jsonify({'error': 'Error updating user. Please try again.'}), 500
             flash('Error updating user. Please try again.', 'danger')
         finally:
 

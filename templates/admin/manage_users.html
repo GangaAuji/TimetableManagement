@@ -31,6 +31,19 @@
     .modal-dialog-centered::before {
         display: none !important;
     }
+
+    /* Keep Bootstrap modal above page stacking contexts */
+    #editUserModal,
+    #inviteModal {
+        z-index: 1060;
+    }
+    .modal-backdrop {
+        z-index: 1055;
+    }
+    #editUserModal .modal-dialog,
+    #inviteModal .modal-dialog {
+        pointer-events: auto;
+    }
 </style>
 {% endblock %}
 
@@ -370,6 +383,14 @@ document.addEventListener('DOMContentLoaded', function () {
     window.__usersPageInit = true;
     const csrfToken = '{{ csrf_token() }}';
 
+    // Move modals to <body> to avoid stacking-context and click-trap issues.
+    const editModalEl = document.getElementById('editUserModal');
+    const inviteModalEl = document.getElementById('inviteModal');
+    if (editModalEl && editModalEl.parentElement !== document.body) document.body.appendChild(editModalEl);
+    if (inviteModalEl && inviteModalEl.parentElement !== document.body) document.body.appendChild(inviteModalEl);
+
+    const editModal = editModalEl ? bootstrap.Modal.getOrCreateInstance(editModalEl, { backdrop: true, keyboard: true }) : null;
+
     // Toast helper
     function showToast(message, type='info', timeout=4000) {
         const container = document.getElementById('toastContainer');
@@ -467,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('is_hod').checked = data.is_hod || false;
                 document.getElementById('is_active').checked = (data.status === 'active');
                 document.getElementById('password').value = '';
-                new bootstrap.Modal(document.getElementById('editUserModal')).show();
+                editModal?.show();
             })
             .catch(err => showToast(err, 'danger'));
     }
@@ -482,10 +503,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if(formData.get('is_hod')) params.set('is_hod', 'on');
 
         fetch(`/admin/users/edit/${encodeURIComponent(formData.get('user_id'))}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: params
         }).then(async r => {
-            if (r.ok) { showToast('Updated successfully', 'success'); setTimeout(() => location.reload(), 800); }
-            else { const j = await r.json(); throw new Error(j.message); }
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || j.error) {
+                throw new Error(j.error || j.message || 'Failed to update user');
+            }
+            showToast(j.message || 'Updated successfully', 'success');
+            editModal?.hide();
+            setTimeout(() => location.reload(), 800);
         }).catch(e => showToast(e.message, 'danger'));
     };
 
