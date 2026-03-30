@@ -17,9 +17,17 @@ try:
     print("EXPORTING CURRENT DATABASE STRUCTURE")
     print("="*80)
     
-    # Get all tables
-    cursor.execute("SHOW TABLES")
-    tables = [table[0] for table in cursor.fetchall()]
+    # Get all base tables and views with type metadata
+    cursor.execute(
+        """
+        SELECT TABLE_NAME, TABLE_TYPE
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = %s
+        ORDER BY TABLE_NAME
+        """,
+        (Config.MYSQL_DB,)
+    )
+    tables = cursor.fetchall()
     
     export_data = {
         'export_date': datetime.now().isoformat(),
@@ -27,11 +35,13 @@ try:
         'tables': {}
     }
     
-    for table in tables:
-        print(f"\n--- Table: {table} ---")
+    for table_name, table_type in tables:
+        print(f"\n--- Table: {table_name} ---")
+        print(f"Type: {table_type}")
         
         # Get table structure
-        cursor.execute(f"DESCRIBE {table}")
+        safe_table_name = table_name.replace('`', '``')
+        cursor.execute(f"DESCRIBE `{safe_table_name}`")
         columns = cursor.fetchall()
         
         table_info = {
@@ -62,10 +72,10 @@ try:
                 REFERENCED_TABLE_NAME,
                 REFERENCED_COLUMN_NAME
             FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE TABLE_SCHEMA = '{Config.MYSQL_DB}'
-            AND TABLE_NAME = '{table}'
+            WHERE TABLE_SCHEMA = %s
+            AND TABLE_NAME = %s
             AND REFERENCED_TABLE_NAME IS NOT NULL
-        """)
+        """, (Config.MYSQL_DB, table_name))
         fks = cursor.fetchall()
         if fks:
             print("Foreign Keys:")
@@ -81,15 +91,19 @@ try:
         
         # Get row count
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            count = cursor.fetchone()[0]
+            if table_type.upper() == 'BASE TABLE':
+                cursor.execute(f"SELECT COUNT(*) FROM `{safe_table_name}`")
+                count = cursor.fetchone()[0]
+            else:
+                count = "N/A (view)"
+                print("Row count skipped for view")
         except Exception as e:
             count = f"Error: {str(e)}"
             print(f"Warning: Could not get row count - {e}")
         table_info['sample_count'] = count
         print(f"Row count: {count}")
         
-        export_data['tables'][table] = table_info
+        export_data['tables'][table_name] = table_info
     
     # Save to JSON file
     with open('database_export.json', 'w') as f:
