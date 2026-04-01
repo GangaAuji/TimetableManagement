@@ -1,4 +1,4 @@
-from flask import session, redirect, url_for, flash, render_template, request
+from flask import app, session, redirect, url_for, flash, render_template, request
 from database import get_db_connection
 from datetime import datetime
 from .teacher import teacher_bp, teacher_required
@@ -138,6 +138,7 @@ def request_proxy():
             """,
             (faculty_user_id, proxy_user_id, timetable_id, ad, status),
         )
+       
         connection.commit()
         cursor.close()
         connection.close()

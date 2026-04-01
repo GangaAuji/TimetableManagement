@@ -449,7 +449,7 @@
                 { data: 'original_faculty', visible: false }, // Hidden on table, useful for search
                 { data: 'proxy_faculty', render: f => f ? `<span class="text-green-600 font-medium">${f}</span>` : '<span class="text-gray-400 italic">Auto</span>' },
                 { data: null, render: row => {
-                    if (row.approval_status === 'PENDING'){
+                    if ((row.approval_status || '').toUpperCase() === 'PENDING'){
                         return `
                         <button data-id="${row.id}" data-subject="${row.subject}" data-time="${row.start_time}" data-subj-id="${row.subject_id}" 
                             class="approve-proxy px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 shadow-sm">

@@ -109,14 +109,18 @@ def manage_branding():
         
         # Convert to dictionary for easier template access
         settings = {}
-        for key, value, stype in settings_list:
-            settings[key] = {'value': value, 'type': stype}
+        for row in settings_list:
+            settings[row['setting_key']] = {
+                'value': row['setting_value'],
+                'type': row['setting_type']
+            }
         
     except Exception as e:
         current_app.logger.error(f"Error fetching branding settings: {str(e)}")
         settings = {}
     finally:
         cursor.close()
+        connection.close()
     
     return render_template('admin/manage_branding.html', settings=settings)
 

@@ -278,7 +278,7 @@ def _build_report_export_dataset(cursor, report_type, payload):
                 al.description,
                 al.ip_address,
                 al.user_agent,
-                DATE_FORMAT(al.created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as timestamp
+                DATE_FORMAT(al.created_at, '%Y-%m-%d %H:%i:%s') as timestamp
             FROM user_activity_log al
             JOIN users u ON al.user_id = u.id
         """
@@ -874,7 +874,7 @@ def audit_logs_report():
                 al.description,
                 al.ip_address,
                 al.user_agent,
-                DATE_FORMAT(al.created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as timestamp
+                DATE_FORMAT(al.created_at, '%Y-%m-%d %H:%i:%s') as timestamp
             FROM user_activity_log al
             JOIN users u ON al.user_id = u.id
         """

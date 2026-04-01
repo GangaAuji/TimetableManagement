@@ -50,7 +50,7 @@ def _start_quality_model_retrainer(app):
 
     worker = threading.Thread(target=retrain_loop, name='quality-model-retrainer', daemon=True)
     worker.start()
-    app.logger.info('Started quality model retrainer thread (interval=%d min).', interval_minutes)
+    # app.logger.info('Started quality model retrainer thread (interval=%d min).', interval_minutes)
 
 def format_time_filter(time_obj):
     """Jinja filter to format time/timedelta objects to HH:MM string"""
@@ -111,7 +111,7 @@ def create_app():
     app.teardown_appcontext(close_db)
     
     # Test MySQL connection
-    app.logger.info(f"MySQL Config - HOST: {app.config.get('MYSQL_HOST')}, USER: {app.config.get('MYSQL_USER')}, DB: {app.config.get('MYSQL_DB')}")
+    # app.logger.info(f"MySQL Config - HOST: {app.config.get('MYSQL_HOST')}, USER: {app.config.get('MYSQL_USER')}, DB: {app.config.get('MYSQL_DB')}")
     
     @app.before_first_request
     def test_mysql_connection():
@@ -346,7 +346,7 @@ def create_app():
         from routes.admin.error_handlers import error_handlers_bp
         app.register_blueprint(error_handlers_bp)
         
-        app.logger.info("Blueprints registered successfully.")
+        # app.logger.info("Blueprints registered successfully.")
 
     # Handle CSRF errors with a friendly message and log diagnostics
     @app.errorhandler(CSRFError)
@@ -416,7 +416,7 @@ def create_app():
     if should_start_worker:
         _start_quality_model_retrainer(app)
     
-    app.logger.info("College Timetable Management System application created.")
+    # app.logger.info("College Timetable Management System application created.")
     return app
 
 if __name__ == '__main__':

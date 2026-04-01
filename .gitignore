@@ -22,6 +22,17 @@ Documents
 migrations
 scripts
 
+ml/models/timetable_quality_model.json
+
+static/css/all.min.css
+static/css/bootstrap.min.css
+static/css/jquery.dataTables.min.css
+
+static/js/bootstrap.bundle.min.js
+static/js/jquery-3.6.0.min.js
+static/js/jquery.dataTables.min.js
+static/js/tailwind.js
+
 # Linux
 *~
 .directory
@@ -116,7 +127,6 @@ verify_changes.py
 test_timetable_generation.py
 test_user_management.py
 
-static/uploads/profiles/*
 
 v1_scripts_bkp
 .env.example
@@ -142,3 +152,5 @@ teachers/__pycache__/
 __pycache__/
 admin/__pycache__/
 api/__pycache__/
+ml/models/timetable_quality_model.json
+ml/models/timetable_quality_model.json

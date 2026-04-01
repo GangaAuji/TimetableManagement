@@ -47,7 +47,7 @@ def manage_faculty():
         query_base += " WHERE " + " AND ".join(where_conditions)
 
     # Fetch: id, name, email, username, phone, is_active, employee_id, designation, department_name
-    query = f"SELECT f.id, f.name, f.email, u.username, f.phone, f.is_active, f.employee_id, f.designation, d.name {query_base.replace('FROM faculty f', 'FROM faculty f LEFT JOIN users u ON f.user_id = u.id')}"
+    query = f"SELECT f.id, f.name, f.email, u.username, f.phone, f.is_active, f.employee_id, f.designation, d.name AS department_name {query_base.replace('FROM faculty f', 'FROM faculty f LEFT JOIN users u ON f.user_id = u.id')}"
     faculty, total_pages = paginate(query, tuple(params), page)
     
     connection = get_db_connection()
@@ -262,6 +262,13 @@ def faculty_timetable_data(faculty_id):
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
+    faculty_row = cursor.fetchone()
+    if not faculty_row or not faculty_row.get('user_id'):
+        cursor.close()
+        return jsonify({'data': []})
+
+    faculty_user_id = faculty_row['user_id']
     try:
         cursor.execute(
             """
@@ -274,7 +281,7 @@ def faculty_timetable_data(faculty_id):
             WHERE t.faculty_id = %s
             ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
             """,
-            [faculty_id],
+            [faculty_user_id],
         )
         has_room = True
     except Exception:
@@ -288,12 +295,18 @@ def faculty_timetable_data(faculty_id):
             WHERE t.faculty_id = %s
             ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
             """,
-            [faculty_id],
+            [faculty_user_id],
         )
         has_room = False
     data = []
     for row in cursor.fetchall():
-        (tid, day, start_t, end_t, subj, cls, div, *rest) = row
+        tid = row['id']
+        day = row['day_of_week']
+        start_t = row['start_time']
+        end_t = row['end_time']
+        subj = row['subject_name']
+        cls = row['class_name']
+        div = row['division_name']
         data.append({
             'id': tid,
             'day': day,
@@ -302,7 +315,7 @@ def faculty_timetable_data(faculty_id):
             'subject': subj,
             'class': cls,
             'division': div,
-            'room': (rest[0] if (has_room and rest) else ''),
+            'room': (row.get('room_number', '') if has_room else ''),
         })
     cursor.close()
     return jsonify({'data': data})
@@ -314,6 +327,14 @@ def faculty_timetable_download(faculty_id):
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
+    faculty_row = cursor.fetchone()
+    if not faculty_row or not faculty_row.get('user_id'):
+        cursor.close()
+        flash('Faculty not found.', 'danger')
+        return redirect(url_for('faculty.manage_faculty'))
+
+    faculty_user_id = faculty_row['user_id']
     try:
         cursor.execute(
             """
@@ -326,7 +347,7 @@ def faculty_timetable_download(faculty_id):
             WHERE t.faculty_id = %s
             ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
             """,
-            [faculty_id],
+            [faculty_user_id],
         )
         rows = cursor.fetchall()
         has_room = True
@@ -341,7 +362,7 @@ def faculty_timetable_download(faculty_id):
             WHERE t.faculty_id = %s
             ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
             """,
-            [faculty_id],
+            [faculty_user_id],
         )
         rows = cursor.fetchall()
         has_room = False
@@ -370,18 +391,19 @@ def manage_faculty_availability(faculty_id):
 
     cursor = connection.cursor(dictionary=True)
     
-    # Get faculty name
-    cursor.execute("SELECT name FROM faculty WHERE id = %s", [faculty_id])
+    # Get faculty details
+    cursor.execute("SELECT name, user_id FROM faculty WHERE id = %s", [faculty_id])
     faculty_row = cursor.fetchone()
     if not faculty_row:
         flash('Faculty not found.', 'danger')
         return redirect(url_for('faculty.manage_faculty'))
     faculty_name = faculty_row['name']
+    faculty_user_id = faculty_row['user_id']
     
     if request.method == 'POST':
         try:
             # Delete existing availability
-            cursor.execute("DELETE FROM faculty_availability WHERE faculty_id = %s", [faculty_id])
+            cursor.execute("DELETE FROM faculty_availability WHERE faculty_id = %s", [faculty_user_id])
             connection.commit()  # Commit DELETE immediately to avoid cursor issues
             
             # Map day names to numbers (1=Monday, 6=Saturday)
@@ -409,7 +431,7 @@ def manage_faculty_availability(faculty_id):
                             (faculty_id, day_of_week, shift_pattern_id, is_available, start_time, end_time, notes)
                             VALUES (%s, %s, %s, %s, %s, %s, %s)
                             """,
-                            (faculty_id, day_num, shift_id, 1, start_time, end_time, notes),
+                            (faculty_user_id, day_num, shift_id, 1, start_time, end_time, notes),
                         )
                         slot_index += 1
                     
@@ -421,7 +443,7 @@ def manage_faculty_availability(faculty_id):
                             (faculty_id, day_of_week, is_available, start_time, end_time, notes)
                             VALUES (%s, %s, %s, %s, %s, %s)
                             """,
-                            (faculty_id, day_num, 0, None, None, ''),
+                            (faculty_user_id, day_num, 0, None, None, ''),
                         )
                 else:
                     # Mark as unavailable
@@ -431,7 +453,7 @@ def manage_faculty_availability(faculty_id):
                         (faculty_id, day_of_week, is_available, start_time, end_time, notes)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
-                        (faculty_id, day_num, 0, None, None, ''),
+                        (faculty_user_id, day_num, 0, None, None, ''),
                     )
             
             connection.commit()
@@ -450,7 +472,7 @@ def manage_faculty_availability(faculty_id):
         FROM faculty_availability
         WHERE faculty_id = %s
         ORDER BY day_of_week, start_time
-    """, [faculty_id])
+    """, [faculty_user_id])
     
     # Map day numbers to names
     day_names = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday'}
@@ -493,11 +515,18 @@ def faculty_availability_admin(faculty_id):
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
+    faculty_row = cursor.fetchone()
+    if not faculty_row or not faculty_row.get('user_id'):
+        cursor.close()
+        return jsonify({'ok': False, 'error': 'Faculty not found'}), 404
+
+    faculty_user_id = faculty_row['user_id']
     if request.method == 'POST':
         # Support JSON format with time slot data (like teacher panel)
         json_data = request.get_json(silent=True)
         
-        cursor.execute("DELETE FROM faculty_availability WHERE faculty_id = %s", [faculty_id])
+        cursor.execute("DELETE FROM faculty_availability WHERE faculty_id = %s", [faculty_user_id])
         
         if json_data and 'availability' in json_data:
             # Format: array of {day_num, start_time, end_time, is_available, notes, shift_id (optional)}
@@ -517,7 +546,7 @@ def faculty_availability_admin(faculty_id):
                         (faculty_id, day_of_week, shift_pattern_id, is_available, start_time, end_time, notes)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
                         """,
-                        (faculty_id, day_num, shift_id, 1 if is_available else 0, start_time, end_time, notes),
+                        (faculty_user_id, day_num, shift_id, 1 if is_available else 0, start_time, end_time, notes),
                     )
             connection.commit()
             cursor.close()
@@ -547,7 +576,7 @@ def faculty_availability_admin(faculty_id):
                             (faculty_id, day_of_week, shift_pattern_id, is_available, start_time, end_time, notes)
                             VALUES (%s, %s, %s, %s, %s, %s, %s)
                             """,
-                            (faculty_id, day_num, shift_id, 1, start_time, end_time, notes),
+                            (faculty_user_id, day_num, shift_id, 1, start_time, end_time, notes),
                         )
                         slot_index += 1
                     
@@ -559,7 +588,7 @@ def faculty_availability_admin(faculty_id):
                             (faculty_id, day_of_week, is_available, start_time, end_time, notes)
                             VALUES (%s, %s, %s, %s, %s, %s)
                             """,
-                            (faculty_id, day_num, 0, None, None, ''),
+                            (faculty_user_id, day_num, 0, None, None, ''),
                         )
                 else:
                     # Mark as unavailable
@@ -569,7 +598,7 @@ def faculty_availability_admin(faculty_id):
                         (faculty_id, day_of_week, is_available, start_time, end_time, notes)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
-                        (faculty_id, day_num, 0, None, None, ''),
+                        (faculty_user_id, day_num, 0, None, None, ''),
                     )
             connection.commit()
             cursor.close()
@@ -585,7 +614,7 @@ def faculty_availability_admin(faculty_id):
            LEFT JOIN shift_patterns sp ON fa.shift_pattern_id = sp.id
            WHERE fa.faculty_id = %s
            ORDER BY fa.day_of_week, fa.start_time""",
-        [faculty_id],
+        [faculty_user_id],
     )
     
     # Map day numbers to names
@@ -637,15 +666,15 @@ def faculty_absences_admin(faculty_id):
             "SELECT id, absence_date, reason, status FROM faculty_absences WHERE faculty_id = %s ORDER BY absence_date DESC",
             [faculty_id],
         )
-        items = [
-            {
-                'id': rid,
-                'absence_date': ad.strftime('%Y-%m-%d') if isinstance(ad, (datetime,)) or (hasattr(ad, 'strftime')) else str(ad),
-                'reason': rsn,
-                'status': st,
-            }
-            for (rid, ad, rsn, st) in cursor.fetchall()
-        ]
+        items = []
+        for row in cursor.fetchall():
+            ad = row['absence_date']
+            items.append({
+                'id': row['id'],
+                'absence_date': ad.strftime('%Y-%m-%d') if hasattr(ad, 'strftime') else str(ad),
+                'reason': row['reason'],
+                'status': row['status'],
+            })
         cursor.close()
         return jsonify({'data': items})
 
@@ -706,7 +735,8 @@ def faculty_absence_approve_admin(faculty_id, absence_id):
         cursor.close()
         flash('Absence record not found.', 'danger')
         return jsonify({'ok': False, 'error': 'Not found'}), 404
-    absence_date, st = row
+    absence_date = row['absence_date']
+    st = row['status']
     if st == 'PROCESSED':
         cursor.close()
         flash('Absence already processed.', 'info')
@@ -766,7 +796,20 @@ def faculty_proxy_log_admin(faculty_id):
     cursor.close()
 
     items = []
-    for rid, ad, status, approval_status, day, st, et, subj_id, subj, orig_id, orig, proxy_id, proxy in rows:
+    for row in rows:
+        rid = row['id']
+        ad = row['absence_date']
+        status = row['status']
+        approval_status = row['approval_status']
+        day = row['day_of_week']
+        st = row['start_time']
+        et = row['end_time']
+        subj_id = row['subject_id']
+        subj = row['subject_name']
+        orig_id = row['original_id']
+        orig = row['original_name']
+        proxy_id = row['proxy_id']
+        proxy = row['proxy_name']
         ad_str = ad.strftime('%Y-%m-%d') if hasattr(ad, 'strftime') else str(ad)
         items.append({
             'id': rid,
@@ -792,6 +835,14 @@ def faculty_proxy_approve_admin(faculty_id, proxy_id):
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
+    faculty_row = cursor.fetchone()
+    if not faculty_row or not faculty_row.get('user_id'):
+        cursor.close()
+        return jsonify({'ok': False, 'error': 'Faculty not found'}), 404
+
+    faculty_user_id = faculty_row['user_id']
     
     # Get proxy_faculty_id from request (admin may have selected one)
     data = request.get_json(silent=True) or {}
@@ -805,14 +856,19 @@ def faculty_proxy_approve_admin(faculty_id, proxy_id):
         JOIN timetable t ON p.timetable_id = t.id
         WHERE p.id = %s AND (p.original_faculty_id = %s OR p.proxy_faculty_id = %s)
         """,
-        (proxy_id, faculty_id, faculty_id),
+        (proxy_id, faculty_user_id, faculty_user_id),
     )
     row = cursor.fetchone()
     if not row:
         cursor.close()
         return jsonify({'ok': False, 'error': 'Not found'}), 404
     
-    timetable_id, existing_proxy_id, approval_status, day, st, et, subject_id = row
+    existing_proxy_id = row['proxy_faculty_id']
+    approval_status = row['approval_status']
+    day = row['day_of_week']
+    st = row['start_time']
+    et = row['end_time']
+    subject_id = row['subject_id']
     
     if approval_status == 'APPROVED':
         cursor.close()
@@ -826,7 +882,7 @@ def faculty_proxy_approve_admin(faculty_id, proxy_id):
         # Auto-assign: find qualified faculty who is free
         cursor.execute(
             "SELECT faculty_id FROM faculty_allocations WHERE subject_id = %s AND faculty_id != %s",
-            (subject_id, faculty_id),
+            (subject_id, faculty_user_id),
         )
         cands = [r['faculty_id'] for r in cursor.fetchall()]
         for cand in cands:
@@ -861,6 +917,13 @@ def faculty_proxy_reject_admin(faculty_id, proxy_id):
     connection = get_db_connection()
 
     cursor = connection.cursor(dictionary=True)
+    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", [faculty_id])
+    faculty_row = cursor.fetchone()
+    if not faculty_row or not faculty_row.get('user_id'):
+        cursor.close()
+        return jsonify({'ok': False, 'error': 'Faculty not found'}), 404
+
+    faculty_user_id = faculty_row['user_id']
     cursor.execute(
         """
         UPDATE proxy_log 
@@ -870,7 +933,7 @@ def faculty_proxy_reject_admin(faculty_id, proxy_id):
             approved_by = %s
         WHERE id = %s AND (original_faculty_id = %s OR proxy_faculty_id = %s)
         """,
-        (session.get('user_id'), proxy_id, faculty_id, faculty_id),
+        (session.get('user_id'), proxy_id, faculty_user_id, faculty_user_id),
     )
     connection.commit()
     cursor.close()

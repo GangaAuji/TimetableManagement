@@ -23,6 +23,7 @@
     
     <form method="POST" action="{{ url_for('attendance.save_attendance', timetable_id=lecture.timetable_id) }}" id="attendanceForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
 
         <div class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300" id="topHeader">
             <div class="w-full px-4 py-3">

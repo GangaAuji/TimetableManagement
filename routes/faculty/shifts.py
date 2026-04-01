@@ -61,7 +61,7 @@ def my_shifts():
                 'end_time': format_time(record['end_time']) if record['end_time'] else None
             }
         
-        # Get pending shift change requests (shift_change_requests uses faculty.id)
+        # Get pending shift change requests (shift_change_requests.faculty_id stores faculty.user_id)
         cursor.execute("""
             SELECT id, day_of_week, current_shift_name, requested_shift_name, 
                    reason, status, created_at, admin_response
@@ -69,7 +69,7 @@ def my_shifts():
             WHERE faculty_id = %s
             ORDER BY created_at DESC
             LIMIT 10
-        """, (faculty_id,))
+        """, (faculty_user_id,))
         change_requests = cursor.fetchall()
         
         cursor.close()
@@ -101,16 +101,23 @@ def request_shift_change():
         return redirect(url_for('teacher.my_shifts'))
     
     connection = get_db_connection()
-
-    
     cursor = connection.cursor(dictionary=True)
     
     try:
+        # shift_change_requests.faculty_id references faculty.user_id
+        cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (faculty_id,))
+        faculty_record = cursor.fetchone()
+        if not faculty_record or not faculty_record.get('user_id'):
+            flash('Faculty profile not found.', 'danger')
+            return redirect(url_for('teacher.my_shifts'))
+
+        faculty_user_id = faculty_record['user_id']
+
         cursor.execute("""
             INSERT INTO shift_change_requests 
             (faculty_id, day_of_week, current_shift_name, requested_shift_name, reason, status)
             VALUES (%s, %s, %s, %s, %s, 'pending')
-        """, (faculty_id, day_of_week, current_shift_name, requested_shift_name, reason))
+        """, (faculty_user_id, day_of_week, current_shift_name, requested_shift_name, reason))
         
         connection.commit()
         flash('Shift change request submitted successfully! Admin will review it soon.', 'success')
