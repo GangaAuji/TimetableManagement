@@ -42,6 +42,22 @@ def _build_string_to_sign(timestamp, nonce, body_hash):
     ])
 
 
+def _build_string_to_sign_candidates(timestamp, nonce, body_hash):
+    candidates = [_build_string_to_sign(timestamp, nonce, body_hash)]
+
+    raw_query = request.query_string.decode("utf-8", errors="ignore")
+    if raw_query:
+        candidates.append("\n".join([
+            request.method.upper(),
+            f"{request.path}?{raw_query}",
+            str(timestamp),
+            nonce,
+            body_hash,
+        ]))
+
+    return candidates
+
+
 def _verify_device_signature(cursor, device_id, timestamp, nonce, signature):
     cursor.execute(
         """
@@ -63,16 +79,20 @@ def _verify_device_signature(cursor, device_id, timestamp, nonce, signature):
 
     body_bytes = request.get_data(cache=True) or b""
     body_hash = hashlib.sha256(body_bytes).hexdigest()
-    string_to_sign = _build_string_to_sign(timestamp, nonce, body_hash)
 
     secret = str(device.get("api_key_secret") or "")
-    expected_signature = hmac.new(
-        secret.encode("utf-8"),
-        string_to_sign.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    valid_signature = False
+    for string_to_sign in _build_string_to_sign_candidates(timestamp, nonce, body_hash):
+        expected_signature = hmac.new(
+            secret.encode("utf-8"),
+            string_to_sign.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(expected_signature, signature):
+            valid_signature = True
+            break
 
-    if not hmac.compare_digest(expected_signature, signature):
+    if not valid_signature:
         return None, _json_error("Invalid signature", 401)
 
     return device, None

@@ -22,7 +22,7 @@ Documents
 migrations
 scripts
 
-ml/models/timetable_quality_model.json
+ml/models/*
 
 static/css/all.min.css
 static/css/bootstrap.min.css

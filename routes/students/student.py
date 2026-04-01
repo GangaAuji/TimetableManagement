@@ -262,26 +262,34 @@ def attendance():
         # Get recent attendance records (last 30 days)
         cursor.execute("""
             SELECT 
-                DATE_FORMAT(a.attendance_date, '%%d %%b %%Y') as attendance_date,
+                a.attendance_date,
                 a.status,
                 a.remarks,
                 s.name as subject_name,
                 CONCAT(c.name, ' - ', cl.name, ' ', d.name) as class_info,
-                f.name as marked_by_name
+                COALESCE(f.name, 'Unknown') as marked_by_name
             FROM attendance a
+            JOIN students st ON a.student_id = st.id
             JOIN timetable t ON a.timetable_id = t.id
             JOIN subjects s ON t.subject_id = s.id
             JOIN courses c ON t.course_id = c.id
             JOIN classes cl ON t.class_id = cl.id
             JOIN divisions d ON t.division_id = d.id
-            JOIN faculty f ON a.marked_by = f.id
+            LEFT JOIN faculty f ON a.marked_by = f.id OR a.marked_by = f.user_id
             WHERE a.student_id = %s
+            AND t.course_id = st.course_id
+            AND t.class_id = st.class_id
+            AND t.division_id = st.division_id
             AND a.attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
             ORDER BY a.attendance_date DESC, s.name
             LIMIT 50
         """, [student_id])
         
         recent_records = cursor.fetchall()
+
+        for record in recent_records:
+            if hasattr(record.get('attendance_date'), 'strftime'):
+                record['attendance_date'] = record['attendance_date'].strftime('%d %b %Y')
         
         return render_template('student/attendance/index.html',
                              overall_stats=overall_stats,
@@ -349,27 +357,41 @@ def attendance_subject(subject_id):
         # Get detailed attendance records for this subject
         cursor.execute("""
             SELECT 
-                DATE_FORMAT(a.attendance_date, '%%d %%b %%Y') as attendance_date,
+                a.attendance_date,
                 a.status,
                 a.remarks,
-                DATE_FORMAT(t.start_time, '%%h:%%i %%p') as start_time,
-                DATE_FORMAT(t.end_time, '%%h:%%i %%p') as end_time,
+                t.start_time,
+                t.end_time,
                 t.day_of_week,
                 CONCAT(c.name, ' - ', cl.name, ' ', d.name) as class_info,
-                f.name as marked_by_name,
-                DATE_FORMAT(a.marked_at, '%%d %%b %%Y %%h:%%i %%p') as marked_at
+                COALESCE(f.name, 'Unknown') as marked_by_name,
+                a.marked_at
             FROM attendance a
+            JOIN students st ON a.student_id = st.id
             JOIN timetable t ON a.timetable_id = t.id
             JOIN courses c ON t.course_id = c.id
             JOIN classes cl ON t.class_id = cl.id
             JOIN divisions d ON t.division_id = d.id
-            JOIN faculty f ON a.marked_by = f.id
+            LEFT JOIN faculty f ON a.marked_by = f.id OR a.marked_by = f.user_id
             WHERE a.student_id = %s 
+            AND t.course_id = st.course_id
+            AND t.class_id = st.class_id
+            AND t.division_id = st.division_id
             AND t.subject_id = %s
             ORDER BY a.attendance_date DESC, t.start_time DESC
         """, [student_id, subject_id])
         
         attendance_records = cursor.fetchall()
+
+        for record in attendance_records:
+            if hasattr(record.get('attendance_date'), 'strftime'):
+                record['attendance_date'] = record['attendance_date'].strftime('%d %b %Y')
+            if hasattr(record.get('start_time'), 'strftime'):
+                record['start_time'] = record['start_time'].strftime('%I:%M %p')
+            if hasattr(record.get('end_time'), 'strftime'):
+                record['end_time'] = record['end_time'].strftime('%I:%M %p')
+            if hasattr(record.get('marked_at'), 'strftime'):
+                record['marked_at'] = record['marked_at'].strftime('%d %b %Y %I:%M %p')
         
         # Calculate monthly breakdown for the last 6 months
         cursor.execute("""

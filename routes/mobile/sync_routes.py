@@ -3,7 +3,7 @@
 import json
 import math
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import decimal
 
@@ -20,6 +20,7 @@ ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 ALLOWED_STATUSES = {"Present", "Absent", "Late"}
 EXPECTED_FACE_TEMPLATE_LENGTH = 192
 DEFAULT_FACE_TEMPLATE_VERSION = "mobilefacenet_192_l2_v1"
+IST_TIMEZONE = timezone(timedelta(hours=5, minutes=30))
 
 
 def _json_error(message, status=400):
@@ -96,12 +97,37 @@ def _normalize_time_hhmmss(raw_value):
         return None
 
 
+def _seconds_from_hhmmss(raw_value):
+    normalized = _normalize_time_hhmmss(raw_value)
+    if not normalized:
+        return None
+    hh, mm, ss = normalized.split(":")
+    return int(hh) * 3600 + int(mm) * 60 + int(ss)
+
+
 def _to_iso_string(raw_value):
     if raw_value is None:
         return None
     if hasattr(raw_value, "isoformat"):
         return raw_value.isoformat()
     return str(raw_value)
+
+
+def _server_time_context():
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc.astimezone(IST_TIMEZONE)
+    return {
+        "server_time_utc": now_utc.isoformat(),
+        "serverTimeUtc": now_utc.isoformat(),
+        "server_time_ist": now_ist.isoformat(),
+        "serverTimeIst": now_ist.isoformat(),
+        "server_timezone": "Asia/Kolkata",
+        "serverTimezone": "Asia/Kolkata",
+        "server_date_ist": now_ist.date().isoformat(),
+        "serverDateIst": now_ist.date().isoformat(),
+        "server_time_only_ist": now_ist.strftime("%H:%M:%S"),
+        "serverTimeOnlyIst": now_ist.strftime("%H:%M:%S"),
+    }
 
 
 def _column_exists(cursor, table_name, column_name):
@@ -246,16 +272,45 @@ def _is_allowed_filename(filename):
     return ext in ALLOWED_IMAGE_EXTENSIONS
 
 
-def _resolve_faculty_id_by_user(cursor, user_id):
-    cursor.execute("SELECT id FROM faculty WHERE user_id = %s", (user_id,))
+def _resolve_faculty_record_by_reference(cursor, faculty_reference):
+    if faculty_reference in (None, ""):
+        return None
+
+    try:
+        candidate_id = int(faculty_reference)
+    except (TypeError, ValueError):
+        return None
+
+    cursor.execute("SELECT id, user_id FROM faculty WHERE user_id = %s LIMIT 1", (candidate_id,))
     row = cursor.fetchone()
-    return row["id"] if row else None
+    if row:
+        return row
+
+    cursor.execute("SELECT id, user_id FROM faculty WHERE id = %s LIMIT 1", (candidate_id,))
+    row = cursor.fetchone()
+    if row:
+        return row
+
+    return None
+
+
+def _resolve_faculty_id_by_user(cursor, user_id):
+    faculty_row = _resolve_faculty_record_by_reference(cursor, user_id)
+    return faculty_row.get("id") if faculty_row else None
 
 
 def _resolve_timetable_faculty_user_id(cursor, timetable_id):
     cursor.execute("SELECT faculty_id FROM timetable WHERE id = %s", (timetable_id,))
     row = cursor.fetchone()
     return row.get("faculty_id") if row else None
+
+
+def _resolve_timetable_record(cursor, timetable_id):
+    cursor.execute(
+        "SELECT id, faculty_id, course_id, class_id, division_id, subject_id FROM timetable WHERE id = %s LIMIT 1",
+        (timetable_id,),
+    )
+    return cursor.fetchone()
 
 
 def _resolve_student_class_division(cursor, student_id):
@@ -288,20 +343,45 @@ def _student_exists(cursor, student_id):
 
 
 def _resolve_student_id_from_event(cursor, raw_student_id, event):
-    # 1) Direct students.id
-    if raw_student_id is not None:
-        exists = _student_exists(cursor, raw_student_id)
+    candidate_ids = []
+    for raw_value in (
+        raw_student_id,
+        _pick(event, "person_id", "personId"),
+        _pick(event, "user_id", "userId"),
+    ):
+        if raw_value in (None, ""):
+            continue
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0 and parsed not in candidate_ids:
+            candidate_ids.append(parsed)
+
+    # 1) Direct students.id and 2) students.user_id candidates
+    for candidate_id in candidate_ids:
+        exists = _student_exists(cursor, candidate_id)
         if exists:
             return exists
 
-        # 2) Some clients send users.id instead of students.id
-        cursor.execute("SELECT id FROM students WHERE user_id = %s LIMIT 1", (raw_student_id,))
+        cursor.execute("SELECT id FROM students WHERE user_id = %s LIMIT 1", (candidate_id,))
         row = cursor.fetchone()
         if row:
             return row.get("id")
 
     # 3) Enrollment/admission identifiers
-    enrollment_code = _pick(event, "enrollment_code", "enrollmentCode", "admission_id", "admissionId")
+    enrollment_code = _pick(
+        event,
+        "enrollment_code",
+        "enrollmentCode",
+        "enrollment",
+        "enrollment_no",
+        "enrollmentNo",
+        "admission_id",
+        "admissionId",
+        "admission_no",
+        "admissionNo",
+    )
     if enrollment_code:
         cursor.execute("SELECT id FROM students WHERE admission_id = %s LIMIT 1", (str(enrollment_code).strip(),))
         row = cursor.fetchone()
@@ -309,7 +389,7 @@ def _resolve_student_id_from_event(cursor, raw_student_id, event):
             return row.get("id")
 
     # 4) Roll number fallback
-    roll_number = _pick(event, "roll_number", "rollNumber")
+    roll_number = _pick(event, "roll_number", "rollNumber", "roll", "rollNo", "roll_no")
     if roll_number:
         cursor.execute("SELECT id FROM students WHERE roll_number = %s LIMIT 1", (str(roll_number).strip(),))
         row = cursor.fetchone()
@@ -319,10 +399,13 @@ def _resolve_student_id_from_event(cursor, raw_student_id, event):
     return None
 
 
-def _resolve_recent_timetable_for_student(cursor, student_id, faculty_user_id=None, subject_id=None):
+def _resolve_recent_timetable_for_student(cursor, student_id, course_id=None, faculty_user_id=None, subject_id=None):
     where_parts = ["a.student_id = %s"]
     params = [student_id]
 
+    if course_id:
+        where_parts.append("t.course_id = %s")
+        params.append(course_id)
     if faculty_user_id:
         where_parts.append("t.faculty_id = %s")
         params.append(faculty_user_id)
@@ -349,6 +432,7 @@ def _resolve_timetable_id_from_event(
     cursor,
     *,
     attendance_date,
+    course_id=None,
     faculty_user_id=None,
     subject_id=None,
     class_id=None,
@@ -367,6 +451,9 @@ def _resolve_timetable_id_from_event(
     if faculty_user_id:
         where_parts.append("t.faculty_id = %s")
         params.append(faculty_user_id)
+    if course_id:
+        where_parts.append("t.course_id = %s")
+        params.append(course_id)
     if subject_id:
         where_parts.append("t.subject_id = %s")
         params.append(subject_id)
@@ -397,6 +484,7 @@ def _resolve_timetable_id_from_event(
 def _resolve_timetable_id_relaxed(
     cursor,
     *,
+    course_id=None,
     faculty_user_id=None,
     subject_id=None,
     class_id=None,
@@ -408,37 +496,41 @@ def _resolve_timetable_id_relaxed(
             [
                 "COALESCE(t.is_active, 1) = 1",
                 "t.faculty_id = %s",
+                "t.course_id = %s",
                 "t.subject_id = %s",
                 "t.class_id = %s",
                 "t.division_id = %s",
             ],
-            [faculty_user_id, subject_id, class_id, division_id],
+            [faculty_user_id, course_id, subject_id, class_id, division_id],
         ),
         (
             [
                 "COALESCE(t.is_active, 1) = 1",
                 "t.faculty_id = %s",
+                "t.course_id = %s",
                 "t.class_id = %s",
                 "t.division_id = %s",
             ],
-            [faculty_user_id, class_id, division_id],
+            [faculty_user_id, course_id, class_id, division_id],
         ),
         (
             [
                 "COALESCE(t.is_active, 1) = 1",
+                "t.course_id = %s",
                 "t.subject_id = %s",
                 "t.class_id = %s",
                 "t.division_id = %s",
             ],
-            [subject_id, class_id, division_id],
+            [course_id, subject_id, class_id, division_id],
         ),
         (
             [
                 "COALESCE(t.is_active, 1) = 1",
+                "t.course_id = %s",
                 "t.class_id = %s",
                 "t.division_id = %s",
             ],
-            [class_id, division_id],
+            [course_id, class_id, division_id],
         ),
     ]
 
@@ -694,6 +786,8 @@ def sync_users():
 @mobile_sync_bp.route("/timetable", methods=["GET"])
 def sync_timetable():
     date_value = request.args.get("date") or request.args.get("attendanceDate")
+    at_time = request.args.get("at_time") or request.args.get("atTime")
+    at_time_norm = _normalize_time_hhmmss(at_time)
     faculty_user_id = request.args.get("faculty_user_id", type=int)
     if faculty_user_id is None:
         faculty_user_id = request.args.get("facultyUserId", type=int)
@@ -706,7 +800,15 @@ def sync_timetable():
     except ValueError:
         return _json_error("Invalid date format. Use YYYY-MM-DD.")
 
+    if at_time and not at_time_norm:
+        return _json_error("Invalid at_time/atTime. Use HH:MM or HH:MM:SS.")
+
     day_name = schedule_date.strftime("%A")
+    time_ctx = _server_time_context()
+    reference_time = at_time_norm
+    if not reference_time and schedule_date.isoformat() == time_ctx.get("server_date_ist"):
+        reference_time = time_ctx.get("server_time_only_ist")
+    reference_seconds = _seconds_from_hhmmss(reference_time) if reference_time else None
 
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
@@ -746,6 +848,7 @@ def sync_timetable():
         lectures = cursor.fetchall()
 
         response_rows = []
+        active_rows = []
         for lecture in lectures:
             cursor.execute(
                 """
@@ -761,10 +864,21 @@ def sync_timetable():
             )
             students = cursor.fetchall()
 
-            response_rows.append(
-                {
+            start_time_str = str(lecture["start_time"])
+            end_time_str = str(lecture["end_time"])
+            start_seconds = _seconds_from_hhmmss(start_time_str)
+            end_seconds = _seconds_from_hhmmss(end_time_str)
+            is_active_now = bool(
+                reference_seconds is not None
+                and start_seconds is not None
+                and end_seconds is not None
+                and start_seconds <= reference_seconds <= end_seconds
+            )
+
+            row_payload = {
                     "timetable_id": lecture["timetable_id"],
                     "timetableId": lecture["timetable_id"],
+                    "id": lecture["timetable_id"],
                     "faculty_user_id": lecture["faculty_user_id"],
                     "facultyUserId": lecture["faculty_user_id"],
                     "subject_id": lecture["subject_id"],
@@ -783,25 +897,54 @@ def sync_timetable():
                     "divisionName": lecture["division_name"],
                     "day_of_week": lecture["day_of_week"],
                     "dayOfWeek": lecture["day_of_week"],
-                    "start_time": str(lecture["start_time"]),
-                    "startTime": str(lecture["start_time"]),
-                    "end_time": str(lecture["end_time"]),
-                    "endTime": str(lecture["end_time"]),
+                    "start_time": start_time_str,
+                    "startTime": start_time_str,
+                    "start": start_time_str,
+                    "end_time": end_time_str,
+                    "endTime": end_time_str,
+                    "end": end_time_str,
                     "students": students,
+                    "roster": students,
+                    "is_active_now": is_active_now,
+                    "isActiveNow": is_active_now,
                 }
-            )
+            response_rows.append(row_payload)
+            if is_active_now:
+                active_rows.append(row_payload)
 
-        return jsonify(
-            {
-                "success": True,
-                "date": schedule_date.isoformat(),
-                "attendanceDate": schedule_date.isoformat(),
-                "day_of_week": day_name,
-                "dayOfWeek": day_name,
-                "count": len(response_rows),
-                "lectures": response_rows,
-            }
-        )
+        next_row = None
+        if reference_seconds is not None:
+            upcoming = []
+            for row in response_rows:
+                start_seconds = _seconds_from_hhmmss(row.get("start_time"))
+                if start_seconds is not None and start_seconds >= reference_seconds:
+                    upcoming.append((start_seconds, row))
+            if upcoming:
+                upcoming.sort(key=lambda item: item[0])
+                next_row = upcoming[0][1]
+
+        response_payload = {
+            "success": True,
+            "date": schedule_date.isoformat(),
+            "attendanceDate": schedule_date.isoformat(),
+            "day_of_week": day_name,
+            "dayOfWeek": day_name,
+            "count": len(response_rows),
+            "lectures": response_rows,
+            "sessions": response_rows,
+            "entries": response_rows,
+            "timetables": response_rows,
+            "reference_time": reference_time,
+            "referenceTime": reference_time,
+            "active_lectures": active_rows,
+            "activeLectures": active_rows,
+            "active_count": len(active_rows),
+            "activeCount": len(active_rows),
+            "next_lecture": next_row,
+            "nextLecture": next_row,
+        }
+        response_payload.update(time_ctx)
+        return jsonify(response_payload)
     finally:
         cursor.close()
         connection.close()
@@ -897,23 +1040,23 @@ def resolve_timetable_session():
         matches = cursor.fetchall()
 
         if not matches:
-            return jsonify(
-                {
-                    "success": True,
-                    "resolved": False,
-                    "message": "No timetable session matched the given filters.",
-                    "filters": {
-                        "date": schedule_date.isoformat(),
-                        "dayOfWeek": day_name,
-                        "facultyUserId": faculty_user_id,
-                        "subjectId": subject_id,
-                        "classId": class_id,
-                        "divisionId": division_id,
-                        "atTime": at_time_norm,
-                    },
-                    "candidates": [],
-                }
-            )
+            response_payload = {
+                "success": True,
+                "resolved": False,
+                "message": "No timetable session matched the given filters.",
+                "filters": {
+                    "date": schedule_date.isoformat(),
+                    "dayOfWeek": day_name,
+                    "facultyUserId": faculty_user_id,
+                    "subjectId": subject_id,
+                    "classId": class_id,
+                    "divisionId": division_id,
+                    "atTime": at_time_norm,
+                },
+                "candidates": [],
+            }
+            response_payload.update(_server_time_context())
+            return jsonify(response_payload)
 
         resolved = matches[0]
         candidates = []
@@ -922,6 +1065,7 @@ def resolve_timetable_session():
                 {
                     "timetable_id": row["timetable_id"],
                     "timetableId": row["timetable_id"],
+                    "id": row["timetable_id"],
                     "faculty_user_id": row["faculty_user_id"],
                     "facultyUserId": row["faculty_user_id"],
                     "subject_id": row["subject_id"],
@@ -940,28 +1084,34 @@ def resolve_timetable_session():
                     "divisionName": row["division_name"],
                     "start_time": str(row["start_time"]),
                     "startTime": str(row["start_time"]),
+                    "start": str(row["start_time"]),
                     "end_time": str(row["end_time"]),
                     "endTime": str(row["end_time"]),
+                    "end": str(row["end_time"]),
                     "day_of_week": row["day_of_week"],
                     "dayOfWeek": row["day_of_week"],
                 }
             )
 
-        return jsonify(
-            {
-                "success": True,
-                "resolved": True,
-                "timetable_id": resolved["timetable_id"],
-                "timetableId": resolved["timetable_id"],
-                "date": schedule_date.isoformat(),
-                "attendanceDate": schedule_date.isoformat(),
-                "day_of_week": day_name,
-                "dayOfWeek": day_name,
-                "candidate_count": len(candidates),
-                "candidateCount": len(candidates),
-                "candidates": candidates,
-            }
-        )
+        response_payload = {
+            "success": True,
+            "resolved": True,
+            "timetable_id": resolved["timetable_id"],
+            "timetableId": resolved["timetable_id"],
+            "session_id": resolved["timetable_id"],
+            "sessionId": resolved["timetable_id"],
+            "date": schedule_date.isoformat(),
+            "attendanceDate": schedule_date.isoformat(),
+            "day_of_week": day_name,
+            "dayOfWeek": day_name,
+            "candidate_count": len(candidates),
+            "candidateCount": len(candidates),
+            "candidates": candidates,
+            "sessions": candidates,
+            "entries": candidates,
+        }
+        response_payload.update(_server_time_context())
+        return jsonify(response_payload)
     finally:
         cursor.close()
         connection.close()
@@ -994,6 +1144,19 @@ def upload_attendance_logs():
         failed += 1
         processed.append({"event_uuid": event_uuid, "eventUuid": event_uuid, "status": "failed", "message": message})
         current_app.logger.warning("Mobile sync event rejected: event_uuid=%s reason=%s", event_uuid, message)
+
+    def _timetable_matches_student_context(timetable_row, student_course_id, student_class_id, student_division_id, subject_id=None):
+        if not timetable_row:
+            return False
+        if student_course_id and timetable_row.get("course_id") != student_course_id:
+            return False
+        if student_class_id and timetable_row.get("class_id") != student_class_id:
+            return False
+        if student_division_id and timetable_row.get("division_id") != student_division_id:
+            return False
+        if subject_id and timetable_row.get("subject_id") != subject_id:
+            return False
+        return True
 
     try:
         for event in events:
@@ -1042,8 +1205,11 @@ def upload_attendance_logs():
                     event_uuid,
                     (
                         f"student_id could not be mapped to a valid student record. "
-                        f"student_id={original_student_id}, enrollment={_pick(event, 'enrollment_code', 'enrollmentCode', 'admission_id', 'admissionId')}, "
-                        f"roll={_pick(event, 'roll_number', 'rollNumber')}"
+                        f"student_id={original_student_id}, "
+                        f"person_id={_pick(event, 'person_id', 'personId')}, "
+                        f"user_id={_pick(event, 'user_id', 'userId')}, "
+                        f"enrollment={_pick(event, 'enrollment_code', 'enrollmentCode', 'enrollment', 'enrollment_no', 'enrollmentNo', 'admission_id', 'admissionId', 'admission_no', 'admissionNo')}, "
+                        f"roll={_pick(event, 'roll_number', 'rollNumber', 'roll', 'rollNo', 'roll_no')}"
                     ),
                 )
                 continue
@@ -1081,11 +1247,35 @@ def upload_attendance_logs():
                 # Fallback: derive faculty user id from timetable if client omits marked_by_user_id.
                 marked_by_user_id = _resolve_timetable_faculty_user_id(cursor, timetable_id)
 
+            timetable_row = _resolve_timetable_record(cursor, timetable_id) if timetable_id > 0 else None
+            if timetable_row and not _timetable_matches_student_context(
+                timetable_row,
+                student_course_id,
+                student_class_id,
+                student_division_id,
+                subject_id=subject_id,
+            ):
+                current_app.logger.warning(
+                    "Mobile sync timetable mismatch: event_uuid=%s timetable_id=%s student_course=%s student_class=%s student_division=%s timetable_course=%s timetable_class=%s timetable_division=%s timetable_subject=%s event_subject=%s",
+                    event_uuid,
+                    timetable_id,
+                    student_course_id,
+                    student_class_id,
+                    student_division_id,
+                    timetable_row.get("course_id"),
+                    timetable_row.get("class_id"),
+                    timetable_row.get("division_id"),
+                    timetable_row.get("subject_id"),
+                    subject_id,
+                )
+                timetable_id = 0
+
             if timetable_id <= 0:
                 timetable_id = (
                     _resolve_timetable_id_from_event(
                         cursor,
                         attendance_date=attendance_date,
+                        course_id=student_course_id,
                         faculty_user_id=marked_by_user_id,
                         subject_id=subject_id,
                         class_id=class_id,
@@ -1099,6 +1289,7 @@ def upload_attendance_logs():
                 timetable_id = (
                     _resolve_timetable_id_relaxed(
                         cursor,
+                        course_id=student_course_id,
                         faculty_user_id=marked_by_user_id,
                         subject_id=subject_id,
                         class_id=class_id,
@@ -1112,6 +1303,7 @@ def upload_attendance_logs():
                     _resolve_recent_timetable_for_student(
                         cursor,
                         student_id=student_id,
+                        course_id=student_course_id,
                         faculty_user_id=marked_by_user_id,
                         subject_id=subject_id,
                     )
@@ -1134,10 +1326,23 @@ def upload_attendance_logs():
                 )
                 continue
 
-            faculty_id = _resolve_faculty_id_by_user(cursor, marked_by_user_id)
-            if not faculty_id:
-                _record_failure(event_uuid, f"No faculty profile found for marked_by_user_id={marked_by_user_id}")
+            faculty_row = _resolve_faculty_record_by_reference(cursor, marked_by_user_id)
+            if not faculty_row:
+                timetable_faculty_user_id = _resolve_timetable_faculty_user_id(cursor, timetable_id)
+                if timetable_faculty_user_id not in (None, marked_by_user_id):
+                    faculty_row = _resolve_faculty_record_by_reference(cursor, timetable_faculty_user_id)
+                    if faculty_row:
+                        marked_by_user_id = faculty_row.get("user_id") or timetable_faculty_user_id
+
+            if not faculty_row:
+                _record_failure(
+                    event_uuid,
+                    f"No faculty profile found for marked_by_user_id={marked_by_user_id} or timetable faculty fallback",
+                )
                 continue
+
+            faculty_id = faculty_row.get("id")
+            marked_by_user_id = faculty_row.get("user_id") or marked_by_user_id
 
             try:
                 captured_value = _pick(event, "captured_at", "capturedAt")
