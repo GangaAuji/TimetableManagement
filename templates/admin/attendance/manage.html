@@ -26,6 +26,7 @@
 
 {% block content %}
 <div class="space-y-6 sm:space-y-8 min-h-screen bg-slate-50/50 pb-12">
+    <input type="hidden" id="attendance-csrf-token" value="{{ csrf_token() }}">
     
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -199,6 +200,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const table = document.getElementById('attendance-table');
     if (!table) return;
 
+    const csrfToken = document.getElementById('attendance-csrf-token')?.value || '';
+
     const rows = table.querySelectorAll('tbody tr');
     
     rows.forEach(row => {
@@ -256,21 +259,35 @@ document.addEventListener('DOMContentLoaded', function() {
             const btn = this;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1.5"></i> Saving...';
-            
+
+            const requestBody = new URLSearchParams({
+                attendance_id: recordId,
+                status: statusSelect.value,
+                remarks: remarksInput.value,
+                csrf_token: csrfToken
+            });
+
             fetch('{{ url_for("attendance_admin.update_attendance") }}', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
                 },
-                body: JSON.stringify({
-                    record_id: recordId,
-                    status: statusSelect.value,
-                    remarks: remarksInput.value
-                })
+                body: requestBody.toString()
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+            .then(async (response) => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Session may have expired. Refresh and try again.');
+                }
+
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to update attendance');
+                }
+
+                return data;
+            })
+            .then(() => {
                     // Update original values
                     statusSelect.dataset.original = statusSelect.value;
                     remarksInput.dataset.original = remarksInput.value;
@@ -289,15 +306,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         btn.disabled = false;
                         checkChanges();
                     }, 1500);
-                } else {
-                    alert('Error: ' + (data.message || 'Failed to update attendance'));
-                    btn.innerHTML = '<i class="fas fa-save mr-1.5"></i> Save';
-                    btn.disabled = false;
-                }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Failed to update attendance. Please try again.');
+                alert(error.message || 'Failed to update attendance. Please try again.');
                 btn.innerHTML = '<i class="fas fa-save mr-1.5"></i> Save';
                 btn.disabled = false;
             });

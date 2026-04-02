@@ -1012,12 +1012,12 @@ def manage_attendance():
                 SELECT 
                     a.id,
                     a.student_id,
-                    s.id as roll_number,
+                    s.roll_number as roll_number,
                     s.name as full_name,
                     c.name as course_name,
                     cl.name as class_name,
                     d.name as division_name,
-                    DATE_FORMAT(a.attendance_date, '%%Y-%%m-%%d') as attendance_date,
+                    DATE_FORMAT(a.attendance_date, '%Y-%m-%d') as attendance_date,
                     a.status,
                     a.remarks
                 FROM attendance a
@@ -1077,18 +1077,48 @@ def update_attendance():
     cursor = connection.cursor(dictionary=True)
     
     try:
-        attendance_id = request.form.get('attendance_id')
-        status = request.form.get('status')
-        remarks = request.form.get('remarks', '')
-        
-        cursor.execute("""
+        payload = request.get_json(silent=True) if request.is_json else {}
+
+        attendance_id = (
+            request.form.get('attendance_id')
+            or request.form.get('record_id')
+            or (payload or {}).get('attendance_id')
+            or (payload or {}).get('record_id')
+        )
+        status = request.form.get('status') or (payload or {}).get('status')
+        remarks = request.form.get('remarks')
+        if remarks is None:
+            remarks = (payload or {}).get('remarks', '')
+
+        if not attendance_id:
+            return jsonify({'success': False, 'message': 'attendance_id is required'}), 400
+
+        try:
+            attendance_id = int(attendance_id)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'message': 'attendance_id must be a valid integer'}), 400
+
+        allowed_statuses = {'Present', 'Absent', 'Late'}
+        normalized_status = str(status or '').strip().title()
+        if normalized_status not in allowed_statuses:
+            return jsonify({'success': False, 'message': 'status must be Present, Absent, or Late'}), 400
+
+        cursor.execute("SELECT id FROM attendance WHERE id = %s", [attendance_id])
+        existing_record = cursor.fetchone()
+        if not existing_record:
+            return jsonify({'success': False, 'message': 'Attendance record not found'}), 404
+
+        cursor.execute(
+            """
             UPDATE attendance
             SET status = %s, remarks = %s
             WHERE id = %s
-        """, [status, remarks, attendance_id])
-        
+            """,
+            [normalized_status, str(remarks or '').strip(), attendance_id],
+        )
+
         connection.commit()
-        
+
         return jsonify({'success': True, 'message': 'Attendance updated successfully'})
     
     except Exception as e:
@@ -1258,14 +1288,14 @@ def charts_data():
             # Last 30 days attendance trend
             cursor.execute("""
                 SELECT 
-                    DATE_FORMAT(attendance_date, '%%Y-%%m-%%d') as date,
+                    DATE_FORMAT(attendance_date, '%Y-%m-%d') as date,
                     SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,
                     SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
                     SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) as late
                 FROM attendance
                 WHERE attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-                GROUP BY DATE_FORMAT(attendance_date, '%%Y-%%m-%%d')
-                ORDER BY DATE_FORMAT(attendance_date, '%%Y-%%m-%%d')
+                GROUP BY DATE_FORMAT(attendance_date, '%Y-%m-%d')
+                ORDER BY DATE_FORMAT(attendance_date, '%Y-%m-%d')
             """)
             data = cursor.fetchall()
             
