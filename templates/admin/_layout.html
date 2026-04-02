@@ -7,7 +7,7 @@
     <title>{% block title %}Admin Panel{% endblock %} - {{ branding.site_title or 'Timetable Pro' }}</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     {% if branding.favicon %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename=branding.favicon) }}">
     {% else %}
@@ -311,33 +311,58 @@
             </div>
             {% endif %}
 
-            {% if user_has_perm('attendance_view') %}
+            {% set can_view_attendance_section = user_has_any_perm(['attendance_view', 'attendance_view_faculty']) %}
+            {% if can_view_attendance_section %}
             <div class="mt-4 mb-2">
                 <p class="px-3 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Attendance</p>
 
-                <a href="{{ url_for('attendance_admin.attendance_overview') }}"
-                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_overview' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <i class="fas fa-chart-line w-6 text-center"></i>
-                    <span class="ml-3 text-sm">Overview</span>
-                </a>
+                {% if user_has_perm('attendance_view_faculty') %}
+                <div class="ml-4 pl-3 border-l border-white/10 mb-2">
+                    <p class="mt-2 mb-1 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Faculty</p>
 
-                <a href="{{ url_for('attendance_admin.manage_attendance') }}"
-                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.manage_attendance' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <i class="fas fa-tasks w-6 text-center"></i>
-                    <span class="ml-3 text-sm">Manage</span>
-                </a>
+                    <a href="{{ url_for('attendance_admin.faculty_attendance_overview') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint in ['attendance_admin.faculty_attendance_overview', 'attendance_admin.faculty_attendance_details'] %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-user-tie w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Overview</span>
+                    </a>
 
-                <a href="{{ url_for('attendance_admin.attendance_defaulters') }}"
-                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_defaulters' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <i class="fas fa-exclamation-triangle w-6 text-center"></i>
-                    <span class="ml-3 text-sm">Defaulters</span>
-                </a>
+                    <a href="{{ url_for('attendance_admin.faculty_mobile_sync_logs') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.faculty_mobile_sync_logs' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-id-badge w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Mobile Logs</span>
+                    </a>
+                </div>
+                {% endif %}
 
-                <a href="{{ url_for('attendance_admin.mobile_sync_logs') }}"
-                    class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.mobile_sync_logs' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
-                    <i class="fas fa-mobile-alt w-6 text-center"></i>
-                    <span class="ml-3 text-sm">Mobile Sync Logs</span>
-                </a>
+                {% if user_has_perm('attendance_view') %}
+                <div class="ml-4 pl-3 border-l border-white/10 mb-1">
+                    <p class="mt-2 mb-1 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Student</p>
+
+                    <a href="{{ url_for('attendance_admin.attendance_overview') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_overview' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-chart-line w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Overview</span>
+                    </a>
+
+                    <a href="{{ url_for('attendance_admin.manage_attendance') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.manage_attendance' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-tasks w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Manage</span>
+                    </a>
+
+                    <a href="{{ url_for('attendance_admin.attendance_defaulters') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.attendance_defaulters' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-exclamation-triangle w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Defaulters</span>
+                    </a>
+
+                    <a href="{{ url_for('attendance_admin.mobile_sync_logs') }}"
+                        class="nav-item flex items-center px-3 py-2 rounded-lg transition-colors mb-1 {% if request.endpoint == 'attendance_admin.mobile_sync_logs' %}bg-white/10 text-white border-l-4 border-accent active-nav-link{% else %}text-gray-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="fas fa-mobile-alt w-6 text-center"></i>
+                        <span class="ml-3 text-sm">Mobile Logs</span>
+                    </a>
+                </div>
+                {% endif %}
             </div>
             {% endif %}
 
@@ -485,7 +510,7 @@
     <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/tailwind.js') }}"></script> -->
-    
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // -- 1. Mobile Sidebar Logic --

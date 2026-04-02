@@ -11,6 +11,210 @@ import string
 
 user_mgmt_bp = Blueprint('user_mgmt_bp', __name__, url_prefix='/admin/users')
 
+
+def _generate_employee_id(user_id):
+    return f"EMP{datetime.now().year}{user_id:06d}"
+
+
+def _generate_admission_id(user_id):
+    return f"ADM{datetime.now().year}{user_id:06d}"
+
+
+def _fallback_email(username, user_id):
+    return f"{username}.{user_id}@local.invalid"
+
+
+def _get_default_department_id(cursor):
+    cursor.execute("SELECT id FROM departments ORDER BY id LIMIT 1")
+    row = cursor.fetchone()
+    return row['id'] if row else None
+
+
+def _get_default_course_id(cursor):
+    cursor.execute("SELECT id FROM courses ORDER BY id LIMIT 1")
+    row = cursor.fetchone()
+    return row['id'] if row else None
+
+
+def _ensure_faculty_profile(cursor, user_id, username, email, department_id=None):
+    cursor.execute(
+        """
+        SELECT id, user_id, name, email, phone, department_id
+        FROM faculty
+        WHERE user_id = %s OR id = %s
+        ORDER BY user_id = %s DESC, id ASC
+        LIMIT 1
+        """,
+        [user_id, user_id, user_id],
+    )
+    existing = cursor.fetchone()
+
+    profile_name = username
+    profile_phone = None
+    student_course_id = None
+    cursor.execute(
+        """
+        SELECT name, phone, course_id
+        FROM students
+        WHERE user_id = %s OR id = %s
+        ORDER BY user_id = %s DESC, id ASC
+        LIMIT 1
+        """,
+        [user_id, user_id, user_id],
+    )
+    student_row = cursor.fetchone()
+    if student_row:
+        profile_name = student_row.get('name') or profile_name
+        profile_phone = student_row.get('phone')
+        student_course_id = student_row.get('course_id')
+
+    if existing:
+        target_department_id = department_id or existing.get('department_id')
+        if not target_department_id and student_course_id:
+            cursor.execute("SELECT department_id FROM courses WHERE id = %s", [student_course_id])
+            course_row = cursor.fetchone()
+            target_department_id = course_row.get('department_id') if course_row else None
+        target_department_id = target_department_id or _get_default_department_id(cursor)
+        if not target_department_id:
+            raise ValueError("Cannot assign Teacher role: no department available.")
+
+        cursor.execute(
+            """
+            UPDATE faculty
+            SET user_id = %s,
+                name = %s,
+                email = %s,
+                phone = %s,
+                department_id = %s,
+                is_active = 1
+            WHERE id = %s
+            """,
+            [
+                user_id,
+                existing.get('name') or profile_name,
+                email or existing.get('email') or _fallback_email(username, user_id),
+                existing.get('phone') or profile_phone,
+                target_department_id,
+                existing['id'],
+            ],
+        )
+        return
+
+    target_department_id = department_id
+    if not target_department_id and student_course_id:
+        cursor.execute("SELECT department_id FROM courses WHERE id = %s", [student_course_id])
+        course_row = cursor.fetchone()
+        target_department_id = course_row.get('department_id') if course_row else None
+    target_department_id = target_department_id or _get_default_department_id(cursor)
+    if not target_department_id:
+        raise ValueError("Cannot assign Teacher role: no department available.")
+
+    employee_id = _generate_employee_id(user_id)
+    cursor.execute(
+        """
+        INSERT INTO faculty (id, user_id, name, email, department_id, employee_id, phone, is_active)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+        """,
+        [
+            user_id,
+            user_id,
+            profile_name,
+            email or _fallback_email(username, user_id),
+            target_department_id,
+            employee_id,
+            profile_phone,
+        ],
+    )
+
+
+def _ensure_student_profile(cursor, user_id, username, email):
+    cursor.execute(
+        """
+        SELECT id, user_id, name, email, phone, course_id
+        FROM students
+        WHERE user_id = %s OR id = %s
+        ORDER BY user_id = %s DESC, id ASC
+        LIMIT 1
+        """,
+        [user_id, user_id, user_id],
+    )
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute(
+            """
+            UPDATE students
+            SET user_id = %s,
+                email = %s,
+                is_active = 1
+            WHERE id = %s
+            """,
+            [user_id, email or existing.get('email') or _fallback_email(username, user_id), existing['id']],
+        )
+        return
+
+    cursor.execute(
+        """
+        SELECT name, phone, department_id
+        FROM faculty
+        WHERE user_id = %s OR id = %s
+        ORDER BY user_id = %s DESC, id ASC
+        LIMIT 1
+        """,
+        [user_id, user_id, user_id],
+    )
+    faculty_row = cursor.fetchone()
+
+    profile_name = faculty_row.get('name') if faculty_row else username
+    profile_phone = faculty_row.get('phone') if faculty_row else None
+    department_id = faculty_row.get('department_id') if faculty_row else None
+
+    course_id = None
+    if department_id:
+        cursor.execute("SELECT id FROM courses WHERE department_id = %s ORDER BY id LIMIT 1", [department_id])
+        course_row = cursor.fetchone()
+        course_id = course_row.get('id') if course_row else None
+    course_id = course_id or _get_default_course_id(cursor)
+    if not course_id:
+        raise ValueError("Cannot assign Student role: no course available.")
+
+    admission_id = _generate_admission_id(user_id)
+    cursor.execute(
+        """
+        INSERT INTO students (id, user_id, name, email, phone, course_id, admission_id, is_active)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+        """,
+        [
+            user_id,
+            user_id,
+            profile_name or username,
+            email or _fallback_email(username, user_id),
+            profile_phone,
+            course_id,
+            admission_id,
+        ],
+    )
+
+
+def _sync_role_profiles(cursor, user_id, target_role, username, email, department_id):
+    if target_role == 'Teacher':
+        _ensure_faculty_profile(cursor, user_id, username, email, department_id)
+        cursor.execute("UPDATE students SET is_active = 0 WHERE user_id = %s", [user_id])
+    elif target_role == 'Student':
+        _ensure_student_profile(cursor, user_id, username, email)
+        cursor.execute("UPDATE faculty SET is_active = 0 WHERE user_id = %s", [user_id])
+    else:
+        cursor.execute("UPDATE students SET is_active = 0 WHERE user_id = %s", [user_id])
+        cursor.execute("UPDATE faculty SET is_active = 0 WHERE user_id = %s", [user_id])
+
+
+def _soft_delete_user_relations(cursor, user_id, role):
+    cursor.execute("UPDATE users SET status = 'inactive' WHERE id = %s", [user_id])
+    if role == 'Teacher':
+        cursor.execute("UPDATE faculty SET is_active = 0 WHERE user_id = %s", [user_id])
+    elif role == 'Student':
+        cursor.execute("UPDATE students SET is_active = 0 WHERE user_id = %s", [user_id])
+
 @user_mgmt_bp.before_request
 def update_forms():
     """Update dynamic form choices before each request"""
@@ -203,6 +407,8 @@ def edit_user(user_id):
     role_aliases = {
         'teachers': 'Teacher',
         'teacher': 'Teacher',
+        'faculty': 'Teacher',
+        'faculties': 'Teacher',
         'students': 'Student',
         'student': 'Student',
         'admins': 'Admin',
@@ -240,6 +446,11 @@ def edit_user(user_id):
         
         cursor = connection.cursor(dictionary=True)
         try:
+            cursor.execute('SELECT id, role FROM users WHERE id = %s', [user_id])
+            current_user = cursor.fetchone()
+            if not current_user:
+                return error_response('User not found.', 404)
+
             # Check if username exists for other users
             cursor.execute('SELECT id FROM users WHERE username = %s AND id != %s', 
                          [username, user_id])
@@ -269,10 +480,12 @@ def edit_user(user_id):
                     WHERE id=%s
                 ''', [username, email or None, role, status, dept_id, is_hod, user_id])
 
+            _sync_role_profiles(cursor, user_id, role, username, email or None, dept_id)
+            profile_active = 1 if status == 'active' else 0
             if role == 'Teacher':
-                cursor.execute('UPDATE faculty SET email=%s WHERE user_id=%s', [email or None, user_id])
+                cursor.execute("UPDATE faculty SET is_active = %s WHERE user_id = %s", [profile_active, user_id])
             elif role == 'Student':
-                cursor.execute('UPDATE students SET email=%s WHERE user_id=%s', [email or None, user_id])
+                cursor.execute("UPDATE students SET is_active = %s WHERE user_id = %s", [profile_active, user_id])
             
             # Log activity
             log_activity(
@@ -317,23 +530,24 @@ def delete_user(user_id):
         user = cursor.fetchone()
         if not user:
             return jsonify({'error': 'User not found'}), 404
-        
-        username, role = user
+
+        username = user['username']
+        role = user['role']
         if role == 'Super Admin':
             return jsonify({'error': 'Cannot delete Super Admin users'}), 403
-        
-        # Delete user
-        cursor.execute('DELETE FROM users WHERE id = %s', [user_id])
+
+        # Soft delete user and related profile
+        _soft_delete_user_relations(cursor, user_id, role)
         
         # Log activity
         log_activity(
             session['user_id'],
             'delete_user',
-            f'Deleted user {username} (ID: {user_id})'
+            f'Soft-deleted user {username} (ID: {user_id})'
         )
         
         connection.commit()
-        return jsonify({'message': 'User deleted successfully'})
+        return jsonify({'message': 'User deactivated successfully'})
         
     except Exception as e:
         connection.rollback()
@@ -788,18 +1002,53 @@ def bulk_users_action():
     try:
         if action in ('activate', 'deactivate'):
             new_status = 'active' if action == 'activate' else 'inactive'
+            is_active_flag = 1 if new_status == 'active' else 0
             format_str = ','.join(['%s'] * len(ids))
-            cursor.execute(f"UPDATE users SET status = %s WHERE id IN ({format_str}) AND role != 'Super Admin'", [new_status, *ids])
+            cursor.execute(
+                f"SELECT id, role FROM users WHERE id IN ({format_str}) AND role != 'Super Admin'",
+                ids,
+            )
+            rows = cursor.fetchall() or []
+            target_ids = [row['id'] for row in rows]
+
+            if target_ids:
+                target_format = ','.join(['%s'] * len(target_ids))
+                cursor.execute(
+                    f"UPDATE users SET status = %s WHERE id IN ({target_format})",
+                    [new_status, *target_ids],
+                )
+
+                teacher_ids = [row['id'] for row in rows if row['role'] == 'Teacher']
+                student_ids = [row['id'] for row in rows if row['role'] == 'Student']
+
+                if teacher_ids:
+                    teacher_format = ','.join(['%s'] * len(teacher_ids))
+                    cursor.execute(
+                        f"UPDATE faculty SET is_active = %s WHERE user_id IN ({teacher_format})",
+                        [is_active_flag, *teacher_ids],
+                    )
+                if student_ids:
+                    student_format = ','.join(['%s'] * len(student_ids))
+                    cursor.execute(
+                        f"UPDATE students SET is_active = %s WHERE user_id IN ({student_format})",
+                        [is_active_flag, *student_ids],
+                    )
+
             connection.commit()
             log_activity(session['user_id'], f'bulk_{action}_users', f"Affected IDs: {','.join(ids)}")
             return jsonify({'message': f"Users {action}d successfully."})
         elif action == 'delete':
             format_str = ','.join(['%s'] * len(ids))
-            # Avoid deleting Super Admins
-            cursor.execute(f"DELETE FROM users WHERE id IN ({format_str}) AND role != 'Super Admin'", ids)
+            cursor.execute(
+                f"SELECT id, role FROM users WHERE id IN ({format_str}) AND role != 'Super Admin'",
+                ids,
+            )
+            rows = cursor.fetchall() or []
+            for row in rows:
+                _soft_delete_user_relations(cursor, row['id'], row['role'])
             connection.commit()
-            log_activity(session['user_id'], 'bulk_delete_users', f"Deleted IDs: {','.join(ids)}")
-            return jsonify({'message': 'Users deleted successfully.'})
+            log_activity(session['user_id'], 'bulk_delete_users', f"Deactivated IDs: {','.join(ids)}")
+            return jsonify({'message': 'Users deactivated successfully.'})
         elif action == 'reset_password':
             new_pwd = request.form.get('new_password')
             if new_pwd and len(new_pwd) < 8:
@@ -879,7 +1128,12 @@ def toggle_status(user_id):
         if row['role'] == 'Super Admin':
             return jsonify({'error': 'Cannot change status for Super Admin.'}), 403
         new_status = 'inactive' if row['status'] == 'active' else 'active'
+        is_active_flag = 1 if new_status == 'active' else 0
         cursor.execute("UPDATE users SET status = %s WHERE id = %s", [new_status, user_id])
+        if row['role'] == 'Teacher':
+            cursor.execute("UPDATE faculty SET is_active = %s WHERE user_id = %s", [is_active_flag, user_id])
+        elif row['role'] == 'Student':
+            cursor.execute("UPDATE students SET is_active = %s WHERE user_id = %s", [is_active_flag, user_id])
         connection.commit()
         log_activity(session['user_id'], 'toggle_status', f'User ID {user_id} -> {new_status}')
         return jsonify({'message': 'Status updated.', 'status': new_status})

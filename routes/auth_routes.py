@@ -94,6 +94,10 @@ def _decode_captured_face_data(data_url):
     except (ValueError, binascii.Error):
         return None
 
+
+def _generate_employee_id(user_id):
+    return f"EMP{datetime.now().year}{user_id:06d}"
+
 @auth_bp.route('/')
 def home():
     if 'user_id' in session:
@@ -516,11 +520,19 @@ def register(token):
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (user_id, user_id, admission_id, invitation['name'], invitation['email'], 
                       invitation['course_id'], invitation['class_id'], invitation['division_id']))
-            elif invitation['role'] == 'Teacher':
+            elif invitation['role'] in ('Teacher', 'Faculty'):
+                employee_id = _generate_employee_id(user_id)
                 cursor.execute("""
-                    INSERT INTO faculty (id, user_id, name, email, department_id) 
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (user_id, user_id, invitation['name'], invitation['email'], invitation['department_id']))
+                    INSERT INTO faculty (id, user_id, name, email, department_id, employee_id) 
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    user_id,
+                    invitation['name'],
+                    invitation['email'],
+                    invitation['department_id'],
+                    employee_id,
+                ))
 
             # Save face image reference to mobile template table when available
             if face_image_path and _table_exists(cursor, 'mobile_face_templates'):

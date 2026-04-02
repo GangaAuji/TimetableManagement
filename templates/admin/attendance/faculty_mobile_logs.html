@@ -1,39 +1,19 @@
 {% extends "admin/_layout.html" %}
 
-{% block title %}Mobile Attendance Logs{% endblock %}
-{% block header_title %}Mobile Logs{% endblock %}
-
-{% block extra_css %}
-<style>
-    /* Custom Scrollbar for the data table */
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: #f8fafc;
-        border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: #cbd5e1;
-        border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background-color: #94a3b8;
-    }
-</style>
-{% endblock %}
+{% block title %}Faculty Attendance Logs{% endblock %}
+{% block header_title %}Faculty Logs{% endblock %}
 
 {% block content %}
 <div class="space-y-6 sm:space-y-8 min-h-screen bg-slate-50/50 pb-12">
     
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Student Sync Logs</h2>
-            <p class="text-slate-500 mt-1 text-sm font-medium">View and manage student attendance synced from mobile devices.</p>
+            <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Attendances Logs</h2>
+            <p class="text-slate-500 mt-1 text-sm font-medium">View and manage faculty shift attendance received from device syncs.</p>
         </div>
         
-        <form method="POST" action="{{ url_for('attendance_admin.reprocess_mobile_sync_logs') }}" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+        {% if user_has_perm('attendance_manage_faculty') %}
+        <form method="POST" action="{{ url_for('attendance_admin.reprocess_faculty_mobile_sync_logs') }}" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="flex items-center px-2">
                 <span class="text-xs font-bold text-slate-500 uppercase tracking-wide mr-2">Limit:</span>
@@ -43,6 +23,7 @@
                 <i class="fas fa-sync-alt mr-2 text-indigo-200"></i> Reprocess Pending
             </button>
         </form>
+        {% endif %}
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -86,10 +67,10 @@
         <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
             <div>
                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Date</label>
-                <input type="date" name="date" value="{{ filters.date }}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white cursor-pointer">
+                <input type="date" name="date" value="{{ filters.date }}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Status</label>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Processing Status</label>
                 <select name="processing_status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white appearance-none cursor-pointer">
                     <option value="" {% if not filters.processing_status %}selected{% endif %}>All Statuses</option>
                     <option value="processed" {% if filters.processing_status == 'processed' %}selected{% endif %}>Processed</option>
@@ -105,22 +86,36 @@
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Student Search</label>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Faculty Search</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fas fa-search text-xs"></i></span>
-                    <input type="text" name="student_query" value="{{ filters.student_query }}" placeholder="Name / Roll / ID" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+                    <input type="text" name="faculty_query" value="{{ filters.faculty_query }}" placeholder="Name / Emp ID" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
                 </div>
             </div>
-            <div class="flex flex-col sm:flex-row gap-2 col-span-1 xl:col-span-2">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Shift Search</label>
+                <input type="text" name="shift_query" value="{{ filters.shift_query }}" placeholder="Name or Code" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
                 <div class="flex-1">
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Limit</label>
-                    <input type="number" min="1" max="500" name="limit" value="{{ filters.limit }}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Rows</label>
+                    <select name="per_page" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+                        <option value="20" {% if filters.per_page == 20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if filters.per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if filters.per_page == 100 %}selected{% endif %}>100</option>
+                    </select>
                 </div>
                 <div class="flex items-end">
-                    <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-700 transition-all shadow-sm active:scale-95">
+                    <button class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-700 transition-all shadow-sm active:scale-95">
                         Apply
                     </button>
                 </div>
+            </div>
+
+            <div class="sm:col-span-2 lg:col-span-3 xl:col-span-6 flex justify-end">
+                <a href="{{ url_for('attendance_admin.faculty_mobile_sync_logs') }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                    Reset Filters
+                </a>
             </div>
         </form>
     </div>
@@ -128,17 +123,23 @@
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200">
         <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 class="text-lg font-bold text-slate-800">Synced Events Log</h3>
+            {% if pagination.total_count > 0 %}
             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-500 shadow-sm">
-                Showing {{ logs|length }} rows
+                {{ pagination.start_index }}-{{ pagination.end_index }} of {{ pagination.total_count }}
             </span>
+            {% else %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-500 shadow-sm">
+                No Records
+            </span>
+            {% endif %}
         </div>
 
-        <div class="overflow-x-auto custom-scrollbar">
-            <table class="min-w-full text-left text-sm whitespace-nowrap">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm whitespace-nowrap">
                 <thead class="bg-slate-50 border-b border-slate-200">
                     <tr>
-                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Student Info</th>
-                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Class & Subject</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Faculty Details</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Shift Info</th>
                         <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Attendance</th>
                         <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Processing</th>
                         <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Device & Meta</th>
@@ -151,25 +152,29 @@
                         <td class="px-6 py-4">
                             <div class="flex items-start gap-3">
                                 <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
-                                    {{ row.student_name[:1] | upper if row.student_name else '?' }}
+                                    {{ row.faculty_name[:1] | upper if row.faculty_name else '?' }}
                                 </div>
                                 <div>
-                                    <div class="font-bold text-slate-800 text-base">{{ row.student_name or 'Unknown Student' }}</div>
+                                    <div class="font-bold text-slate-800 text-base">{{ row.faculty_name or 'Unknown Faculty' }}</div>
                                     <div class="text-[11px] font-medium text-slate-500 mt-0.5 flex flex-col gap-0.5">
-                                        <span><i class="fas fa-id-badge text-slate-400 mr-1"></i> Roll: {{ row.roll_number or 'N/A' }}</span>
-                                        <span><i class="fas fa-user-tag text-slate-400 mr-1"></i> ID: {{ row.student_id }}</span>
+                                        <span><i class="fas fa-id-badge text-slate-400 mr-1"></i> {{ row.employee_id or 'No Emp ID' }}</span>
+                                        <span><i class="fas fa-user-tag text-slate-400 mr-1"></i> UID: {{ row.faculty_user_id }} | FID: {{ row.faculty_id }}</span>
+                                        {% if row.department_name %}
+                                        <span class="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded w-max mt-0.5">{{ row.department_name }}</span>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>
                         </td>
 
                         <td class="px-6 py-4">
-                            <div class="font-bold text-slate-700">{{ row.subject_name or 'Unknown Subject' }}</div>
-                            <div class="text-[11px] text-slate-500 mt-1 flex flex-col gap-1">
-                                <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded w-max border border-slate-200 font-bold">
-                                    {{ row.course_name or '-' }} {{ row.class_name or '' }} {{ row.division_name or '' }}
+                            <div class="font-bold text-slate-700">{{ row.shift_name or row.shift_pattern_name or 'General Availability' }}</div>
+                            <div class="text-xs text-slate-500 mt-1 flex flex-col gap-1">
+                                <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] w-max border border-slate-200">
+                                    <i class="far fa-clock mr-1"></i> {{ row.shift_start_time or '--:--' }} to {{ row.shift_end_time or '--:--' }}
                                 </span>
-                                <span class="text-[10px] text-slate-400 mt-0.5">TT ID: {{ row.timetable_id }}</span>
+                                <span class="text-[10px] text-slate-400">Code: {{ row.shift_code or row.shift_pattern_code or 'N/A' }}</span>
+                                <span class="text-[10px] text-slate-400 truncate max-w-[150px]" title="{{ row.shift_key }}">Key: {{ row.shift_key }}</span>
                             </div>
                         </td>
 
@@ -235,8 +240,12 @@
                                     </span>
                                 </div>
                                 <div class="flex justify-between">
-                                    <span class="text-slate-500">By</span>
-                                    <span class="truncate ml-2 font-medium">{{ row.marked_by_faculty or row.marked_by_username or '-' }}</span>
+                                    <span class="text-slate-500">Marker</span>
+                                    <span class="truncate ml-2">{{ row.marked_by_username or '-' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Login</span>
+                                    <span class="truncate ml-2">{{ row.faculty_username or '-' }}</span>
                                 </div>
                                 
                                 {% if row.face_model or row.detector_model or row.remarks %}
@@ -257,12 +266,40 @@
                                 <i class="fas fa-mobile-alt text-2xl text-slate-300"></i>
                             </div>
                             <p class="font-bold text-slate-600 text-base">No Synced Logs Found</p>
-                            <p class="text-sm text-slate-400 mt-1 max-w-sm mx-auto">We couldn't find any student attendance sync logs matching your current filters. Try adjusting your search criteria.</p>
+                            <p class="text-sm text-slate-400 mt-1 max-w-sm mx-auto">We couldn't find any sync logs matching your current filters. Try adjusting your search criteria.</p>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="text-xs text-slate-500 font-medium">
+                Page {{ pagination.page }} of {{ pagination.total_pages }}
+            </div>
+
+            <div class="flex items-center gap-2">
+                {% if pagination.has_prev %}
+                <a href="{{ url_for('attendance_admin.faculty_mobile_sync_logs', page=pagination.page - 1, per_page=filters.per_page, date=filters.date, processing_status=filters.processing_status, device_id=filters.device_id, faculty_query=filters.faculty_query, shift_query=filters.shift_query) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                    <i class="fas fa-chevron-left mr-1"></i> Previous
+                </a>
+                {% else %}
+                <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                    <i class="fas fa-chevron-left mr-1"></i> Previous
+                </span>
+                {% endif %}
+
+                {% if pagination.has_next %}
+                <a href="{{ url_for('attendance_admin.faculty_mobile_sync_logs', page=pagination.page + 1, per_page=filters.per_page, date=filters.date, processing_status=filters.processing_status, device_id=filters.device_id, faculty_query=filters.faculty_query, shift_query=filters.shift_query) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                    Next <i class="fas fa-chevron-right ml-1"></i>
+                </a>
+                {% else %}
+                <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                    Next <i class="fas fa-chevron-right ml-1"></i>
+                </span>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>

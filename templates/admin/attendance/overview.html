@@ -3,217 +3,377 @@
 {% block title %}Attendance{% endblock %}
 {% block header_title %}Attendance Management{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Custom Scrollbar for inner lists */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6 sm:space-y-8 min-h-screen bg-slate-50/50 pb-12">
     
-    <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h2 class="text-2xl font-bold text-gray-800">Overview</h2>
-            <p class="text-gray-500 mt-1 text-sm">Monitor and manage student attendance across the institution</p>
+            <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Student Attendance</h2>
+            <p class="text-slate-500 mt-1 text-sm font-medium">Monitor and manage student attendance across the institution</p>
         </div>
-        <div class="flex items-center gap-3">
-            <a href="{{ url_for('attendance_admin.export_overview') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
-                <i class="fas fa-download mr-2"></i> Export CSV
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('attendance_admin.export_overview') }}" class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 shadow-sm hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                <i class="fas fa-download mr-2 text-emerald-500"></i> Export CSV
             </a>
-            <a href="{{ url_for('admin_reports.reports_index') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors">
-                <i class="fas fa-chart-pie mr-2"></i> All Reports
+            <a href="{{ url_for('admin_reports.reports_index') }}" class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow transition-all focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform active:scale-95">
+                <i class="fas fa-chart-pie mr-2 text-indigo-200"></i> All Reports
             </a>
         </div>
     </div>
 
-    <!-- Statistics Cards -->
     {% if overall_stats %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 bg-blue-100 rounded-lg">
-                    <i class="fas fa-users text-blue-600 text-2xl"></i>
-                </div>
+    <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group hover:border-blue-200 transition-colors">
+            <div class="absolute right-0 top-0 mt-4 mr-4 bg-blue-50 text-blue-500 w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i class="fas fa-users text-lg"></i>
             </div>
-            <h3 class="text-3xl font-bold text-gray-800">{{ overall_stats.total_students }}</h3>
-            <p class="text-sm text-gray-500 mt-1">Active Students</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Active Students</p>
+            <p class="text-3xl font-black text-slate-800">{{ overall_stats.total_students }}</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 bg-green-100 rounded-lg">
-                    <i class="fas fa-check-circle text-green-600 text-2xl"></i>
-                </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group hover:border-emerald-200 transition-colors">
+            <div class="absolute right-0 top-0 mt-4 mr-4 bg-emerald-50 text-emerald-500 w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i class="fas fa-check-circle text-lg"></i>
             </div>
-            <h3 class="text-3xl font-bold text-green-600">{{ overall_stats.total_present }}</h3>
-            <p class="text-sm text-gray-500 mt-1">Total Present</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Present</p>
+            <p class="text-3xl font-black text-emerald-600">{{ overall_stats.total_present }}</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 bg-yellow-100 rounded-lg">
-                    <i class="fas fa-clock text-yellow-600 text-2xl"></i>
-                </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group hover:border-amber-200 transition-colors">
+            <div class="absolute right-0 top-0 mt-4 mr-4 bg-amber-50 text-amber-500 w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i class="fas fa-clock text-lg"></i>
             </div>
-            <h3 class="text-3xl font-bold text-yellow-600">{{ overall_stats.total_late }}</h3>
-            <p class="text-sm text-gray-500 mt-1">Total Late</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Late</p>
+            <p class="text-3xl font-black text-amber-500">{{ overall_stats.total_late }}</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 bg-red-100 rounded-lg">
-                    <i class="fas fa-times-circle text-red-600 text-2xl"></i>
-                </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group hover:border-rose-200 transition-colors">
+            <div class="absolute right-0 top-0 mt-4 mr-4 bg-rose-50 text-rose-500 w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i class="fas fa-times-circle text-lg"></i>
             </div>
-            <h3 class="text-3xl font-bold text-red-600">{{ overall_stats.total_absent }}</h3>
-            <p class="text-sm text-gray-500 mt-1">Total Absent</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Absent</p>
+            <p class="text-3xl font-black text-rose-600">{{ overall_stats.total_absent }}</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 {% if overall_stats.overall_percentage >= 75 %}bg-green-100{% else %}bg-red-100{% endif %} rounded-lg">
-                    <i class="fas fa-percentage {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %} text-2xl"></i>
-                </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group col-span-2 xl:col-span-1 hover:border-slate-300 transition-colors">
+            {% set pct_color = 'emerald' if overall_stats.overall_percentage >= 75 else 'rose' %}
+            <div class="absolute right-0 top-0 mt-4 mr-4 bg-{{ pct_color }}-50 text-{{ pct_color }}-500 w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i class="fas fa-percentage text-lg"></i>
             </div>
-            <h3 class="text-3xl font-bold {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.1f"|format(overall_stats.overall_percentage) }}%</h3>
-            <p class="text-sm text-gray-500 mt-1">Overall Attendance</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Overall Rate</p>
+            <p class="text-3xl font-black text-{{ pct_color }}-600">{{ "%.1f"|format(overall_stats.overall_percentage) }}%</p>
         </div>
     </div>
     {% endif %}
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         
-        <!-- Defaulters Alert -->
-        <div class="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl shadow-sm p-6 border border-red-200">
-            <div class="flex items-center justify-between mb-4">
-                <div class="p-3 bg-red-100 rounded-lg">
-                    <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
-                </div>
+        <div class="bg-gradient-to-br from-rose-50 to-orange-50 rounded-2xl shadow-sm border border-rose-100 p-6 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div class="absolute -right-4 -top-4 opacity-10">
+                <i class="fas fa-exclamation-triangle text-9xl text-rose-600"></i>
             </div>
-            <h3 class="text-4xl font-bold text-red-700">{{ defaulter_count }}</h3>
-            <p class="text-sm text-red-700 mt-1 font-medium">Students Below 75%</p>
-            <a href="{{ url_for('attendance_admin.attendance_defaulters') }}" class="mt-4 inline-flex items-center text-sm font-medium text-red-700 hover:text-red-800">
-                View Defaulters <i class="fas fa-arrow-right ml-2"></i>
-            </a>
+            <div class="relative z-10">
+                <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-exclamation-triangle text-xl"></i>
+                </div>
+                <h3 class="text-5xl font-black text-rose-700 tracking-tight">{{ defaulter_count }}</h3>
+                <p class="text-sm text-rose-700/80 mt-2 font-bold uppercase tracking-wider">Students Below 75%</p>
+            </div>
+            <div class="mt-6 relative z-10">
+                <a href="{{ url_for('attendance_admin.attendance_defaulters') }}" class="inline-flex items-center px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors shadow-sm">
+                    View Defaulters <i class="fas fa-arrow-right ml-2"></i>
+                </a>
+            </div>
         </div>
 
-        <!-- Today's Summary by Class -->
-        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
-            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-semibold text-gray-800">Today's Attendance by Class</h3>
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200 flex flex-col h-[340px]">
+            <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-clipboard-list text-indigo-500 mr-2"></i>Today's Snapshot by Class</h3>
+                <span class="text-xs font-bold bg-white border border-slate-200 text-slate-500 px-2.5 py-1 rounded-full shadow-sm">{{ today_by_class|length }} Classes</span>
             </div>
-            <div class="p-6">
+            <div class="p-5 flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
                 {% if today_by_class %}
-                <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {% for record in today_by_class %}
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div>
-                            <h4 class="font-semibold text-gray-800">{{ record.course_name }} - {{ record.class_name }} {{ record.division_name }}</h4>
-                            <p class="text-sm text-gray-500">{{ record.students_marked }} students marked</p>
+                    <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:border-slate-300 transition-colors">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 class="font-bold text-slate-800 text-sm">{{ record.course_name }}</h4>
+                                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{{ record.class_name }} {{ record.division_name }}</p>
+                            </div>
+                            <span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-md font-bold border border-slate-200">
+                                {{ record.students_marked }} Marked
+                            </span>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <div class="text-center">
-                                <p class="text-2xl font-bold text-green-600">{{ record.present_count }}</p>
-                                <p class="text-xs text-gray-500">Present</p>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="text-center rounded-lg bg-emerald-50/50 border border-emerald-100 py-2">
+                                <p class="text-lg font-black text-emerald-600">{{ record.present_count }}</p>
+                                <p class="text-[10px] font-bold text-emerald-600/70 uppercase">Present</p>
                             </div>
-                            <div class="text-center">
-                                <p class="text-2xl font-bold text-yellow-600">{{ record.late_count }}</p>
-                                <p class="text-xs text-gray-500">Late</p>
+                            <div class="text-center rounded-lg bg-amber-50/50 border border-amber-100 py-2">
+                                <p class="text-lg font-black text-amber-500">{{ record.late_count }}</p>
+                                <p class="text-[10px] font-bold text-amber-600/70 uppercase">Late</p>
                             </div>
-                            <div class="text-center">
-                                <p class="text-2xl font-bold text-red-600">{{ record.absent_count }}</p>
-                                <p class="text-xs text-gray-500">Absent</p>
+                            <div class="text-center rounded-lg bg-rose-50/50 border border-rose-100 py-2">
+                                <p class="text-lg font-black text-rose-600">{{ record.absent_count }}</p>
+                                <p class="text-[10px] font-bold text-rose-600/70 uppercase">Absent</p>
                             </div>
                         </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-center py-8">
-                    <i class="fas fa-calendar-times text-gray-300 text-4xl mb-3"></i>
-                    <p class="text-gray-500">No attendance marked today yet</p>
+                <div class="h-full flex flex-col items-center justify-center text-center">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-calendar-times text-2xl text-slate-300"></i>
+                    </div>
+                    <p class="font-semibold text-slate-600 text-sm">No attendance marked today</p>
+                    <p class="text-xs text-slate-400 mt-1 max-w-[250px]">Once attendance is submitted, class summaries will appear here.</p>
                 </div>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- Recent Activity -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-800">Recent Attendance Activity</h3>
-            <span class="text-sm text-gray-500">Last 20 records</span>
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-200">
+        <div class="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+            <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-history text-slate-400 mr-2"></i>Recent Activity</h3>
+            {% if recent_activity_pagination.total_count > 0 %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-500 shadow-sm">
+                {{ recent_activity_pagination.start_index }}-{{ recent_activity_pagination.end_index }} of {{ recent_activity_pagination.total_count }}
+            </span>
+            {% else %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-500 shadow-sm">
+                No Records
+            </span>
+            {% endif %}
         </div>
+
+        <div class="px-6 py-4 border-b border-slate-100 bg-white">
+            <form method="GET" action="{{ url_for('attendance_admin.attendance_overview') }}" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                <div class="xl:col-span-2">
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search</label>
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ recent_activity_filters.q }}"
+                        placeholder="Student, roll, subject, class..."
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                    <select name="status" class="w-full rounded-lg border-slate-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="" {% if not recent_activity_filters.status %}selected{% endif %}>All</option>
+                        <option value="Present" {% if recent_activity_filters.status == 'Present' %}selected{% endif %}>Present</option>
+                        <option value="Late" {% if recent_activity_filters.status == 'Late' %}selected{% endif %}>Late</option>
+                        <option value="Absent" {% if recent_activity_filters.status == 'Absent' %}selected{% endif %}>Absent</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">From Date</label>
+                    <input
+                        type="date"
+                        name="date_from"
+                        value="{{ recent_activity_filters.date_from }}"
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">To Date</label>
+                    <input
+                        type="date"
+                        name="date_to"
+                        value="{{ recent_activity_filters.date_to }}"
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rows</label>
+                    <div class="flex gap-2">
+                        <select name="per_page" class="w-full rounded-lg border-slate-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="20" {% if recent_activity_filters.per_page == 20 %}selected{% endif %}>20</option>
+                            <option value="50" {% if recent_activity_filters.per_page == 50 %}selected{% endif %}>50</option>
+                            <option value="100" {% if recent_activity_filters.per_page == 100 %}selected{% endif %}>100</option>
+                        </select>
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+
+                <div class="xl:col-span-6 flex justify-end">
+                    <a href="{{ url_for('attendance_admin.attendance_overview') }}" class="inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors">
+                        Reset Filters
+                    </a>
+                </div>
+            </form>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="bg-white border-b border-slate-200">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marked By</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marked At</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Student</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Class & Subject</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wider">Details</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="divide-y divide-slate-100">
                     {% for record in recent_activity %}
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ record.attendance_date }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900">{{ record.student_name }}</div>
-                            <div class="text-sm text-gray-500">{{ record.roll_number }}</div>
+                    <tr class="hover:bg-slate-50/80 transition-colors group">
+
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold flex-shrink-0">
+                                    {{ record.student_name[:1] | upper if record.student_name else '?' }}
+                                </div>
+                                <div>
+                                    <div class="font-bold text-slate-800">{{ record.student_name }}</div>
+                                    <div class="text-[11px] font-medium text-slate-500 mt-0.5">
+                                        {{ record.roll_number }}
+                                    </div>
+                                </div>
+                            </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ record.class_info }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ record.subject_name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
+
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-700">{{ record.subject_name }}</div>
+                            <div class="text-[11px] font-medium text-slate-500 mt-0.5 bg-slate-100 px-2 py-0.5 rounded w-max border border-slate-200">
+                                {{ record.class_info }}
+                            </div>
+                        </td>
+
+                        <td class="px-6 py-4">
                             {% if record.status == 'Present' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Present</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> Present
+                            </span>
                             {% elif record.status == 'Late' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Late</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span> Late
+                            </span>
                             {% else %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Absent</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span> Absent
+                            </span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ record.marked_by }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ record.marked_at }}</td>
+
+                        <td class="px-6 py-4">
+                            <div class="text-xs font-medium text-slate-700">Marked by: {{ record.marked_by }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5 flex flex-col gap-0.5">
+                                <span>Date: {{ record.attendance_date }}</span>
+                                <span>Time: {{ record.marked_at }}</span>
+                            </div>
+                        </td>
+
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                            <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
-                            <p>No recent attendance records</p>
+                        <td colspan="4" class="px-6 py-16 text-center">
+                            <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                                <i class="fas fa-inbox text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="font-bold text-slate-600 text-base">No matching records</p>
+                            <p class="text-sm text-slate-400 mt-1 max-w-sm mx-auto">Try widening date range or clearing filters.</p>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        <div class="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+            <div class="text-xs text-slate-500 font-medium">
+                Page {{ recent_activity_pagination.page }} of {{ recent_activity_pagination.total_pages }}
+            </div>
+
+            <div class="flex items-center gap-2">
+                {% if recent_activity_pagination.has_prev %}
+                <a
+                    href="{{ url_for('attendance_admin.attendance_overview', page=recent_activity_pagination.page - 1, per_page=recent_activity_filters.per_page, status=recent_activity_filters.status, q=recent_activity_filters.q, date_from=recent_activity_filters.date_from, date_to=recent_activity_filters.date_to) }}"
+                    class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors"
+                >
+                    <i class="fas fa-chevron-left mr-1"></i> Previous
+                </a>
+                {% else %}
+                <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                    <i class="fas fa-chevron-left mr-1"></i> Previous
+                </span>
+                {% endif %}
+
+                {% if recent_activity_pagination.has_next %}
+                <a
+                    href="{{ url_for('attendance_admin.attendance_overview', page=recent_activity_pagination.page + 1, per_page=recent_activity_filters.per_page, status=recent_activity_filters.status, q=recent_activity_filters.q, date_from=recent_activity_filters.date_from, date_to=recent_activity_filters.date_to) }}"
+                    class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors"
+                >
+                    Next <i class="fas fa-chevron-right ml-1"></i>
+                </a>
+                {% else %}
+                <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                    Next <i class="fas fa-chevron-right ml-1"></i>
+                </span>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
-    <!-- Charts Section -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Attendance Trend Chart -->
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                <i class="fas fa-chart-line text-indigo-600 mr-2"></i>30-Day Attendance Trend
-            </h3>
-            <div style="position: relative; height: 300px;">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <i class="fas fa-chart-line text-indigo-500 mr-2"></i>30-Day Trend
+                </h3>
+            </div>
+            <div class="p-6 flex-1 w-full relative min-h-[300px]">
                 <canvas id="trendChart"></canvas>
             </div>
         </div>
 
-        <!-- Class-wise Distribution Chart -->
-        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                <i class="fas fa-chart-bar text-indigo-600 mr-2"></i>Top Classes by Attendance
-            </h3>
-            <div style="position: relative; height: 300px;">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>Top Classes
+                </h3>
+            </div>
+            <div class="p-6 flex-1 w-full relative min-h-[300px]">
                 <canvas id="distributionChart"></canvas>
             </div>
         </div>
     </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+// Styling config to match Tailwind theme
+const chartConfig = {
+    fontFamily: "'Inter', sans-serif",
+    textColor: '#64748b', // slate-500
+    gridColor: '#f1f5f9'  // slate-100
+};
+
+Chart.defaults.font.family = chartConfig.fontFamily;
+Chart.defaults.color = chartConfig.textColor;
+
 // Trend Chart
 fetch('{{ url_for("attendance_admin.charts_data") }}?type=trend')
     .then(response => response.json())
@@ -227,26 +387,46 @@ fetch('{{ url_for("attendance_admin.charts_data") }}?type=trend')
                     label: ds.label,
                     data: ds.data,
                     borderColor: ds.color,
-                    backgroundColor: ds.color + '20',
+                    backgroundColor: ds.color + '20', // Add alpha for fill
                     borderWidth: 2,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 5
                 }))
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
                     legend: {
                         position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 8,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)', // slate-900
+                        titleFont: { size: 13, family: chartConfig.fontFamily },
+                        bodyFont: { size: 13, family: chartConfig.fontFamily },
+                        padding: 10,
+                        cornerRadius: 8
                     }
                 },
                 scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false }
+                    },
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            precision: 0
-                        }
+                        grid: { color: chartConfig.gridColor, borderDash: [4, 4], drawBorder: false },
+                        ticks: { precision: 0 }
                     }
                 }
             }
@@ -254,7 +434,7 @@ fetch('{{ url_for("attendance_admin.charts_data") }}?type=trend')
     })
     .catch(error => {
         console.error('Error loading trend chart:', error);
-        document.getElementById('trendChart').parentElement.innerHTML = '<p class="text-center text-gray-500 py-8">Failed to load chart data</p>';
+        document.getElementById('trendChart').parentElement.innerHTML = '<div class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">Failed to load chart data</div>';
     });
 
 // Distribution Chart
@@ -262,34 +442,54 @@ fetch('{{ url_for("attendance_admin.charts_data") }}?type=distribution')
     .then(response => response.json())
     .then(data => {
         const ctx = document.getElementById('distributionChart').getContext('2d');
+        
+        // Gradient for bars
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, '#6366f1'); // indigo-500
+        gradient.addColorStop(1, '#818cf8'); // indigo-400
+
         new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: data.labels,
                 datasets: [{
-                    label: 'Attendance %',
+                    label: 'Attendance Rate',
                     data: data.data,
-                    backgroundColor: '#6366f1',
-                    borderColor: '#4f46e5',
-                    borderWidth: 1
+                    backgroundColor: gradient,
+                    borderColor: 'transparent',
+                    borderWidth: 0,
+                    borderRadius: 6,
+                    barPercentage: 0.6
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)', // slate-900
+                        titleFont: { size: 13, family: chartConfig.fontFamily },
+                        bodyFont: { size: 13, family: chartConfig.fontFamily },
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + '%';
+                            }
+                        }
                     }
                 },
                 scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false }
+                    },
                     y: {
                         beginAtZero: true,
                         max: 100,
+                        grid: { color: chartConfig.gridColor, borderDash: [4, 4], drawBorder: false },
                         ticks: {
-                            callback: function(value) {
-                                return value + '%';
-                            },
+                            callback: function(value) { return value + '%'; },
                             precision: 0
                         }
                     }
@@ -299,7 +499,7 @@ fetch('{{ url_for("attendance_admin.charts_data") }}?type=distribution')
     })
     .catch(error => {
         console.error('Error loading distribution chart:', error);
-        document.getElementById('distributionChart').parentElement.innerHTML = '<p class="text-center text-gray-500 py-8">Failed to load chart data</p>';
+        document.getElementById('distributionChart').parentElement.innerHTML = '<div class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">Failed to load chart data</div>';
     });
 </script>
 {% endblock %}

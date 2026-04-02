@@ -1,0 +1,377 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Faculty Attendance{% endblock %}
+{% block header_title %}Faculty Attendance Overview{% endblock %}
+
+{% block content %}
+<div class="space-y-6 sm:space-y-8 min-h-screen bg-slate-50/50 pb-12">
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Faculty Attendance</h2>
+            <p class="text-slate-500 mt-1 text-sm font-medium">Monitor shift-wise faculty attendance synced from mobile and panel actions</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('attendance_admin.faculty_mobile_sync_logs') }}" class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 shadow-sm hover:bg-slate-50 hover:text-indigo-600 transition-all focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                <i class="fas fa-mobile-alt mr-2 text-indigo-500"></i> Mobile Logs
+            </a>
+            {% if user_has_perm('attendance_view') %}
+            <a href="{{ url_for('attendance_admin.attendance_overview') }}" class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow transition-all focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform active:scale-95">
+                <i class="fas fa-users mr-2"></i> Student Overview
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md transition-shadow group">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <i class="fas fa-chalkboard-teacher text-xl"></i>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Faculty</p>
+                <h3 class="text-2xl font-black text-slate-800 mt-0.5">{{ overall_stats.total_faculty }}</h3>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md transition-shadow group">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                <i class="fas fa-check-circle text-xl"></i>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Present <span class="text-[10px] lowercase text-slate-400 font-medium">(30d)</span></p>
+                <h3 class="text-2xl font-black text-slate-800 mt-0.5">{{ overall_stats.total_present }}</h3>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md transition-shadow group">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center bg-amber-50 text-amber-600 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                <i class="fas fa-clock text-xl"></i>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Late <span class="text-[10px] lowercase text-slate-400 font-medium">(30d)</span></p>
+                <h3 class="text-2xl font-black text-slate-800 mt-0.5">{{ overall_stats.total_late }}</h3>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md transition-shadow group">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                <i class="fas fa-times-circle text-xl"></i>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Absent <span class="text-[10px] lowercase text-slate-400 font-medium">(30d)</span></p>
+                <h3 class="text-2xl font-black text-slate-800 mt-0.5">{{ overall_stats.total_absent }}</h3>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md transition-shadow group sm:col-span-2 xl:col-span-1">
+            {% set pct_color = 'emerald' if overall_stats.overall_percentage >= 75 else 'rose' %}
+            <div class="w-14 h-14 rounded-full flex items-center justify-center bg-{{ pct_color }}-50 text-{{ pct_color }}-600 group-hover:bg-{{ pct_color }}-600 group-hover:text-white transition-colors">
+                <i class="fas fa-percentage text-xl"></i>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Attendance Rate</p>
+                <h3 class="text-2xl font-black text-{{ pct_color }}-600 mt-0.5">{{ "%.1f"|format(overall_stats.overall_percentage) }}%</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden xl:col-span-2 flex flex-col h-full">
+            <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-history text-slate-400 mr-2"></i>Recent Activity</h3>
+                {% if recent_activity_pagination.total_count > 0 %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                    {{ recent_activity_pagination.start_index }}-{{ recent_activity_pagination.end_index }} of {{ recent_activity_pagination.total_count }}
+                </span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                    No Records
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                <form method="GET" action="{{ url_for('attendance_admin.faculty_attendance_overview') }}" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 items-end">
+                    <div class="xl:col-span-2">
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Search</label>
+                        <input
+                            type="text"
+                            name="ra_q"
+                            value="{{ recent_activity_filters.q }}"
+                            placeholder="Faculty, employee ID, department, shift..."
+                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Status</label>
+                        <select name="ra_status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+                            <option value="" {% if not recent_activity_filters.status %}selected{% endif %}>All</option>
+                            <option value="Present" {% if recent_activity_filters.status == 'Present' %}selected{% endif %}>Present</option>
+                            <option value="Late" {% if recent_activity_filters.status == 'Late' %}selected{% endif %}>Late</option>
+                            <option value="Absent" {% if recent_activity_filters.status == 'Absent' %}selected{% endif %}>Absent</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">From Date</label>
+                        <input
+                            type="date"
+                            name="ra_date_from"
+                            value="{{ recent_activity_filters.date_from }}"
+                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">To Date</label>
+                        <input
+                            type="date"
+                            name="ra_date_to"
+                            value="{{ recent_activity_filters.date_to }}"
+                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white"
+                        >
+                    </div>
+
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Rows</label>
+                            <select name="ra_per_page" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all hover:bg-white">
+                                <option value="20" {% if recent_activity_filters.per_page == 20 %}selected{% endif %}>20</option>
+                                <option value="50" {% if recent_activity_filters.per_page == 50 %}selected{% endif %}>50</option>
+                                <option value="100" {% if recent_activity_filters.per_page == 100 %}selected{% endif %}>100</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit" class="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-700 transition-all shadow-sm active:scale-95">Apply</button>
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-6 flex justify-end">
+                        <a href="{{ url_for('attendance_admin.faculty_attendance_overview') }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                            Reset Filters
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            <div class="overflow-x-auto flex-1">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50/80 text-xs uppercase font-bold text-slate-500 tracking-wider">
+                        <tr>
+                            <th class="px-6 py-4">Faculty</th>
+                            <th class="px-6 py-4">Shift & Time</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4">Marked By</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for row in recent_activity %}
+                        <tr class="hover:bg-slate-50/80 transition-colors group">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold flex-shrink-0">
+                                        {{ row.faculty_name[:1] | upper if row.faculty_name else '?' }}
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-slate-800">{{ row.faculty_name or 'Unknown Faculty' }}</div>
+                                        <div class="text-[11px] font-medium text-slate-500 mt-0.5">
+                                            {{ row.employee_id or '-' }} {% if row.department_name %}• {{ row.department_name }}{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="font-semibold text-slate-700">{{ row.shift_name or 'General Availability' }}</div>
+                                <div class="text-[11px] text-slate-500 flex items-center mt-1">
+                                    <i class="far fa-clock mr-1"></i> {{ row.shift_start_time or '-' }} - {{ row.shift_end_time or '-' }}
+                                </div>
+                                <div class="text-[10px] font-medium text-slate-400 mt-0.5">{{ row.attendance_date or '-' }}</div>
+                            </td>
+                            <td class="px-6 py-4">
+                                {% if row.status == 'Present' %}
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> Present
+                                </span>
+                                {% elif row.status == 'Late' %}
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span> Late
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span> Absent
+                                </span>
+                                {% endif %}
+                                <div class="text-[10px] text-slate-400 mt-1.5 font-medium">via {{ row.source or '-' }}</div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-medium text-slate-700">{{ row.marked_by_username or '-' }}</div>
+                                <div class="text-[10px] text-slate-400 mb-1">{{ row.marked_at or '-' }}</div>
+                                <a href="{{ url_for('attendance_admin.faculty_attendance_details', faculty_id=row.faculty_id) }}" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    View Log &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-16 text-center text-slate-500">
+                                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <i class="fas fa-inbox text-2xl text-slate-300"></i>
+                                </div>
+                                <p class="font-medium text-slate-600">No matching activity found.</p>
+                                <p class="text-xs text-slate-400 mt-1">Try widening date range or clearing filters.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="text-xs text-slate-500 font-medium">
+                    Page {{ recent_activity_pagination.page }} of {{ recent_activity_pagination.total_pages }}
+                </div>
+
+                <div class="flex items-center gap-2">
+                    {% if recent_activity_pagination.has_prev %}
+                    <a href="{{ url_for('attendance_admin.faculty_attendance_overview', ra_page=recent_activity_pagination.page - 1, ra_per_page=recent_activity_filters.per_page, ra_status=recent_activity_filters.status, ra_q=recent_activity_filters.q, ra_date_from=recent_activity_filters.date_from, ra_date_to=recent_activity_filters.date_to) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                        <i class="fas fa-chevron-left mr-1"></i> Previous
+                    </a>
+                    {% else %}
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                        <i class="fas fa-chevron-left mr-1"></i> Previous
+                    </span>
+                    {% endif %}
+
+                    {% if recent_activity_pagination.has_next %}
+                    <a href="{{ url_for('attendance_admin.faculty_attendance_overview', ra_page=recent_activity_pagination.page + 1, ra_per_page=recent_activity_filters.per_page, ra_status=recent_activity_filters.status, ra_q=recent_activity_filters.q, ra_date_from=recent_activity_filters.date_from, ra_date_to=recent_activity_filters.date_to) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors">
+                        Next <i class="fas fa-chevron-right ml-1"></i>
+                    </a>
+                    {% else %}
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
+                        Next <i class="fas fa-chevron-right ml-1"></i>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full">
+            <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-calendar-day text-indigo-500 mr-2"></i>Today's Snapshot</h3>
+            </div>
+            <div class="p-5 flex-1 overflow-y-auto space-y-4">
+                {% for row in today_by_shift %}
+                <div class="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-slate-300 transition-colors">
+                    <div class="flex justify-between items-start mb-3">
+                        <p class="font-bold text-slate-800">{{ row.shift_name }}</p>
+                        <span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-md font-bold border border-slate-200">
+                            {{ row.total_marked }} Marked
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="text-center rounded-lg bg-emerald-50/50 border border-emerald-100 py-2.5">
+                            <p class="text-lg font-black text-emerald-600">{{ row.present_count }}</p>
+                            <p class="text-[10px] font-bold text-emerald-600/70 uppercase">Present</p>
+                        </div>
+                        <div class="text-center rounded-lg bg-amber-50/50 border border-amber-100 py-2.5">
+                            <p class="text-lg font-black text-amber-600">{{ row.late_count }}</p>
+                            <p class="text-[10px] font-bold text-amber-600/70 uppercase">Late</p>
+                        </div>
+                        <div class="text-center rounded-lg bg-rose-50/50 border border-rose-100 py-2.5">
+                            <p class="text-lg font-black text-rose-600">{{ row.absent_count }}</p>
+                            <p class="text-[10px] font-bold text-rose-600/70 uppercase">Absent</p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center justify-center h-full text-center py-10">
+                    <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-coffee text-2xl text-slate-300"></i>
+                    </div>
+                    <p class="font-semibold text-slate-700">No records today</p>
+                    <p class="text-xs text-slate-400 mt-1 max-w-[200px]">Attendance hasn't been synced or marked for today's shifts yet.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-chart-line text-blue-500 mr-2"></i>30-Day Performance Summary</h3>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                {{ faculty_summary|length }} Faculty Members
+            </span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50/80 text-xs uppercase font-bold text-slate-500 tracking-wider">
+                    <tr>
+                        <th class="px-6 py-4">Faculty Info</th>
+                        <th class="px-6 py-4">Total Shifts</th>
+                        <th class="px-6 py-4 text-center">P</th>
+                        <th class="px-6 py-4 text-center">L</th>
+                        <th class="px-6 py-4 text-center">A</th>
+                        <th class="px-6 py-4 min-w-[200px]">Health Rate</th>
+                        <th class="px-6 py-4 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for row in faculty_summary %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-800">{{ row.faculty_name }}</div>
+                            <div class="text-[11px] font-medium text-slate-500 mt-0.5">
+                                {{ row.employee_id or 'No ID' }} {% if row.department_name %}• {{ row.department_name }}{% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">{{ row.total_shifts }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="font-bold text-emerald-600">{{ row.total_present }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="font-bold text-amber-600">{{ row.total_late }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="font-bold text-rose-600">{{ row.total_absent }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% set pct = row.attendance_percentage %}
+                            {% set bar_color = 'bg-emerald-500' if pct >= 75 else ('bg-amber-500' if pct >= 60 else 'bg-rose-500') %}
+                            {% set text_color = 'text-emerald-700' if pct >= 75 else ('text-amber-700' if pct >= 60 else 'text-rose-700') %}
+                            
+                            <div class="flex items-center gap-3">
+                                <span class="font-bold {{ text_color }} w-12">{{ "%.1f"|format(pct) }}%</span>
+                                <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div class="h-full {{ bar_color }} rounded-full" style="width: {{ pct }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="{{ url_for('attendance_admin.faculty_attendance_details', faculty_id=row.faculty_id) }}" class="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm">
+                                View <i class="fas fa-chevron-right ml-1.5 text-[10px]"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-16 text-center text-slate-500">
+                            <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i class="fas fa-user-clock text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="font-medium text-slate-600">No faculty attendance summary available.</p>
+                            <p class="text-xs text-slate-400 mt-1">Data will populate after shifts are marked.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

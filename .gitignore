@@ -21,7 +21,7 @@ v1_scripts_bkp
 Documents
 migrations
 scripts
-
+backups/*
 ml/models/*
 
 static/css/all.min.css

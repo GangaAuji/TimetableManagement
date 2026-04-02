@@ -16,10 +16,13 @@ def manage_faculty():
     search = request.args.get('search', '', type=str)
     department_filter = request.args.get('department_filter', '', type=str)
     
-    query_base = "FROM faculty f LEFT JOIN departments d ON f.department_id = d.id"
+    query_base = "FROM faculty f LEFT JOIN departments d ON f.department_id = d.id LEFT JOIN users u ON f.user_id = u.id"
     
     # Build WHERE clause
-    where_conditions = []
+    where_conditions = [
+        "u.role = 'Teacher'",
+        "COALESCE(u.status, 'active') = 'active'",
+    ]
     params = []
     
     # Apply department filtering based on user permissions
@@ -47,7 +50,7 @@ def manage_faculty():
         query_base += " WHERE " + " AND ".join(where_conditions)
 
     # Fetch: id, name, email, username, phone, is_active, employee_id, designation, department_name
-    query = f"SELECT f.id, f.name, f.email, u.username, f.phone, f.is_active, f.employee_id, f.designation, d.name AS department_name {query_base.replace('FROM faculty f', 'FROM faculty f LEFT JOIN users u ON f.user_id = u.id')}"
+    query = f"SELECT f.id, f.name, f.email, u.username, f.phone, f.is_active, f.employee_id, f.designation, d.name AS department_name {query_base}"
     faculty, total_pages = paginate(query, tuple(params), page)
     
     connection = get_db_connection()
@@ -58,8 +61,22 @@ def manage_faculty():
     departments = cursor.fetchall()
     
     # Get total active and inactive faculty counts (without filters)
-    total_active_query = "SELECT COUNT(f.id) AS total FROM faculty f WHERE f.is_active = 1"
-    total_inactive_query = "SELECT COUNT(f.id) AS total FROM faculty f WHERE f.is_active = 0"
+    total_active_query = """
+        SELECT COUNT(f.id) AS total
+        FROM faculty f
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE f.is_active = 1
+          AND u.role = 'Teacher'
+          AND COALESCE(u.status, 'active') = 'active'
+    """
+    total_inactive_query = """
+        SELECT COUNT(f.id) AS total
+        FROM faculty f
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE f.is_active = 0
+          AND u.role = 'Teacher'
+          AND COALESCE(u.status, 'active') = 'active'
+    """
     
     # Respect department access permissions
     if accessible_faculty_ids is not None:
@@ -226,16 +243,35 @@ def update_faculty(faculty_id):
 @has_permission('faculty_delete_faculty')
 def bulk_delete_faculty():
     ids_to_delete = request.form.getlist('faculty_ids')
-    if ids_to_delete:
-        connection = get_db_connection()
+    if not ids_to_delete:
+        flash('No faculty members selected for deletion.', 'warning')
+        return redirect(url_for('faculty.manage_faculty'))
 
-        cursor = connection.cursor(dictionary=True)
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
         format_strings = ','.join(['%s'] * len(ids_to_delete))
-        # Without user_id FK, just delete faculty records
-        cursor.execute(f"DELETE FROM faculty WHERE id IN ({format_strings})", tuple(ids_to_delete))
+        cursor.execute(f"SELECT user_id FROM faculty WHERE id IN ({format_strings})", tuple(ids_to_delete))
+        user_ids = [row['user_id'] for row in cursor.fetchall() if row.get('user_id')]
+
+        cursor.execute(f"UPDATE faculty SET is_active = 0 WHERE id IN ({format_strings})", tuple(ids_to_delete))
+
+        if user_ids:
+            user_format_strings = ','.join(['%s'] * len(user_ids))
+            cursor.execute(
+                f"UPDATE users SET status = 'inactive' WHERE id IN ({user_format_strings}) AND role != 'Super Admin'",
+                tuple(user_ids),
+            )
+
         connection.commit()
-        flash(f'{len(ids_to_delete)} faculty members deleted.', 'success')
+        flash(f'{len(ids_to_delete)} faculty members deactivated.', 'success')
+    except Exception as e:
+        connection.rollback()
+        current_app.logger.error(f"Error deactivating faculty: {str(e)}")
+        flash('Error deactivating faculty. Please try again.', 'danger')
+    finally:
         cursor.close()
+        connection.close()
     return redirect(url_for('faculty.manage_faculty'))
 
 

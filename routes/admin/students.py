@@ -32,6 +32,7 @@ def manage_students():
     
     # Comprehensive query with all JOINs
     query_base = """FROM students s 
+        LEFT JOIN users u ON s.user_id = u.id
         LEFT JOIN courses c ON s.course_id = c.id 
         LEFT JOIN classes cl ON s.class_id = cl.id 
         LEFT JOIN divisions d ON s.division_id = d.id
@@ -45,7 +46,11 @@ def manage_students():
                     {query_base}"""
     
     # Build WHERE clause
-    where_conditions = []
+    where_conditions = [
+        "u.role = 'Student'",
+        "COALESCE(u.status, 'active') = 'active'",
+        "COALESCE(s.is_active, 1) = 1",
+    ]
     params = []
     
     # Apply department filtering based on user permissions
@@ -101,11 +106,18 @@ def manage_students():
     cursor.execute("SELECT id, name FROM divisions ORDER BY name"); divisions = cursor.fetchall()
     
     # Get total active students count (without filters)
-    total_active_query = "SELECT COUNT(s.id) AS total FROM students s"
+    total_active_query = """
+        SELECT COUNT(s.id) AS total
+        FROM students s
+        LEFT JOIN users u ON s.user_id = u.id
+        WHERE u.role = 'Student'
+          AND COALESCE(u.status, 'active') = 'active'
+          AND COALESCE(s.is_active, 1) = 1
+    """
     if accessible_student_ids is not None:
         if accessible_student_ids:
             placeholders = ','.join(['%s'] * len(accessible_student_ids))
-            total_active_query += f" WHERE s.id IN ({placeholders})"
+            total_active_query += f" AND s.id IN ({placeholders})"
             cursor.execute(total_active_query, tuple(accessible_student_ids))
         else:
             cursor.execute("SELECT 0 AS total")  # No access
@@ -256,21 +268,24 @@ def bulk_delete_students():
     
     cursor = connection.cursor(dictionary=True)
     try:
-        # Get user_ids for the students to be deleted
+        # Resolve linked user IDs once, then perform soft delete.
         format_strings = ','.join(['%s'] * len(ids_to_delete))
         cursor.execute(f"SELECT user_id FROM students WHERE id IN ({format_strings})", tuple(ids_to_delete))
         user_ids = [row['user_id'] for row in cursor.fetchall()]
-        
-        # Delete students first (FK constraint)
-        cursor.execute(f"DELETE FROM students WHERE id IN ({format_strings})", tuple(ids_to_delete))
-        
-        # Delete corresponding user accounts
+
+        # Soft-delete students instead of hard delete to preserve attendance history.
+        cursor.execute(f"UPDATE students SET is_active = 0 WHERE id IN ({format_strings})", tuple(ids_to_delete))
+
+        # Soft-delete linked users.
         if user_ids:
             user_format_strings = ','.join(['%s'] * len(user_ids))
-            cursor.execute(f"DELETE FROM users WHERE id IN ({user_format_strings})", tuple(user_ids))
+            cursor.execute(
+                f"UPDATE users SET status = 'inactive' WHERE id IN ({user_format_strings}) AND role != 'Super Admin'",
+                tuple(user_ids),
+            )
         
         connection.commit()
-        flash(f'{len(ids_to_delete)} students deleted successfully.', 'success')
+        flash(f'{len(ids_to_delete)} students deactivated successfully.', 'success')
     except Exception as e:
         connection.rollback()
         current_app.logger.error(f"Error deleting students: {str(e)}")

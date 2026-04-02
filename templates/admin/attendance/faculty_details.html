@@ -1,0 +1,201 @@
+{% extends "admin/_layout.html" %}
+
+{% block title %}Faculty Attendance Details{% endblock %}
+{% block header_title %}Faculty Attendance Details{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">{{ faculty.name }}</h2>
+            <p class="text-gray-500 mt-1 text-sm">
+                {{ faculty.employee_id or '-' }}
+                {% if faculty.department_name %} | {{ faculty.department_name }}{% endif %}
+                {% if faculty.designation %} | {{ faculty.designation }}{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('attendance_admin.faculty_attendance_overview') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i> Back to Faculty Overview
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-calendar-check text-blue-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-gray-800">{{ overall_stats.total_shifts }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Total Shifts Marked</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-green-600">{{ overall_stats.total_present }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Present</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-clock text-yellow-600 text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold text-yellow-600">{{ overall_stats.total_late }}</h3>
+            <p class="text-sm text-gray-500 mt-1">Late</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 {% if overall_stats.overall_percentage >= 75 %}bg-green-100{% else %}bg-red-100{% endif %} rounded-lg">
+                    <i class="fas fa-percentage {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %} text-2xl"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-bold {% if overall_stats.overall_percentage >= 75 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.1f"|format(overall_stats.overall_percentage) }}%</h3>
+            <p class="text-sm text-gray-500 mt-1">Present + Late</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-semibold text-gray-800">Shift-wise Attendance</h3>
+        </div>
+
+        {% if shift_wise %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shift</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Present</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Late</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Absent</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">%</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Period</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in shift_wise %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ row.shift_name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ row.total_shifts }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-semibold">{{ row.present_count }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-amber-700 font-semibold">{{ row.late_count }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-red-700 font-semibold">{{ row.absent_count }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full {% if row.attendance_percentage >= 75 %}bg-green-100 text-green-700{% elif row.attendance_percentage >= 60 %}bg-amber-100 text-amber-700{% else %}bg-red-100 text-red-700{% endif %}">
+                                {{ "%.2f"|format(row.attendance_percentage) }}%
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ row.first_marked or '-' }}
+                            <span class="mx-1">to</span>
+                            {{ row.last_marked or '-' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <i class="fas fa-clipboard-list text-gray-300 text-5xl mb-4"></i>
+            <p class="text-gray-500">No shift-wise attendance data available</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">Recent Shift Records</h3>
+            <span class="text-sm text-gray-500">{{ recent_records|length }} rows shown</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Shift</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Captured/Marked</th>
+                        <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">Meta</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in recent_records %}
+                    <tr class="hover:bg-gray-50 align-top">
+                        <td class="px-4 py-3 whitespace-nowrap text-gray-700">{{ row.attendance_date or '-' }}</td>
+                        <td class="px-4 py-3">
+                            <div class="text-gray-900">{{ row.shift_name or 'General Availability' }}</div>
+                            <div class="text-xs text-gray-500">{{ row.shift_start_time or '-' }} - {{ row.shift_end_time or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if row.status == 'Present' %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">Present</span>
+                            {% elif row.status == 'Late' %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Late</span>
+                            {% else %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">Absent</span>
+                            {% endif %}
+                            <div class="text-xs text-gray-500 mt-1">Source: {{ row.source or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-gray-700">
+                            <div>Captured: {{ row.captured_at or '-' }}</div>
+                            <div class="text-xs text-gray-500">Marked: {{ row.marked_at or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-gray-700">
+                            <div>By: {{ row.marked_by_username or '-' }}</div>
+                            <div class="text-xs text-gray-500">Confidence: {{ row.confidence if row.confidence is not none else '-' }}</div>
+                            {% if row.remarks %}
+                            <div class="text-xs text-gray-600 mt-1 max-w-xs break-words">{{ row.remarks }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                            <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
+                            <p>No faculty attendance records found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div class="flex items-start gap-4">
+            <div class="p-3 bg-blue-100 rounded-lg">
+                <i class="fas fa-address-card text-blue-600 text-2xl"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="font-semibold text-gray-800 mb-3">Contact Information</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-600">Email</p>
+                        <a href="mailto:{{ faculty.email }}" class="text-sm font-medium text-blue-600 hover:text-blue-800">
+                            {{ faculty.email or 'Not provided' }}
+                        </a>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Phone</p>
+                        <a href="tel:{{ faculty.phone }}" class="text-sm font-medium text-blue-600 hover:text-blue-800">
+                            {{ faculty.phone or 'Not provided' }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

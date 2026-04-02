@@ -112,7 +112,9 @@ def _enforce_rate_limit_and_nonce(cursor, device, nonce):
     request_count = int(count_row.get("request_count", 0))
 
     limit_value = int(device.get("rate_limit_per_minute") or Config.MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE)
-    if request.path.startswith("/mobile-sync/v1/attendance/sync"):
+    if request.path.startswith("/mobile-sync/v1/attendance/sync") or request.path.startswith(
+        "/mobile-sync/v1/faculty-attendance/sync"
+    ):
         multiplier = int(getattr(Config, "MOBILE_SYNC_ATTENDANCE_RATE_LIMIT_MULTIPLIER", 1) or 1)
         if multiplier > 1:
             limit_value *= multiplier

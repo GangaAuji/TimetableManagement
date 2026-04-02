@@ -57,6 +57,58 @@ def _promote_log_to_attendance(cursor, log_row):
     )
 
 
+def _promote_log_to_faculty_attendance(cursor, log_row):
+    cursor.execute(
+        """
+        INSERT INTO faculty_attendance (
+            faculty_id,
+            faculty_user_id,
+            attendance_date,
+            day_of_week,
+            shift_key,
+            shift_pattern_id,
+            shift_name,
+            shift_code,
+            shift_start_time,
+            shift_end_time,
+            status,
+            marked_by_user_id,
+            source,
+            captured_at,
+            confidence,
+            remarks
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'mobile_face', %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            marked_by_user_id = VALUES(marked_by_user_id),
+            captured_at = VALUES(captured_at),
+            confidence = VALUES(confidence),
+            remarks = VALUES(remarks),
+            source = VALUES(source),
+            marked_at = NOW(),
+            updated_at = NOW()
+        """,
+        (
+            log_row["faculty_id"],
+            log_row["faculty_user_id"],
+            log_row["attendance_date"],
+            log_row["day_of_week"],
+            log_row["shift_key"],
+            log_row.get("shift_pattern_id"),
+            log_row.get("shift_name"),
+            log_row.get("shift_code"),
+            log_row.get("shift_start_time"),
+            log_row.get("shift_end_time"),
+            log_row["status"],
+            log_row["marked_by_user_id"],
+            log_row.get("captured_at"),
+            log_row.get("confidence"),
+            log_row.get("remarks"),
+        ),
+    )
+
+
 @attendance_admin_bp.route('/')
 @has_permission('attendance_view')
 def attendance_overview():
@@ -121,28 +173,115 @@ def attendance_overview():
             record['late_count'] = int(record['late_count'] or 0)
             record['absent_count'] = int(record['absent_count'] or 0)
         
-        # Get recent attendance activity
-        cursor.execute("""
+        # Build scalable filters + pagination for recent attendance activity.
+        page = request.args.get('page', 1, type=int) or 1
+        page = max(page, 1)
+
+        per_page = request.args.get('per_page', 20, type=int) or 20
+        if per_page not in (20, 50, 100):
+            per_page = 20
+
+        status_filter = (request.args.get('status') or '').strip()
+        if status_filter not in ('Present', 'Late', 'Absent'):
+            status_filter = ''
+
+        search_query = (request.args.get('q') or '').strip()
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
+
+        if date_from:
+            try:
+                datetime.strptime(date_from, '%Y-%m-%d')
+            except ValueError:
+                date_from = ''
+
+        if date_to:
+            try:
+                datetime.strptime(date_to, '%Y-%m-%d')
+            except ValueError:
+                date_to = ''
+
+        where_clauses = []
+        where_params = []
+
+        if status_filter:
+            where_clauses.append('a.status = %s')
+            where_params.append(status_filter)
+
+        if date_from:
+            where_clauses.append('a.attendance_date >= %s')
+            where_params.append(date_from)
+
+        if date_to:
+            where_clauses.append('a.attendance_date <= %s')
+            where_params.append(date_to)
+
+        if search_query:
+            like_query = f"%{search_query}%"
+            where_clauses.append(
+                """
+                (
+                    st.name LIKE %s
+                    OR st.roll_number LIKE %s
+                    OR s.name LIKE %s
+                    OR c.name LIKE %s
+                    OR cl.name LIKE %s
+                    OR d.name LIKE %s
+                )
+                """
+            )
+            where_params.extend([like_query] * 6)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ''
+
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS total_count
+            FROM attendance a
+            JOIN students st ON a.student_id = st.id
+            JOIN timetable t ON a.timetable_id = t.id
+            JOIN subjects s ON t.subject_id = s.id
+            JOIN courses c ON t.course_id = c.id
+            JOIN classes cl ON t.class_id = cl.id
+            JOIN divisions d ON t.division_id = d.id
+            {where_sql}
+            """,
+            tuple(where_params),
+        )
+        total_count_row = cursor.fetchone() or {}
+        total_count = int(total_count_row.get('total_count') or 0)
+
+        total_pages = max((total_count + per_page - 1) // per_page, 1)
+        if page > total_pages:
+            page = total_pages
+
+        offset = (page - 1) * per_page
+
+        cursor.execute(
+            f"""
             SELECT 
                 a.attendance_date,
                 a.status,
                 st.name as student_name,
                 st.roll_number,
                 s.name as subject_name,
-                f.name as marked_by,
+                COALESCE(f.name, 'Unknown') as marked_by,
                 a.marked_at,
                 CONCAT(c.name, ' - ', cl.name, ' ', d.name) as class_info
             FROM attendance a
             JOIN students st ON a.student_id = st.id
             JOIN timetable t ON a.timetable_id = t.id
             JOIN subjects s ON t.subject_id = s.id
-            JOIN faculty f ON a.marked_by = f.id
+            LEFT JOIN faculty f ON a.marked_by = f.id
             JOIN courses c ON t.course_id = c.id
             JOIN classes cl ON t.class_id = cl.id
             JOIN divisions d ON t.division_id = d.id
+            {where_sql}
             ORDER BY a.marked_at DESC
-            LIMIT 20
-        """)
+            LIMIT %s OFFSET %s
+            """,
+            tuple([*where_params, per_page, offset]),
+        )
         recent_activity = cursor.fetchall()
         
         # Format dates
@@ -168,11 +307,32 @@ def attendance_overview():
         defaulter_stats = cursor.fetchone()
         defaulter_count = int(defaulter_stats['defaulter_count'] or 0) if defaulter_stats else 0
         
+        recent_activity_filters = {
+            'status': status_filter,
+            'q': search_query,
+            'date_from': date_from,
+            'date_to': date_to,
+            'per_page': per_page,
+        }
+
+        recent_activity_pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'has_prev': page > 1,
+            'has_next': page < total_pages,
+            'start_index': (offset + 1) if total_count > 0 else 0,
+            'end_index': min(offset + len(recent_activity), total_count),
+        }
+
         return render_template('admin/attendance/overview.html',
                              overall_stats=overall_stats,
                              today_by_class=today_by_class,
                              recent_activity=recent_activity,
-                             defaulter_count=defaulter_count)
+                             defaulter_count=defaulter_count,
+                             recent_activity_filters=recent_activity_filters,
+                             recent_activity_pagination=recent_activity_pagination)
     
     except Exception as e:
         print(f"Error in attendance overview: {e}")
@@ -183,7 +343,24 @@ def attendance_overview():
                              overall_stats=None,
                              today_by_class=[],
                              recent_activity=[],
-                             defaulter_count=0)
+                             defaulter_count=0,
+                             recent_activity_filters={
+                                 'status': '',
+                                 'q': '',
+                                 'date_from': '',
+                                 'date_to': '',
+                                 'per_page': 20,
+                             },
+                             recent_activity_pagination={
+                                 'page': 1,
+                                 'per_page': 20,
+                                 'total_count': 0,
+                                 'total_pages': 1,
+                                 'has_prev': False,
+                                 'has_next': False,
+                                 'start_index': 0,
+                                 'end_index': 0,
+                             })
     finally:
         cursor.close()
         connection.close()
@@ -324,6 +501,471 @@ def student_attendance_details(student_id):
         traceback.print_exc()
         flash("An error occurred while loading student details.", "danger")
         return redirect(url_for('attendance_admin.attendance_overview'))
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/faculty')
+@has_permission('attendance_view_faculty')
+def faculty_attendance_overview():
+    """Faculty attendance dashboard (shift-based)."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'faculty_attendance'):
+            flash(
+                "faculty_attendance table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "warning",
+            )
+            return render_template(
+                'admin/attendance/faculty_overview.html',
+                overall_stats={
+                    'total_faculty': 0,
+                    'total_records': 0,
+                    'total_present': 0,
+                    'total_late': 0,
+                    'total_absent': 0,
+                    'overall_percentage': 0.0,
+                },
+                today_by_shift=[],
+                recent_activity=[],
+                faculty_summary=[],
+                recent_activity_filters={
+                    'q': '',
+                    'status': '',
+                    'date_from': '',
+                    'date_to': '',
+                    'per_page': 20,
+                },
+                recent_activity_pagination={
+                    'page': 1,
+                    'per_page': 20,
+                    'total_count': 0,
+                    'total_pages': 1,
+                    'has_prev': False,
+                    'has_next': False,
+                    'start_index': 0,
+                    'end_index': 0,
+                },
+            )
+
+        # Recent activity filters + pagination for high-volume attendance logs.
+        ra_page = request.args.get('ra_page', 1, type=int) or 1
+        ra_page = max(ra_page, 1)
+
+        ra_per_page = request.args.get('ra_per_page', 20, type=int) or 20
+        if ra_per_page not in (20, 50, 100):
+            ra_per_page = 20
+
+        ra_status = (request.args.get('ra_status') or '').strip()
+        if ra_status not in ('Present', 'Late', 'Absent'):
+            ra_status = ''
+
+        ra_query = (request.args.get('ra_q') or '').strip()
+        ra_date_from = (request.args.get('ra_date_from') or '').strip()
+        ra_date_to = (request.args.get('ra_date_to') or '').strip()
+
+        if ra_date_from:
+            try:
+                datetime.strptime(ra_date_from, '%Y-%m-%d')
+            except ValueError:
+                ra_date_from = ''
+
+        if ra_date_to:
+            try:
+                datetime.strptime(ra_date_to, '%Y-%m-%d')
+            except ValueError:
+                ra_date_to = ''
+
+        ra_where_clauses = ['1=1']
+        ra_params = []
+
+        if ra_status:
+            ra_where_clauses.append('fa.status = %s')
+            ra_params.append(ra_status)
+
+        if ra_date_from:
+            ra_where_clauses.append('fa.attendance_date >= %s')
+            ra_params.append(ra_date_from)
+
+        if ra_date_to:
+            ra_where_clauses.append('fa.attendance_date <= %s')
+            ra_params.append(ra_date_to)
+
+        if ra_query:
+            like_query = f'%{ra_query}%'
+            ra_where_clauses.append(
+                """
+                (
+                    f.name LIKE %s
+                    OR f.employee_id LIKE %s
+                    OR d.name LIKE %s
+                    OR COALESCE(u.username, '') LIKE %s
+                    OR COALESCE(fa.shift_name, '') LIKE %s
+                    OR COALESCE(fa.shift_code, '') LIKE %s
+                )
+                """
+            )
+            ra_params.extend([like_query, like_query, like_query, like_query, like_query, like_query])
+
+        ra_where_sql = ' AND '.join(ra_where_clauses)
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(DISTINCT faculty_id) AS total_faculty,
+                COUNT(*) AS total_records,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) AS total_present,
+                SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) AS total_late,
+                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) AS total_absent,
+                ROUND(
+                    (
+                        SUM(CASE WHEN status IN ('Present', 'Late') THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(*), 0)
+                    ) * 100,
+                    2
+                ) AS overall_percentage
+            FROM faculty_attendance
+            WHERE attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            """
+        )
+        overall_stats = cursor.fetchone() or {}
+        overall_stats = {
+            'total_faculty': int(overall_stats.get('total_faculty') or 0),
+            'total_records': int(overall_stats.get('total_records') or 0),
+            'total_present': int(overall_stats.get('total_present') or 0),
+            'total_late': int(overall_stats.get('total_late') or 0),
+            'total_absent': int(overall_stats.get('total_absent') or 0),
+            'overall_percentage': float(overall_stats.get('overall_percentage') or 0),
+        }
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(NULLIF(shift_name, ''), 'General Availability') AS shift_name,
+                COUNT(*) AS total_marked,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) AS present_count,
+                SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) AS late_count,
+                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) AS absent_count
+            FROM faculty_attendance
+            WHERE attendance_date = CURDATE()
+            GROUP BY shift_key, shift_name
+            ORDER BY shift_name
+            """
+        )
+        today_by_shift = cursor.fetchall() or []
+        for row in today_by_shift:
+            row['total_marked'] = int(row.get('total_marked') or 0)
+            row['present_count'] = int(row.get('present_count') or 0)
+            row['late_count'] = int(row.get('late_count') or 0)
+            row['absent_count'] = int(row.get('absent_count') or 0)
+
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS total_count
+            FROM faculty_attendance fa
+            JOIN faculty f ON f.id = fa.faculty_id
+            LEFT JOIN departments d ON d.id = f.department_id
+            LEFT JOIN users u ON u.id = fa.marked_by_user_id
+            WHERE {ra_where_sql}
+            """,
+            tuple(ra_params),
+        )
+        ra_total_count_row = cursor.fetchone() or {}
+        ra_total_count = int(ra_total_count_row.get('total_count') or 0)
+        ra_total_pages = max((ra_total_count + ra_per_page - 1) // ra_per_page, 1)
+        if ra_page > ra_total_pages:
+            ra_page = ra_total_pages
+        ra_offset = (ra_page - 1) * ra_per_page
+
+        cursor.execute(
+            f"""
+            SELECT
+                fa.attendance_date,
+                fa.status,
+                fa.shift_name,
+                fa.shift_start_time,
+                fa.shift_end_time,
+                fa.marked_at,
+                fa.source,
+                f.id AS faculty_id,
+                f.name AS faculty_name,
+                f.employee_id,
+                d.name AS department_name,
+                u.username AS marked_by_username
+            FROM faculty_attendance fa
+            JOIN faculty f ON f.id = fa.faculty_id
+            LEFT JOIN departments d ON d.id = f.department_id
+            LEFT JOIN users u ON u.id = fa.marked_by_user_id
+            WHERE {ra_where_sql}
+            ORDER BY fa.marked_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple([*ra_params, ra_per_page, ra_offset]),
+        )
+        recent_activity = cursor.fetchall() or []
+        for row in recent_activity:
+            for key in ('attendance_date', 'marked_at'):
+                value = row.get(key)
+                if isinstance(value, datetime):
+                    if key == 'attendance_date':
+                        row[key] = value.strftime('%Y-%m-%d')
+                    else:
+                        row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        cursor.execute(
+            """
+            SELECT
+                f.id AS faculty_id,
+                f.name AS faculty_name,
+                f.employee_id,
+                d.name AS department_name,
+                COUNT(*) AS total_shifts,
+                SUM(CASE WHEN fa.status = 'Present' THEN 1 ELSE 0 END) AS total_present,
+                SUM(CASE WHEN fa.status = 'Late' THEN 1 ELSE 0 END) AS total_late,
+                SUM(CASE WHEN fa.status = 'Absent' THEN 1 ELSE 0 END) AS total_absent,
+                ROUND(
+                    (
+                        SUM(CASE WHEN fa.status IN ('Present', 'Late') THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(*), 0)
+                    ) * 100,
+                    2
+                ) AS attendance_percentage
+            FROM faculty_attendance fa
+            JOIN faculty f ON f.id = fa.faculty_id
+            LEFT JOIN departments d ON d.id = f.department_id
+            WHERE fa.attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY f.id, f.name, f.employee_id, d.name
+            ORDER BY attendance_percentage ASC, f.name ASC
+            LIMIT 100
+            """
+        )
+        faculty_summary = cursor.fetchall() or []
+        for row in faculty_summary:
+            row['total_shifts'] = int(row.get('total_shifts') or 0)
+            row['total_present'] = int(row.get('total_present') or 0)
+            row['total_late'] = int(row.get('total_late') or 0)
+            row['total_absent'] = int(row.get('total_absent') or 0)
+            row['attendance_percentage'] = float(row.get('attendance_percentage') or 0)
+
+        recent_activity_filters = {
+            'q': ra_query,
+            'status': ra_status,
+            'date_from': ra_date_from,
+            'date_to': ra_date_to,
+            'per_page': ra_per_page,
+        }
+
+        recent_activity_pagination = {
+            'page': ra_page,
+            'per_page': ra_per_page,
+            'total_count': ra_total_count,
+            'total_pages': ra_total_pages,
+            'has_prev': ra_page > 1,
+            'has_next': ra_page < ra_total_pages,
+            'start_index': (ra_offset + 1) if ra_total_count > 0 else 0,
+            'end_index': min(ra_offset + len(recent_activity), ra_total_count),
+        }
+
+        return render_template(
+            'admin/attendance/faculty_overview.html',
+            overall_stats=overall_stats,
+            today_by_shift=today_by_shift,
+            recent_activity=recent_activity,
+            faculty_summary=faculty_summary,
+            recent_activity_filters=recent_activity_filters,
+            recent_activity_pagination=recent_activity_pagination,
+        )
+    except Exception as e:
+        print(f"Error in faculty attendance overview: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("An error occurred while loading faculty attendance data.", "danger")
+        return render_template(
+            'admin/attendance/faculty_overview.html',
+            overall_stats={
+                'total_faculty': 0,
+                'total_records': 0,
+                'total_present': 0,
+                'total_late': 0,
+                'total_absent': 0,
+                'overall_percentage': 0.0,
+            },
+            today_by_shift=[],
+            recent_activity=[],
+            faculty_summary=[],
+            recent_activity_filters={
+                'q': '',
+                'status': '',
+                'date_from': '',
+                'date_to': '',
+                'per_page': 20,
+            },
+            recent_activity_pagination={
+                'page': 1,
+                'per_page': 20,
+                'total_count': 0,
+                'total_pages': 1,
+                'has_prev': False,
+                'has_next': False,
+                'start_index': 0,
+                'end_index': 0,
+            },
+        )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/faculty/<int:faculty_id>')
+@has_permission('attendance_view_faculty')
+def faculty_attendance_details(faculty_id):
+    """Detailed attendance view for a specific faculty member."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'faculty_attendance'):
+            flash(
+                "faculty_attendance table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "warning",
+            )
+            return redirect(url_for('attendance_admin.faculty_attendance_overview'))
+
+        cursor.execute(
+            """
+            SELECT
+                f.id,
+                f.name,
+                f.employee_id,
+                f.email,
+                f.phone,
+                f.designation,
+                d.name AS department_name
+            FROM faculty f
+            LEFT JOIN departments d ON d.id = f.department_id
+            WHERE f.id = %s
+            """,
+            (faculty_id,),
+        )
+        faculty = cursor.fetchone()
+
+        if not faculty:
+            flash("Faculty member not found.", "danger")
+            return redirect(url_for('attendance_admin.faculty_attendance_overview'))
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total_shifts,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) AS total_present,
+                SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) AS total_late,
+                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) AS total_absent,
+                ROUND(
+                    (
+                        SUM(CASE WHEN status IN ('Present', 'Late') THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(*), 0)
+                    ) * 100,
+                    2
+                ) AS overall_percentage
+            FROM faculty_attendance
+            WHERE faculty_id = %s
+            """,
+            (faculty_id,),
+        )
+        overall_stats = cursor.fetchone() or {}
+        overall_stats = {
+            'total_shifts': int(overall_stats.get('total_shifts') or 0),
+            'total_present': int(overall_stats.get('total_present') or 0),
+            'total_late': int(overall_stats.get('total_late') or 0),
+            'total_absent': int(overall_stats.get('total_absent') or 0),
+            'overall_percentage': float(overall_stats.get('overall_percentage') or 0),
+        }
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(NULLIF(shift_name, ''), 'General Availability') AS shift_name,
+                COUNT(*) AS total_shifts,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) AS present_count,
+                SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) AS late_count,
+                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) AS absent_count,
+                ROUND(
+                    (
+                        SUM(CASE WHEN status IN ('Present', 'Late') THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(*), 0)
+                    ) * 100,
+                    2
+                ) AS attendance_percentage,
+                MIN(attendance_date) AS first_marked,
+                MAX(attendance_date) AS last_marked
+            FROM faculty_attendance
+            WHERE faculty_id = %s
+            GROUP BY shift_key, shift_name
+            ORDER BY shift_name
+            """,
+            (faculty_id,),
+        )
+        shift_wise = cursor.fetchall() or []
+        for row in shift_wise:
+            row['total_shifts'] = int(row.get('total_shifts') or 0)
+            row['present_count'] = int(row.get('present_count') or 0)
+            row['late_count'] = int(row.get('late_count') or 0)
+            row['absent_count'] = int(row.get('absent_count') or 0)
+            row['attendance_percentage'] = float(row.get('attendance_percentage') or 0)
+            for key in ('first_marked', 'last_marked'):
+                value = row.get(key)
+                if isinstance(value, datetime):
+                    row[key] = value.strftime('%Y-%m-%d')
+
+        cursor.execute(
+            """
+            SELECT
+                fa.attendance_date,
+                fa.status,
+                fa.shift_name,
+                fa.shift_start_time,
+                fa.shift_end_time,
+                fa.source,
+                fa.captured_at,
+                fa.confidence,
+                fa.remarks,
+                fa.marked_at,
+                u.username AS marked_by_username
+            FROM faculty_attendance fa
+            LEFT JOIN users u ON u.id = fa.marked_by_user_id
+            WHERE fa.faculty_id = %s
+            ORDER BY fa.marked_at DESC
+            LIMIT 100
+            """,
+            (faculty_id,),
+        )
+        recent_records = cursor.fetchall() or []
+        for row in recent_records:
+            row['confidence'] = _decimal_to_number(row.get('confidence'))
+            for key in ('attendance_date', 'captured_at', 'marked_at'):
+                value = row.get(key)
+                if isinstance(value, datetime):
+                    if key == 'attendance_date':
+                        row[key] = value.strftime('%Y-%m-%d')
+                    else:
+                        row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        return render_template(
+            'admin/attendance/faculty_details.html',
+            faculty=faculty,
+            overall_stats=overall_stats,
+            shift_wise=shift_wise,
+            recent_records=recent_records,
+        )
+    except Exception as e:
+        print(f"Error fetching faculty attendance details: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("An error occurred while loading faculty attendance details.", "danger")
+        return redirect(url_for('attendance_admin.faculty_attendance_overview'))
     finally:
         cursor.close()
         connection.close()
@@ -822,6 +1464,320 @@ def mobile_sync_logs():
             stats={'total': 0, 'processed': 0, 'pending': 0, 'failed': 0},
             filters={'date': '', 'processing_status': '', 'device_id': '', 'student_query': '', 'limit': 100},
         )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/faculty-mobile-logs')
+@has_permission('attendance_view_faculty')
+def faculty_mobile_sync_logs():
+    """Show mobile synced faculty attendance events from faculty_attendance_logs."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'faculty_attendance_logs'):
+            flash(
+                "faculty_attendance_logs table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "warning",
+            )
+            return render_template(
+                'admin/attendance/faculty_mobile_logs.html',
+                logs=[],
+                stats={'total': 0, 'processed': 0, 'pending': 0, 'failed': 0},
+                filters={
+                    'date': '',
+                    'processing_status': '',
+                    'device_id': '',
+                    'faculty_query': '',
+                    'shift_query': '',
+                    'per_page': 100,
+                },
+                pagination={
+                    'page': 1,
+                    'per_page': 100,
+                    'total_count': 0,
+                    'total_pages': 1,
+                    'has_prev': False,
+                    'has_next': False,
+                    'start_index': 0,
+                    'end_index': 0,
+                },
+            )
+
+        filter_date = (request.args.get('date') or '').strip()
+        processing_status = (request.args.get('processing_status') or '').strip().lower()
+        device_id = (request.args.get('device_id') or '').strip()
+        faculty_query = (request.args.get('faculty_query') or '').strip()
+        shift_query = (request.args.get('shift_query') or '').strip()
+        page = request.args.get('page', 1, type=int) or 1
+        page = max(page, 1)
+
+        per_page = request.args.get('per_page', type=int)
+        if per_page is None:
+            per_page = request.args.get('limit', 100, type=int)
+        per_page = per_page or 100
+        if per_page not in (20, 50, 100):
+            per_page = 100
+
+        where_clauses = ['1=1']
+        params = []
+
+        if filter_date:
+            where_clauses.append('fal.attendance_date = %s')
+            params.append(filter_date)
+
+        if processing_status in ('processed', 'pending', 'failed'):
+            where_clauses.append('fal.processing_status = %s')
+            params.append(processing_status)
+
+        if device_id:
+            where_clauses.append('fal.device_id LIKE %s')
+            params.append(f'%{device_id}%')
+
+        if faculty_query:
+            where_clauses.append(
+                '('
+                'f.name LIKE %s '
+                'OR f.employee_id LIKE %s '
+                'OR CAST(fal.faculty_id AS CHAR) LIKE %s '
+                'OR CAST(fal.faculty_user_id AS CHAR) LIKE %s'
+                ')'
+            )
+            like_faculty = f'%{faculty_query}%'
+            params.extend([like_faculty, like_faculty, like_faculty, like_faculty])
+
+        if shift_query:
+            where_clauses.append('(fal.shift_name LIKE %s OR fal.shift_code LIKE %s)')
+            like_shift = f'%{shift_query}%'
+            params.extend([like_shift, like_shift])
+
+        where_sql = ' AND '.join(where_clauses)
+
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN fal.processing_status = 'processed' THEN 1 ELSE 0 END) AS processed,
+                SUM(CASE WHEN fal.processing_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                SUM(CASE WHEN fal.processing_status = 'failed' THEN 1 ELSE 0 END) AS failed
+            FROM faculty_attendance_logs fal
+            LEFT JOIN faculty f ON f.id = fal.faculty_id
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        stats = cursor.fetchone() or {}
+        stats = {
+            'total': int(stats.get('total') or 0),
+            'processed': int(stats.get('processed') or 0),
+            'pending': int(stats.get('pending') or 0),
+            'failed': int(stats.get('failed') or 0),
+        }
+
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) AS total_count
+            FROM faculty_attendance_logs fal
+            LEFT JOIN faculty f ON f.id = fal.faculty_id
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        total_count_row = cursor.fetchone() or {}
+        total_count = int(total_count_row.get('total_count') or 0)
+        total_pages = max((total_count + per_page - 1) // per_page, 1)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * per_page
+
+        cursor.execute(
+            f"""
+            SELECT
+                fal.id,
+                fal.event_uuid,
+                fal.device_id,
+                fal.faculty_id,
+                fal.faculty_user_id,
+                fal.attendance_date,
+                fal.day_of_week,
+                fal.shift_key,
+                fal.shift_pattern_id,
+                fal.shift_name,
+                fal.shift_code,
+                fal.shift_start_time,
+                fal.shift_end_time,
+                fal.status,
+                fal.processing_status,
+                fal.confidence,
+                fal.face_model,
+                fal.detector_model,
+                fal.remarks,
+                fal.error_message,
+                fal.created_at,
+                fal.captured_at,
+                fal.processed_at,
+                f.name AS faculty_name,
+                f.employee_id,
+                d.name AS department_name,
+                fu.username AS faculty_username,
+                mu.username AS marked_by_username,
+                sp.shift_name AS shift_pattern_name,
+                sp.shift_code AS shift_pattern_code
+            FROM faculty_attendance_logs fal
+            LEFT JOIN faculty f ON f.id = fal.faculty_id
+            LEFT JOIN departments d ON d.id = f.department_id
+            LEFT JOIN users fu ON fu.id = fal.faculty_user_id
+            LEFT JOIN users mu ON mu.id = fal.marked_by_user_id
+            LEFT JOIN shift_patterns sp ON sp.id = fal.shift_pattern_id
+            WHERE {where_sql}
+            ORDER BY fal.created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple([*params, per_page, offset]),
+        )
+        logs = cursor.fetchall() or []
+
+        for row in logs:
+            row['confidence'] = _decimal_to_number(row.get('confidence'))
+            for key in ('attendance_date', 'created_at', 'captured_at', 'processed_at'):
+                value = row.get(key)
+                if isinstance(value, datetime):
+                    if key == 'attendance_date':
+                        row[key] = value.strftime('%Y-%m-%d')
+                    else:
+                        row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'has_prev': page > 1,
+            'has_next': page < total_pages,
+            'start_index': (offset + 1) if total_count > 0 else 0,
+            'end_index': min(offset + len(logs), total_count),
+        }
+
+        return render_template(
+            'admin/attendance/faculty_mobile_logs.html',
+            logs=logs,
+            stats=stats,
+            filters={
+                'date': filter_date,
+                'processing_status': processing_status,
+                'device_id': device_id,
+                'faculty_query': faculty_query,
+                'shift_query': shift_query,
+                'per_page': per_page,
+            },
+            pagination=pagination,
+        )
+    except Exception as e:
+        print(f"Error fetching faculty mobile sync logs: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("Unable to load faculty mobile sync logs.", "danger")
+        return render_template(
+            'admin/attendance/faculty_mobile_logs.html',
+            logs=[],
+            stats={'total': 0, 'processed': 0, 'pending': 0, 'failed': 0},
+            filters={
+                'date': '',
+                'processing_status': '',
+                'device_id': '',
+                'faculty_query': '',
+                'shift_query': '',
+                'per_page': 100,
+            },
+            pagination={
+                'page': 1,
+                'per_page': 100,
+                'total_count': 0,
+                'total_pages': 1,
+                'has_prev': False,
+                'has_next': False,
+                'start_index': 0,
+                'end_index': 0,
+            },
+        )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@attendance_admin_bp.route('/faculty-mobile-logs/reprocess', methods=['POST'])
+@has_permission('attendance_manage_faculty')
+def reprocess_faculty_mobile_sync_logs():
+    """Reprocess pending/failed faculty mobile logs into faculty_attendance table."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        if not _table_exists(cursor, 'faculty_attendance_logs') or not _table_exists(cursor, 'faculty_attendance'):
+            flash(
+                'faculty_attendance_logs/faculty_attendance tables not found. Run migration first.',
+                'warning',
+            )
+            return redirect(url_for('attendance_admin.faculty_mobile_sync_logs'))
+
+        limit = request.form.get('limit', 100, type=int) or 100
+        limit = max(1, min(limit, 500))
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM faculty_attendance_logs
+            WHERE processing_status IN ('pending', 'failed')
+            ORDER BY created_at ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        log_rows = cursor.fetchall() or []
+
+        retried = 0
+        processed = 0
+        failed = 0
+
+        for log_row in log_rows:
+            retried += 1
+            try:
+                _promote_log_to_faculty_attendance(cursor, log_row)
+                cursor.execute(
+                    """
+                    UPDATE faculty_attendance_logs
+                    SET processing_status = 'processed',
+                        processed_at = NOW(),
+                        error_message = NULL
+                    WHERE id = %s
+                    """,
+                    (log_row['id'],),
+                )
+                processed += 1
+            except Exception as process_error:
+                failed += 1
+                cursor.execute(
+                    """
+                    UPDATE faculty_attendance_logs
+                    SET processing_status = 'failed',
+                        error_message = %s
+                    WHERE id = %s
+                    """,
+                    (str(process_error)[:500], log_row['id']),
+                )
+
+        connection.commit()
+        flash(
+            f"Faculty reprocess complete: retried={retried}, processed={processed}, failed={failed}",
+            'success' if failed == 0 else 'warning',
+        )
+        return redirect(url_for('attendance_admin.faculty_mobile_sync_logs'))
+    except Exception as e:
+        connection.rollback()
+        flash(f'Failed to reprocess faculty mobile sync logs: {str(e)}', 'danger')
+        return redirect(url_for('attendance_admin.faculty_mobile_sync_logs'))
     finally:
         cursor.close()
         connection.close()
