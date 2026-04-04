@@ -340,14 +340,25 @@ def generate_timetable_for_class(
                         continue
             return v
 
+        has_is_active_column = False
+        try:
+            active_col_cursor = connection.cursor()
+            active_col_cursor.execute("SHOW COLUMNS FROM timetable LIKE 'is_active'")
+            has_is_active_column = active_col_cursor.fetchone() is not None
+            active_col_cursor.close()
+        except Exception:
+            has_is_active_column = False
+
         # Faculty workload and availability
-        cursor.execute(
-            """
+        faculty_busy_query = """
             SELECT faculty_id, day_of_week, start_time, end_time
             FROM timetable
             WHERE faculty_id IS NOT NULL
+              AND NOT (course_id = %s AND class_id = %s AND division_id = %s)
         """
-        )
+        if has_is_active_column:
+            faculty_busy_query += "\n              AND COALESCE(is_active, 1) = 1"
+        cursor.execute(faculty_busy_query, (course_id, class_id, division_id))
         faculty_busy: dict[int, dict[str, list[tuple[time, time]]]] = defaultdict(lambda: defaultdict(list))
         for row in cursor.fetchall():
             busy_start = _coerce_time_value(row['start_time'])
@@ -445,11 +456,15 @@ def generate_timetable_for_class(
             # Build existing room usage to avoid conflicts with already saved timetable
             if has_room_column:
                 cur4 = connection.cursor(dictionary=True)
-                cur4.execute("""
+                room_usage_query = """
                     SELECT day_of_week, start_time, end_time, room_id
                     FROM timetable
                     WHERE room_id IS NOT NULL
-                """)
+                      AND NOT (course_id = %s AND class_id = %s AND division_id = %s)
+                """
+                if has_is_active_column:
+                    room_usage_query += "\n                      AND COALESCE(is_active, 1) = 1"
+                cur4.execute(room_usage_query, (course_id, class_id, division_id))
                 for r in cur4.fetchall():
                     if not r['room_id']:
                         continue
@@ -1018,61 +1033,77 @@ def generate_timetable_for_class(
 
         # Persist timetable if not previewing
         if not preview_only:
-            # Archive old timetable to history before deleting
+            # Archive the currently active timetable version before replacement.
+            archive_scope_clause = "course_id = %s AND class_id = %s AND division_id = %s"
+            archive_params = (course_id, class_id, division_id)
+            if has_is_active_column:
+                archive_scope_clause += " AND COALESCE(is_active, 1) = 1"
             try:
-                cursor.execute("""
+                cursor.execute(f"""
                     INSERT INTO timetable_history 
                     (course_id, class_id, division_id, day_of_week, start_time, end_time, 
                      subject_id, faculty_id, room_id, archived_at)
                     SELECT course_id, class_id, division_id, day_of_week, start_time, end_time,
                            subject_id, faculty_id, room_id, NOW()
                     FROM timetable
-                    WHERE course_id = %s AND class_id = %s AND division_id = %s
-                """, (course_id, class_id, division_id))
+                    WHERE {archive_scope_clause}
+                """, archive_params)
                 current_app.logger.info('Archived %d old timetable entries to history', cursor.rowcount)
             except Exception as e:
                 current_app.logger.warning('Could not archive to timetable_history (table may not exist): %s', str(e))
-            
-            cursor.execute(
-                "DELETE FROM timetable WHERE course_id = %s AND class_id = %s AND division_id = %s",
-                (course_id, class_id, division_id),
-            )
+
+            if has_is_active_column:
+                cursor.execute(
+                    """
+                    UPDATE timetable
+                    SET is_active = 0
+                    WHERE course_id = %s AND class_id = %s AND division_id = %s
+                      AND COALESCE(is_active, 1) = 1
+                    """,
+                    (course_id, class_id, division_id),
+                )
+                current_app.logger.info('Retired %d active timetable entries', cursor.rowcount)
+            else:
+                cursor.execute(
+                    "DELETE FROM timetable WHERE course_id = %s AND class_id = %s AND division_id = %s",
+                    (course_id, class_id, division_id),
+                )
+
             for entry in assigned_entries:
+                insert_columns = [
+                    'course_id',
+                    'class_id',
+                    'division_id',
+                    'day_of_week',
+                    'start_time',
+                    'end_time',
+                    'subject_id',
+                    'faculty_id',
+                ]
+                insert_values = [
+                    course_id,
+                    class_id,
+                    division_id,
+                    entry['day'],
+                    entry['start_time'],
+                    entry['end_time'],
+                    entry['subject_id'],
+                    entry['faculty_id'],
+                ]
+
                 if has_room_column and entry.get('room_id'):
-                    cursor.execute(
-                        """
-                        INSERT INTO timetable (course_id, class_id, division_id, day_of_week, start_time, end_time, subject_id, faculty_id, room_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            course_id,
-                            class_id,
-                            division_id,
-                            entry['day'],
-                            entry['start_time'],
-                            entry['end_time'],
-                            entry['subject_id'],
-                            entry['faculty_id'],
-                            entry.get('room_id'),
-                        ),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO timetable (course_id, class_id, division_id, day_of_week, start_time, end_time, subject_id, faculty_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            course_id,
-                            class_id,
-                            division_id,
-                            entry['day'],
-                            entry['start_time'],
-                            entry['end_time'],
-                            entry['subject_id'],
-                            entry['faculty_id'],
-                        ),
-                    )
+                    insert_columns.append('room_id')
+                    insert_values.append(entry.get('room_id'))
+                if has_is_active_column:
+                    insert_columns.append('is_active')
+                    insert_values.append(1)
+
+                column_sql = ', '.join(insert_columns)
+                placeholder_sql = ', '.join(['%s'] * len(insert_values))
+                cursor.execute(
+                    f"INSERT INTO timetable ({column_sql}) VALUES ({placeholder_sql})",
+                    tuple(insert_values),
+                )
             connection.commit()
 
             # Persist quality scoring metadata for phase-2 ML data.

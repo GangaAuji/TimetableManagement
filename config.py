@@ -82,7 +82,8 @@ class Config:
         'YOLO_FACE_DETECTOR_MODEL_PATH',
         os.path.join(basedir, 'assets', 'yolov8n_float32.tflite')
     )
-    FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD', 0.35))
-    FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD', 0.45))
+    FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD'))
+    FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD'))
+    FACE_TEMPLATE_MIN_QUALITY = float(os.environ.get('FACE_TEMPLATE_MIN_QUALITY'))
 
 

@@ -60,6 +60,16 @@ def _parse_optional_float(raw_value):
     return value
 
 
+def _meets_face_quality_threshold(quality_score):
+    if quality_score is None:
+        return False
+    try:
+        min_quality = float(getattr(Config, 'FACE_TEMPLATE_MIN_QUALITY', 0.55) or 0.55)
+    except (TypeError, ValueError):
+        min_quality = 0.55
+    return quality_score >= min_quality
+
+
 def _table_exists(cursor, table_name):
     cursor.execute(
         """
@@ -442,6 +452,13 @@ def register(token):
                 )
                 return render_template('register.html', form=form, invitation=invitation, token=token)
 
+            if face_template and quality_score is not None and not _meets_face_quality_threshold(quality_score):
+                flash(
+                    f"Face quality is too low ({quality_score:.3f}). Please recapture in better lighting.",
+                    "danger"
+                )
+                return render_template('register.html', form=form, invitation=invitation, token=token)
+
             embedding_version = (
                 request.form.get('face_template_version')
                 or request.form.get('embedding_version')
@@ -466,6 +483,13 @@ def register(token):
                     face_template = generated.embedding
                     quality_score = generated.quality_score
                     embedding_version = generated.embedding_version
+
+                    if not _meets_face_quality_threshold(quality_score):
+                        if quality_score is None:
+                            raise ValueError("No detectable face found in capture")
+                        raise ValueError(
+                            f"Detected face quality too low ({quality_score:.3f}); minimum is {Config.FACE_TEMPLATE_MIN_QUALITY:.3f}"
+                        )
                 except Exception as generation_error:
                     current_app.logger.exception(
                         "Failed to generate face template during registration: %s",
@@ -473,7 +497,7 @@ def register(token):
                     )
                     if Config.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS:
                         flash(
-                            "Unable to generate face embedding. Ensure assets/mobilefacenet.tflite and assets/yolov8n_float32.tflite are available.",
+                            "Unable to generate a reliable face embedding. Ensure one clear face is visible and recapture in good lighting.",
                             "danger"
                         )
                         return render_template('register.html', form=form, invitation=invitation, token=token)
