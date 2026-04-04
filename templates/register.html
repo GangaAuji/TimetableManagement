@@ -10,175 +10,208 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     {% endif %}
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body { font-family: 'Inter', sans-serif; }
         :root {
-            --primary-color: {{ branding.primary_color or '#6366f1' }};
+            --primary-color: {{ branding.primary_color or '#4f46e5' }};
             --secondary-color: {{ branding.secondary_color or '#10b981' }};
+        }
+        
+        /* Smooth autofill styling */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+            -webkit-text-fill-color: #1e293b !important;
+            border-radius: 0.75rem;
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+<body class="bg-slate-50/50 min-h-screen flex items-start sm:items-center justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden overflow-y-auto">
     
-    <div class="max-w-xl w-full space-y-8">
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-indigo-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob pointer-events-none"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 bg-violet-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000 pointer-events-none"></div>
+
+    <div class="max-w-lg w-full space-y-6 relative z-10">
+        
         <div class="text-center">
-            <div class="mx-auto h-16 w-16 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg transform rotate-3">
-                <i class="fas fa-user-plus text-3xl text-white"></i>
+            <div class="mx-auto h-16 w-16 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+                <i class="fas fa-user-astronaut text-2xl text-white"></i>
             </div>
-            <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Setup your account</h2>
-            <p class="mt-2 text-sm text-gray-600">
-                You have been invited to join the system.
+            <h2 class="mt-6 text-3xl font-black text-slate-800 tracking-tight">Claim Your Account</h2>
+            <p class="mt-2 text-sm font-medium text-slate-500">
+                Set up your credentials and face ID to get started.
             </p>
         </div>
 
-        <div class="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10 border border-gray-100">
+        <div class="bg-white py-8 px-6 sm:px-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl border border-slate-100">
             
-            <div class="bg-indigo-50 rounded-lg p-5 mb-8 border border-indigo-100 relative overflow-hidden">
-                <div class="absolute top-0 right-0 -mt-2 -mr-2 w-12 h-12 bg-indigo-200 rounded-full blur-xl opacity-50"></div>
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-ticket-alt text-indigo-500 text-xl mt-1"></i>
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-8 flex items-start gap-4">
+                <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg flex-shrink-0 border border-indigo-200 shadow-sm">
+                    {{ invitation.name[:1] | upper if invitation.name else '?' }}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-0.5">
+                        <h3 class="text-sm font-bold text-slate-800 truncate">{{ invitation.name }}</h3>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wider border border-indigo-200">
+                            {{ invitation.role }}
+                        </span>
                     </div>
-                    <div class="ml-4 w-full">
-                        <h3 class="text-sm font-bold text-indigo-900 uppercase tracking-wide">Invitation Details</h3>
-                        <div class="mt-2 grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <span class="text-gray-500 text-xs">Name</span>
-                                <p class="font-semibold text-gray-800">{{ invitation.name }}</p>
-                            </div>
-                            <div>
-                                <span class="text-gray-500 text-xs">Role</span>
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                    {{ invitation.role }}
-                                </span>
-                            </div>
-                            <div class="col-span-2">
-                                <span class="text-gray-500 text-xs">Email</span>
-                                <p class="font-medium text-gray-800">{{ invitation.email }}</p>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="text-xs font-medium text-slate-500 truncate"><i class="fas fa-envelope text-slate-400 mr-1.5"></i>{{ invitation.email }}</p>
                 </div>
             </div>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
+                    <div class="space-y-3 mb-6">
                     {% for category, message in messages %}
-                        <div class="p-4 mb-6 text-sm rounded-lg flex items-center
-                            {% if category == 'danger' %} bg-red-50 text-red-800 border-l-4 border-red-500
-                            {% elif category == 'success' %} bg-green-50 text-green-800 border-l-4 border-green-500
-                            {% else %} bg-blue-50 text-blue-800 border-l-4 border-blue-500 {% endif %}" 
+                        <div class="p-4 text-sm font-medium rounded-xl flex items-start
+                            {% if category == 'danger' %} bg-rose-50 text-rose-700 border border-rose-200
+                            {% elif category == 'success' %} bg-emerald-50 text-emerald-700 border border-emerald-200
+                            {% else %} bg-blue-50 text-blue-700 border border-blue-200 {% endif %}" 
                             role="alert">
-                            <i class="fas fa-info-circle mr-3"></i>{{ message }}
+                            <i class="fas fa-info-circle mt-0.5 mr-3"></i>
+                            <span>{{ message }}</span>
                         </div>
                     {% endfor %}
+                    </div>
                 {% endif %}
             {% endwith %}
 
-            <form id="registrationForm" method="POST" action="{{ url_for('auth.register', token=token) }}" class="space-y-6" enctype="multipart/form-data">
+            <form id="registrationForm" method="POST" action="{{ url_for('auth.register', token=token) }}" class="space-y-5" enctype="multipart/form-data">
                 {{ form.hidden_tag() }}
                 
                 <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                    <div class="relative rounded-md shadow-sm">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <i class="fas fa-at text-gray-400"></i>
+                    <label for="username" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-at text-slate-400"></i>
                         </div>
-                        {{ form.username(class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3", placeholder="Choose a unique username") }}
+                        {{ form.username(class="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium text-slate-800 transition-all hover:bg-white placeholder-slate-400 shadow-sm", placeholder="Choose a unique username") }}
                     </div>
                     {% if form.username.errors %}
-                        <div class="mt-1 text-xs text-red-600">
+                        <div class="mt-1.5 text-[11px] font-medium text-rose-600 space-y-1">
                             {% for error in form.username.errors %}
-                                <p class="flex items-center"><i class="fas fa-circle text-[4px] mr-1"></i> {{ error }}</p>
+                                <p class="flex items-center"><i class="fas fa-exclamation-circle mr-1.5"></i> {{ error }}</p>
                             {% endfor %}
                         </div>
                     {% endif %}
                 </div>
 
                 <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Create Password</label>
-                    <div class="relative rounded-md shadow-sm">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <i class="fas fa-lock text-gray-400"></i>
+                    <label for="password" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Create Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-slate-400"></i>
                         </div>
-                        {{ form.password(class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3", placeholder="Min 6 characters") }}
+                        {{ form.password(class="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium text-slate-800 transition-all hover:bg-white placeholder-slate-400 shadow-sm", placeholder="Min 6 characters") }}
                     </div>
                     {% if form.password.errors %}
-                        <div class="mt-1 text-xs text-red-600">
+                        <div class="mt-1.5 text-[11px] font-medium text-rose-600 space-y-1">
                             {% for error in form.password.errors %}
-                                <p>{{ error }}</p>
+                                <p class="flex items-center"><i class="fas fa-exclamation-circle mr-1.5"></i> {{ error }}</p>
                             {% endfor %}
                         </div>
                     {% endif %}
                 </div>
 
                 <div>
-                    <label for="confirm_password" class="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-                    <div class="relative rounded-md shadow-sm">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <i class="fas fa-check-double text-gray-400"></i>
+                    <label for="confirm_password" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Confirm Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-check-double text-slate-400"></i>
                         </div>
-                        {{ form.confirm_password(class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3", placeholder="Re-enter password") }}
+                        {{ form.confirm_password(class="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium text-slate-800 transition-all hover:bg-white placeholder-slate-400 shadow-sm", placeholder="Re-enter password") }}
                     </div>
-                    <p id="password-match-text" class="text-xs mt-1 h-4 transition-all"></p>
+                    <p id="password-match-text" class="text-[11px] font-bold mt-1.5 h-4 transition-all ml-1"></p>
                 </div>
 
-                <div class="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                <div id="faceAuthSection" class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4 relative overflow-hidden transition-shadow duration-200">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -z-10"></div>
+
                     <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-semibold text-gray-800">Capture Face Image</h4>
-                        <span class="text-[11px] text-gray-500">Required for device attendance sync</span>
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-800">Face Authentication</h4>
+                            <p class="text-[11px] text-slate-500 font-medium">Required for device attendance sync</p>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center">
+                            <i class="fas fa-camera text-sm"></i>
+                        </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-2">Face Camera</label>
-                        <div class="rounded-md overflow-hidden border border-gray-300 bg-black">
-                            <video id="faceCamera" autoplay playsinline muted class="w-full h-56 object-cover"></video>
+                        <div class="relative rounded-xl overflow-hidden border-2 border-slate-100 bg-slate-900 shadow-inner aspect-[4/3] flex items-center justify-center group">
+                            <video id="faceCamera" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                            
+                            <div class="absolute inset-0 border-4 border-indigo-500/20 rounded-xl pointer-events-none"></div>
+                            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-dashed border-white/30 rounded-full pointer-events-none"></div>
                         </div>
+
                         <canvas id="faceCanvas" class="hidden"></canvas>
                         <input type="hidden" id="face_capture_data" name="face_capture_data">
                         <input type="hidden" id="face_template_json" name="face_template_json">
                         <input type="hidden" id="face_template_version" name="face_template_version" value="mobilefacenet_192_l2_v1">
                         <input type="hidden" id="face_detector_model" name="face_detector_model" value="yolov8n_float32.tflite">
 
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <button type="button" id="startCameraBtn" class="px-3 py-2 text-xs rounded-md bg-slate-700 hover:bg-slate-800 text-white">Open Camera</button>
-                            <button type="button" id="captureBtn" class="px-3 py-2 text-xs rounded-md bg-indigo-600 hover:bg-indigo-700 text-white">Capture</button>
-                            <button type="button" id="retakeBtn" class="px-3 py-2 text-xs rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800">Retake</button>
+                        <div class="mt-4 grid grid-cols-3 gap-2">
+                            <button type="button" id="startCameraBtn" class="col-span-1 py-2.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors focus:ring-2 focus:ring-slate-300">
+                                Open Cam
+                            </button>
+                            <button type="button" id="captureBtn" class="col-span-1 py-2.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors focus:ring-2 focus:ring-indigo-500 flex justify-center items-center">
+                                <i class="fas fa-camera-retro mr-1.5"></i> Capture
+                            </button>
+                            <button type="button" id="retakeBtn" class="col-span-1 py-2.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors focus:ring-2 focus:ring-rose-200">
+                                Retake
+                            </button>
                         </div>
 
-                        <p id="faceCaptureStatus" class="mt-2 text-[11px] text-gray-600">Open camera and capture a clear front-facing image.</p>
+                        <div class="mt-3 flex items-center justify-center gap-2">
+                            <i id="statusIcon" class="fas fa-info-circle text-slate-400 text-[10px]"></i>
+                            <p id="faceCaptureStatus" class="text-[11px] font-medium text-slate-500">Open camera and capture a clear front-facing image.</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="pt-2">
-                    <button id="submitBtn" type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.01]">
+                <div class="pt-4">
+                    <button id="submitBtn" type="submit" class="w-full flex justify-center py-3.5 px-4 rounded-xl shadow-sm shadow-indigo-200 text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform active:scale-[0.98]">
                         Complete Registration
                     </button>
                 </div>
             </form>
 
-            <div class="mt-6">
+            <div class="mt-8">
                 <div class="relative">
                     <div class="absolute inset-0 flex items-center">
-                        <div class="w-full border-t border-gray-300"></div>
+                        <div class="w-full border-t border-slate-200"></div>
                     </div>
                     <div class="relative flex justify-center text-sm">
-                        <span class="px-2 bg-white text-gray-500">
+                        <span class="px-3 bg-white text-slate-400 font-medium text-xs uppercase tracking-wide">
                             Already registered?
                         </span>
                     </div>
                 </div>
 
                 <div class="mt-6 text-center">
-                    <a href="{{ url_for('auth.login') }}" class="font-medium text-indigo-600 hover:text-indigo-500 transition">
-                        Sign in to your account
+                    <a href="{{ url_for('auth.login') }}" class="text-sm font-bold text-indigo-600 hover:text-indigo-500 transition-colors">
+                        Sign in to your account &rarr;
                     </a>
                 </div>
             </div>
         </div>
     </div>
+
+    <button
+        type="button"
+        id="jumpToFaceBtn"
+        class="sm:hidden fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex items-center gap-2 rounded-full bg-indigo-600 text-white text-xs font-bold px-4 py-3 shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
+        aria-label="Jump to face authentication"
+    >
+        <i class="fas fa-camera"></i>
+        <span>Face ID</span>
+    </button>
 
     <script>
         const passwordInput = document.getElementById('password');
@@ -194,25 +227,52 @@
         const captureBtn = document.getElementById('captureBtn');
         const retakeBtn = document.getElementById('retakeBtn');
         const faceCaptureStatus = document.getElementById('faceCaptureStatus');
+        const statusIcon = document.getElementById('statusIcon');
+        const faceAuthSection = document.getElementById('faceAuthSection');
+        const jumpToFaceBtn = document.getElementById('jumpToFaceBtn');
         let mediaStream = null;
+
+        function updateStatusUI(message, type) {
+            faceCaptureStatus.textContent = message;
+            
+            // Reset classes
+            statusIcon.className = 'text-[10px] mr-1.5 ';
+            faceCaptureStatus.className = 'text-[11px] font-medium ';
+
+            if (type === 'success') {
+                statusIcon.classList.add('fas', 'fa-check-circle', 'text-emerald-500');
+                faceCaptureStatus.classList.add('text-emerald-600');
+            } else if (type === 'error') {
+                statusIcon.classList.add('fas', 'fa-exclamation-triangle', 'text-rose-500');
+                faceCaptureStatus.classList.add('text-rose-600');
+            } else if (type === 'warning') {
+                statusIcon.classList.add('fas', 'fa-info-circle', 'text-amber-500');
+                faceCaptureStatus.classList.add('text-amber-600');
+            } else {
+                statusIcon.classList.add('fas', 'fa-info-circle', 'text-slate-400');
+                faceCaptureStatus.classList.add('text-slate-500');
+            }
+        }
 
         function validatePassword() {
             if(confirmInput.value === '') {
-                confirmInput.classList.remove('border-red-300', 'border-green-300', 'focus:ring-red-500', 'focus:ring-green-500');
+                confirmInput.classList.remove('border-rose-300', 'border-emerald-300', 'focus:ring-rose-500', 'focus:ring-emerald-500', 'bg-rose-50', 'bg-emerald-50');
                 matchText.textContent = '';
                 return;
             }
 
             if (passwordInput.value === confirmInput.value) {
-                confirmInput.classList.remove('border-red-300', 'focus:ring-red-500');
-                confirmInput.classList.add('border-green-300', 'focus:ring-green-500');
+                confirmInput.classList.remove('border-rose-300', 'focus:ring-rose-500', 'bg-rose-50');
+                confirmInput.classList.add('border-emerald-300', 'focus:ring-emerald-500', 'bg-emerald-50');
                 matchText.textContent = 'Passwords match';
-                matchText.className = 'text-xs mt-1 h-4 transition-all text-green-600';
+                matchText.className = 'text-[11px] font-bold mt-1.5 h-4 transition-all ml-1 text-emerald-600 flex items-center';
+                matchText.innerHTML = '<i class="fas fa-check text-[10px] mr-1"></i> Passwords match';
             } else {
-                confirmInput.classList.remove('border-green-300', 'focus:ring-green-500');
-                confirmInput.classList.add('border-red-300', 'focus:ring-red-500');
+                confirmInput.classList.remove('border-emerald-300', 'focus:ring-emerald-500', 'bg-emerald-50');
+                confirmInput.classList.add('border-rose-300', 'focus:ring-rose-500', 'bg-rose-50');
                 matchText.textContent = 'Passwords do not match';
-                matchText.className = 'text-xs mt-1 h-4 transition-all text-red-600';
+                matchText.className = 'text-[11px] font-bold mt-1.5 h-4 transition-all ml-1 text-rose-600 flex items-center';
+                matchText.innerHTML = '<i class="fas fa-times text-[10px] mr-1"></i> Passwords do not match';
             }
         }
 
@@ -221,6 +281,7 @@
 
         async function startCamera() {
             try {
+                updateStatusUI('Initializing camera...', 'default');
                 if (mediaStream) {
                     mediaStream.getTracks().forEach(track => track.stop());
                 }
@@ -229,18 +290,15 @@
                     audio: false
                 });
                 cameraEl.srcObject = mediaStream;
-                faceCaptureStatus.textContent = 'Camera ready. Tap Capture.';
-                faceCaptureStatus.className = 'mt-2 text-[11px] text-green-700';
+                updateStatusUI('Camera ready. Align face and tap Capture.', 'success');
             } catch (error) {
-                faceCaptureStatus.textContent = 'Unable to access camera. Please allow camera permission.';
-                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
+                updateStatusUI('Unable to access camera. Please allow permissions.', 'error');
             }
         }
 
         function captureFaceImage() {
             if (!cameraEl.videoWidth || !cameraEl.videoHeight) {
-                faceCaptureStatus.textContent = 'Camera not ready yet. Please try again.';
-                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
+                updateStatusUI('Camera not ready. Please Open Camera first.', 'error');
                 return;
             }
 
@@ -251,18 +309,53 @@
             const dataUrl = canvasEl.toDataURL('image/jpeg', 0.9);
             faceCaptureDataEl.value = dataUrl;
 
-            faceCaptureStatus.textContent = 'Face image captured successfully.';
-            faceCaptureStatus.className = 'mt-2 text-[11px] text-green-700';
+            // Flash effect
+            const videoContainer = cameraEl.parentElement;
+            const flash = document.createElement('div');
+            flash.className = 'absolute inset-0 bg-white transition-opacity duration-300 opacity-100 z-10 rounded-xl';
+            videoContainer.appendChild(flash);
+            setTimeout(() => { flash.style.opacity = '0'; }, 50);
+            setTimeout(() => { flash.remove(); }, 350);
+
+            updateStatusUI('Face image captured successfully!', 'success');
         }
 
         function clearCapture() {
             faceCaptureDataEl.value = '';
-            faceCaptureStatus.textContent = 'Capture cleared. Capture again before submitting.';
-            faceCaptureStatus.className = 'mt-2 text-[11px] text-amber-700';
+            updateStatusUI('Capture cleared. Please capture again.', 'warning');
         }
 
         function hasCapturedFace() {
             return Boolean(faceCaptureDataEl.value && faceCaptureDataEl.value.startsWith('data:image/'));
+        }
+
+        function setupFaceJumpButton() {
+            if (!jumpToFaceBtn || !faceAuthSection) {
+                return;
+            }
+
+            jumpToFaceBtn.addEventListener('click', () => {
+                faceAuthSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                faceAuthSection.classList.add('ring-2', 'ring-indigo-300');
+                setTimeout(() => {
+                    faceAuthSection.classList.remove('ring-2', 'ring-indigo-300');
+                }, 1200);
+            });
+
+            if (!('IntersectionObserver' in window)) {
+                return;
+            }
+
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        jumpToFaceBtn.classList.toggle('hidden', entry.isIntersecting);
+                    });
+                },
+                { threshold: 0.35 }
+            );
+
+            observer.observe(faceAuthSection);
         }
 
         startCameraBtn.addEventListener('click', startCamera);
@@ -272,10 +365,15 @@
         registrationForm.addEventListener('submit', (event) => {
             if (!hasCapturedFace()) {
                 event.preventDefault();
-                faceCaptureStatus.textContent = 'Face capture is required. Please capture your image before submitting.';
-                faceCaptureStatus.className = 'mt-2 text-[11px] text-red-700';
-                submitBtn.classList.add('ring-2', 'ring-red-400');
-                setTimeout(() => submitBtn.classList.remove('ring-2', 'ring-red-400'), 1200);
+                updateStatusUI('Face capture is required to proceed.', 'error');
+                
+                // Shake effect on the container
+                const captureContainer = faceCaptureStatus.closest('.rounded-2xl');
+                captureContainer.classList.add('ring-2', 'ring-rose-400', 'transform', 'translate-x-1');
+                setTimeout(() => captureContainer.classList.replace('translate-x-1', '-translate-x-1'), 50);
+                setTimeout(() => captureContainer.classList.replace('-translate-x-1', 'translate-x-1'), 100);
+                setTimeout(() => captureContainer.classList.replace('translate-x-1', '-translate-x-1'), 150);
+                setTimeout(() => captureContainer.classList.remove('-translate-x-1', 'ring-2', 'ring-rose-400', 'transform'), 200);
             }
         });
 
@@ -285,6 +383,9 @@
             }
         });
 
+        setupFaceJumpButton();
+
+        // Initialize camera on load
         startCamera();
     </script>
 </body>
