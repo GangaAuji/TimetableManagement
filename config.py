@@ -6,6 +6,14 @@ from MySQLdb.cursors import DictCursor
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
+
+def _first_existing_path(*candidates: str) -> str:
+    """Return the first existing file path, else the first candidate."""
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return candidates[0]
+
 class Config:
     """Set Flask configuration from environment variables."""
 
@@ -76,11 +84,17 @@ class Config:
     MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = os.environ.get('MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS', 'True') == 'True'
     MOBILEFACENET_MODEL_PATH = os.environ.get(
         'MOBILEFACENET_MODEL_PATH',
-        os.path.join(basedir, 'assets', 'mobilefacenet.tflite')
+        _first_existing_path(
+            os.path.join(basedir, 'ml', 'models', 'face-recognition', 'mobilefacenet.tflite'),
+            os.path.join(basedir, 'assets', 'mobilefacenet.tflite'),
+        )
     )
     YOLO_FACE_DETECTOR_MODEL_PATH = os.environ.get(
         'YOLO_FACE_DETECTOR_MODEL_PATH',
-        os.path.join(basedir, 'assets', 'yolov8n_float32.tflite')
+        _first_existing_path(
+            os.path.join(basedir, 'ml', 'models', 'face-recognition', 'yolov8n_float32.tflite'),
+            os.path.join(basedir, 'assets', 'yolov8n_float32.tflite'),
+        )
     )
     FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD', 0.35))
     FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD', 0.45))

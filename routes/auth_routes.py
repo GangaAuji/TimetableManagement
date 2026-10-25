@@ -473,7 +473,11 @@ def register(token):
                     )
                     if Config.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS:
                         flash(
-                            "Unable to generate face embedding. Ensure assets/mobilefacenet.tflite and assets/yolov8n_float32.tflite are available.",
+                            (
+                                "Unable to generate face embedding. Check runtime installation and model paths: "
+                                f"embedder={Config.MOBILEFACENET_MODEL_PATH}, "
+                                f"detector={Config.YOLO_FACE_DETECTOR_MODEL_PATH}"
+                            ),
                             "danger"
                         )
                         return render_template('register.html', form=form, invitation=invitation, token=token)

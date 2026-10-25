@@ -28,7 +28,13 @@ def _load_interpreter_class():
             return getattr(module, "Interpreter")
         except Exception:
             try:
-                module = importlib.import_module("tensorflow.lite")
+                # TensorFlow commonly exposes the class via tf.lite.Interpreter.
+                tf_module = importlib.import_module("tensorflow")
+                lite_module = getattr(tf_module, "lite", None)
+                if lite_module is not None and hasattr(lite_module, "Interpreter"):
+                    return getattr(lite_module, "Interpreter")
+                # Fallback for TensorFlow package layouts where Interpreter is under python.interpreter.
+                module = importlib.import_module("tensorflow.lite.python.interpreter")
                 return getattr(module, "Interpreter")
             except Exception:
                 return None
@@ -54,7 +60,9 @@ class TFLiteFacePipeline:
     ):
         if Interpreter is None:
             raise RuntimeError(
-                "No TFLite interpreter available. Install tflite-runtime or tensorflow."
+                "No TFLite interpreter available. Install one runtime in your active environment: "
+                "`pip install tensorflow` (or `pip install tflite-runtime` where supported). "
+                f"Requested models: detector={detector_model_path}, embedder={embedder_model_path}"
             )
 
         if not os.path.exists(embedder_model_path):
