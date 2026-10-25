@@ -201,6 +201,22 @@ def _normalize_face_template(raw_template):
     return [value / norm for value in normalized_values]
 
 
+def _quality_threshold():
+    try:
+        return float(getattr(Config, "FACE_TEMPLATE_MIN_QUALITY", 0.55) or 0.55)
+    except (TypeError, ValueError):
+        return 0.55
+
+
+def _has_acceptable_template_quality(raw_quality):
+    if raw_quality is None:
+        return True
+    try:
+        return float(raw_quality) >= _quality_threshold()
+    except (TypeError, ValueError):
+        return False
+
+
 def _load_face_templates(cursor, user_ids, updated_after_dt=None):
     if not user_ids:
         return {}
@@ -874,7 +890,14 @@ def sync_users():
             profile_photo_url = _build_photo_url(profile_photo)
             face_template_info = face_templates_by_user.get(user_id) or {}
             template_embedding = face_template_info.get("embedding")
-            has_valid_template = isinstance(template_embedding, list) and len(template_embedding) == EXPECTED_FACE_TEMPLATE_LENGTH
+            quality_ok = _has_acceptable_template_quality(face_template_info.get("quality_score"))
+            has_valid_template = (
+                isinstance(template_embedding, list)
+                and len(template_embedding) == EXPECTED_FACE_TEMPLATE_LENGTH
+                and quality_ok
+            )
+            if not has_valid_template:
+                template_embedding = None
             template_image_path = face_template_info.get("image_path")
             template_image_url = _build_photo_url(template_image_path) if template_image_path else None
             users.append(

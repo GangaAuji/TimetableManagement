@@ -96,8 +96,8 @@ def generate_timetable():
             generation_result.setdefault('unassigned', [])
             generation_result.setdefault('proxy_suggestions', [])
             generation_result.setdefault('skipped_holidays', [])
-        status = result.get('status', 'error')
-        message = result.get('message', 'Unable to generate timetable.')
+        status = generation_result.get('status', 'error') if isinstance(generation_result, dict) else 'error'
+        message = generation_result.get('message', 'Unable to generate timetable.') if isinstance(generation_result, dict) else 'Unable to generate timetable.'
         flash_category = 'success' if status == 'success' else 'warning' if status == 'warning' else 'danger'
         flash(message, flash_category)
     cursor.close()
@@ -184,6 +184,7 @@ def timetable_manage():
                 """
                 SELECT 1 FROM timetable
                 WHERE course_id = %s AND class_id = %s AND division_id = %s AND day_of_week = %s
+                                    AND COALESCE(is_active, 1) = 1
                   AND NOT (end_time <= %s OR start_time >= %s)
                 LIMIT 1
                 """,
@@ -197,6 +198,7 @@ def timetable_manage():
                     """
                     SELECT 1 FROM timetable
                     WHERE faculty_id = %s AND day_of_week = %s
+                                            AND COALESCE(is_active, 1) = 1
                       AND NOT (end_time <= %s OR start_time >= %s)
                     LIMIT 1
                     """,
@@ -253,13 +255,26 @@ def timetable_manage():
     if request.method == 'POST' and request.form.get('action') == 'delete':
         try:
             tid = int(request.form.get('timetable_id'))
-            cursor.execute("DELETE FROM timetable WHERE id = %s", [tid])
+            try:
+                cursor.execute(
+                    "UPDATE timetable SET is_active = 0 WHERE id = %s AND COALESCE(is_active, 1) = 1",
+                    [tid],
+                )
+                if cursor.rowcount == 0:
+                    flash('Session not found or already removed.', 'warning')
+                else:
+                    flash('Session removed.', 'success')
+            except Exception:
+                cursor.execute("DELETE FROM timetable WHERE id = %s", [tid])
+                flash('Session removed.', 'success')
             connection.commit()
-            flash('Session removed.', 'success')
         except Exception as e:
             connection.rollback()
             current_app.logger.error(f"Delete timetable session error: {str(e)}")
-            flash('Failed to delete session.', 'danger')
+            if '1451' in str(e):
+                flash('Cannot delete this session because attendance records already exist for it.', 'danger')
+            else:
+                flash('Failed to delete session.', 'danger')
 
     # Assign room to session via POST
     if request.method == 'POST' and request.form.get('action') == 'assign_room':
@@ -273,7 +288,7 @@ def timetable_manage():
                        (SELECT COUNT(*) FROM students WHERE course_id = t.course_id AND class_id = t.class_id AND division_id = t.division_id) as student_count
                 FROM timetable t
                 JOIN subjects s ON t.subject_id = s.id
-                WHERE t.id = %s
+                WHERE t.id = %s AND COALESCE(t.is_active, 1) = 1
             """, (timetable_id,))
             session = cursor.fetchone()
             if not session:
@@ -306,7 +321,8 @@ def timetable_manage():
                 JOIN classes c ON t.class_id = c.id
                 JOIN divisions d ON t.division_id = d.id
                 JOIN subjects s ON t.subject_id = s.id
-                WHERE t.room_id = %s 
+                                WHERE t.room_id = %s
+                                    AND COALESCE(t.is_active, 1) = 1
                   AND t.day_of_week = %s
                   AND t.id != %s
                   AND NOT (t.end_time <= %s OR t.start_time >= %s)
@@ -321,7 +337,10 @@ def timetable_manage():
                 raise ValueError(f"Room has conflicts:\n" + "\n".join(conflict_details))
 
             # Assign room
-            cursor.execute("UPDATE timetable SET room_id = %s WHERE id = %s", (room_id, timetable_id))
+            cursor.execute(
+                "UPDATE timetable SET room_id = %s WHERE id = %s AND COALESCE(is_active, 1) = 1",
+                (room_id, timetable_id),
+            )
             connection.commit()
             flash('Room assigned successfully.', 'success')
             
@@ -352,7 +371,8 @@ def timetable_manage():
                 JOIN subjects s ON s.id = t.subject_id
                 LEFT JOIN faculty f ON f.user_id = t.faculty_id
                 LEFT JOIN rooms r ON t.room_id = r.id
-                WHERE t.course_id = %s AND t.class_id = %s AND t.division_id = %s
+                                WHERE t.course_id = %s AND t.class_id = %s AND t.division_id = %s
+                                    AND COALESCE(t.is_active, 1) = 1
                 ORDER BY FIELD(t.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), t.start_time
                 """,
                 (course_id, class_id, division_id),
@@ -368,7 +388,8 @@ def timetable_manage():
                 FROM timetable t
                 JOIN subjects s ON s.id = t.subject_id
                 LEFT JOIN faculty f ON f.user_id = t.faculty_id
-                WHERE t.course_id = %s AND t.class_id = %s AND t.division_id = %s
+                                WHERE t.course_id = %s AND t.class_id = %s AND t.division_id = %s
+                                    AND COALESCE(t.is_active, 1) = 1
                 ORDER BY FIELD(t.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), t.start_time
                 """,
                 (course_id, class_id, division_id),
