@@ -2,16 +2,15 @@
 
 import json
 import math
-import os
 from datetime import datetime, timedelta, timezone
 
 import decimal
 
 from flask import Blueprint, current_app, g, jsonify, request, url_for
-from werkzeug.utils import secure_filename
+from utils.uploads import save_uploaded_file
 
 from config import Config
-from database import get_db_connection
+from extensions import get_db_connection
 from .security import authenticate_mobile_request
 
 mobile_sync_bp = Blueprint("mobile_sync", __name__, url_prefix="/mobile-sync/v1")
@@ -1000,17 +999,14 @@ def upload_face_image(user_id):
     if not _is_allowed_filename(image_file.filename):
         return _json_error("Unsupported image format. Use png/jpg/jpeg/webp.")
 
-    safe_name = secure_filename(image_file.filename)
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    final_name = f"{user_id}_{timestamp}_{safe_name}"
-
-    upload_dir = os.path.join(current_app.root_path, "static", "uploads", "profiles")
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, final_name)
-
-    image_file.save(file_path)
-
-    relative_path = f"uploads/profiles/{final_name}"
+    relative_path = save_uploaded_file(
+        image_file,
+        "uploads/profiles",
+        allowed_extensions=ALLOWED_IMAGE_EXTENSIONS,
+        name_prefix=str(user_id),
+        timestamp=timestamp,
+    )
 
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)

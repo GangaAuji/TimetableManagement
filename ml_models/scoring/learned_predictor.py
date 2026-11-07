@@ -5,7 +5,7 @@ import math
 import os
 from typing import Iterable
 
-from database import get_db_connection
+from extensions import get_db_connection
 
 # Ordered feature list used by both training and inference.
 _FEATURE_NAMES = [

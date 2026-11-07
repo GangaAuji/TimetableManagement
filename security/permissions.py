@@ -3,7 +3,7 @@ Department-Filtered Access Control Helper Functions
 Django-like permission system with department-level filtering
 """
 from flask import session
-from database import get_db_connection
+from extensions import get_db_connection
 
 def get_accessible_student_ids(user_id=None):
     """

@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import session, flash, redirect, url_for, request, current_app
-from database import get_db_connection
+from extensions import get_db_connection
 import datetime
 
 

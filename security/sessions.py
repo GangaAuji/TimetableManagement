@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 import secrets
 import hashlib
-from database import get_db_connection
+from extensions import get_db_connection
 
 # Session configuration
 SESSION_TIMEOUT_MINUTES = 30  # Regular session timeout

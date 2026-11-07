@@ -1,8 +1,9 @@
-from flask import session, render_template, jsonify, make_response
-from database import get_db_connection
+from flask import session, jsonify, make_response
+from ui.pages import render_template
 import csv
 import io
 from .teacher import teacher_bp, teacher_required, format_time
+from services.teacher_portal import load_timetable_download, load_timetable_rows
 
 # --- Timetable: page, JSON, download ---
 @teacher_bp.route('/timetable')
@@ -15,78 +16,18 @@ def my_timetable():
 @teacher_bp.route('/timetable/data')
 @teacher_required
 def timetable_data():
-    connection = get_db_connection()
-
-    cursor = connection.cursor(dictionary=True)
-    faculty_id = session.get('faculty_id')
-    
-    # Get user_id for this faculty (timetable uses user_id as faculty_id)
-    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (faculty_id,))
-    faculty_record = cursor.fetchone()
-    if not faculty_record:
+    data = load_timetable_rows(session.get('faculty_id'))
+    if data == 'missing':
         return jsonify({'data': []})
-    
-    faculty_user_id = faculty_record['user_id']
-    
-    cursor.execute(
-        """
-        SELECT t.id, t.day_of_week, t.start_time, t.end_time, s.name AS subject_name, c.name AS class_name, d.name AS division_name
-        FROM timetable t
-        JOIN subjects s ON t.subject_id = s.id
-        JOIN classes c ON t.class_id = c.id
-        JOIN divisions d ON t.division_id = d.id
-        WHERE t.faculty_id = %s
-        ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
-        """,
-        [faculty_user_id],
-    )
-    data = []
-    for row in cursor.fetchall():
-        data.append(
-            {
-                'id': row['id'],
-                'day': row['day_of_week'],
-                'start_time': format_time(row['start_time']),
-                'end_time': format_time(row['end_time']),
-                'subject': row['subject_name'],
-                'class': row['class_name'],
-                'division': row['division_name'],
-            }
-        )
-    cursor.close()
     return jsonify({'data': data})
 
 
 @teacher_bp.route('/timetable/download')
 @teacher_required
 def download_timetable():
-    connection = get_db_connection()
-
-    cursor = connection.cursor(dictionary=True)
-    faculty_id = session.get('faculty_id')
-    
-    # Get user_id for this faculty (timetable uses user_id as faculty_id)
-    cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (faculty_id,))
-    faculty_record = cursor.fetchone()
-    if not faculty_record:
+    rows = load_timetable_download(session.get('faculty_id'))
+    if rows == 'missing':
         return "Faculty not found", 404
-    
-    faculty_user_id = faculty_record['user_id']
-    
-    cursor.execute(
-        """
-        SELECT t.day_of_week, t.start_time, t.end_time, s.name AS subject_name, c.name AS class_name, d.name AS division_name
-        FROM timetable t
-        JOIN subjects s ON t.subject_id = s.id
-        JOIN classes c ON t.class_id = c.id
-        JOIN divisions d ON t.division_id = d.id
-        WHERE t.faculty_id = %s
-        ORDER BY FIELD(t.day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), t.start_time
-        """,
-        [faculty_user_id],
-    )
-    rows = cursor.fetchall()
-    cursor.close()
 
     output = io.StringIO()
     writer = csv.writer(output)

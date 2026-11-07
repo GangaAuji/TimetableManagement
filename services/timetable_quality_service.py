@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ml.features.timetable_features import extract_timetable_features
-from ml.scoring.rule_scorer import score_from_features
+from ml_models.features.timetable_features import extract_timetable_features
+from ml_models.scoring.rule_scorer import score_from_features
 
 
 def score_timetable_candidate(

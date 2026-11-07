@@ -9,7 +9,7 @@ from datetime import datetime
 
 from flask import current_app, g, jsonify, request
 
-from database import get_db_connection
+from extensions import get_db_connection
 from .sync_attendance import (
     ALLOWED_STATUSES,
     _has_active_timetable_for_group,

@@ -4,8 +4,8 @@ Handles department listing and management
 """
 
 from flask import Blueprint, jsonify
-from database import get_db_connection
 from routes.admin_utils import admin_required
+from services.admin_departments import list_department_choices
 
 departments_bp = Blueprint('departments', __name__, url_prefix='/admin')
 
@@ -14,15 +14,4 @@ departments_bp = Blueprint('departments', __name__, url_prefix='/admin')
 @admin_required
 def list_departments():
     """API endpoint to get all departments for dropdowns"""
-    connection = get_db_connection()
-
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT id, name FROM departments ORDER BY name")
-        departments = cursor.fetchall()
-        return jsonify([{'id': d['id'], 'name': d['name']} for d in departments])
-    finally:
-
-        cursor.close()
-
-        connection.close()
+    return jsonify(list_department_choices())

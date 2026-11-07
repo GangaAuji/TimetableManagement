@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ml.scoring.learned_predictor import predict_quality_score
+from ml_models.scoring.learned_predictor import predict_quality_score
 
 SCORE_WEIGHTS = {
     "clash_risk": 0.35,

@@ -8,7 +8,7 @@ import json
 
 from flask import current_app, g, jsonify, request
 
-from database import get_db_connection
+from extensions import get_db_connection
 from .sync_attendance import (
     _day_of_week_from_date,
     _json_error,

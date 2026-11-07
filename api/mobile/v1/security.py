@@ -6,7 +6,7 @@ import time
 from flask import current_app, g, jsonify, request
 
 from config import Config
-from database import get_db_connection
+from extensions import get_db_connection
 
 
 def _json_error(message, status=400):

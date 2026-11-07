@@ -3,7 +3,8 @@ Admin Permissions Routes
 Handles viewing and managing user permissions
 """
 
-from flask import Blueprint, render_template, session
+from flask import Blueprint, session
+from ui.pages import render_template
 from security import get_user_permissions
 from routes.admin_utils import admin_required
 

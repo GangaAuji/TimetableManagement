@@ -3,7 +3,7 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from MySQLdb.cursors import DictCursor
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 load_dotenv(os.path.join(basedir, '.env'))
 
 
@@ -13,6 +13,14 @@ def _first_existing_path(*candidates: str) -> str:
         if path and os.path.exists(path):
             return path
     return candidates[0]
+
+
+def _path_from_env(name: str, *candidates: str) -> str:
+    """Use the env path when that file exists. Otherwise use a moved default."""
+    configured = os.environ.get(name)
+    if configured and os.path.exists(configured):
+        return configured
+    return _first_existing_path(*candidates)
 
 class Config:
     """Set Flask configuration from environment variables."""
@@ -38,9 +46,10 @@ class Config:
     LOG_FILE = os.environ.get('LOG_FILE')
 
     # Timetable quality model
-    QUALITY_MODEL_PATH = os.environ.get(
+    QUALITY_MODEL_PATH = _path_from_env(
         'QUALITY_MODEL_PATH',
-        os.path.join(basedir, 'ml', 'models', 'timetable_quality_model.json')
+        os.path.join(basedir, 'ml_models', 'models', 'timetable_quality_model.json'),
+        os.path.join(basedir, 'ml', 'models', 'timetable_quality_model.json'),
     )
     QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES = int(os.environ.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 5))
 
@@ -58,7 +67,7 @@ class Config:
     # CSRF settings
     WTF_CSRF_ENABLED = True
     WTF_CSRF_CHECK_DEFAULT = True
-    WTF_CSRF_TIME_LIMIT = None  # Disable CSRF token expiration for debugging
+    WTF_CSRF_TIME_LIMIT = 60 * 60 * 12
     WTF_CSRF_SSL_STRICT = False  # Disable SSL check for development
     WTF_CSRF_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
     
@@ -82,19 +91,17 @@ class Config:
     # Face embedding generation (registration/backend ML)
     MOBILE_FACE_EMBEDDING_ENABLED = os.environ.get('MOBILE_FACE_EMBEDDING_ENABLED', 'True') == 'True'
     MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = os.environ.get('MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS', 'True') == 'True'
-    MOBILEFACENET_MODEL_PATH = os.environ.get(
+    MOBILEFACENET_MODEL_PATH = _path_from_env(
         'MOBILEFACENET_MODEL_PATH',
-        _first_existing_path(
-            os.path.join(basedir, 'ml', 'models', 'face-recognition', 'mobilefacenet.tflite'),
-            os.path.join(basedir, 'assets', 'mobilefacenet.tflite'),
-        )
+        os.path.join(basedir, 'ml_models', 'models', 'face-recognition', 'mobilefacenet.tflite'),
+        os.path.join(basedir, 'ml', 'models', 'face-recognition', 'mobilefacenet.tflite'),
+        os.path.join(basedir, 'assets', 'mobilefacenet.tflite'),
     )
-    YOLO_FACE_DETECTOR_MODEL_PATH = os.environ.get(
+    YOLO_FACE_DETECTOR_MODEL_PATH = _path_from_env(
         'YOLO_FACE_DETECTOR_MODEL_PATH',
-        _first_existing_path(
-            os.path.join(basedir, 'ml', 'models', 'face-recognition', 'yolov8n_float32.tflite'),
-            os.path.join(basedir, 'assets', 'yolov8n_float32.tflite'),
-        )
+        os.path.join(basedir, 'ml_models', 'models', 'face-recognition', 'yolov8n_float32.tflite'),
+        os.path.join(basedir, 'ml', 'models', 'face-recognition', 'yolov8n_float32.tflite'),
+        os.path.join(basedir, 'assets', 'yolov8n_float32.tflite'),
     )
     FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD'))
     FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD'))
