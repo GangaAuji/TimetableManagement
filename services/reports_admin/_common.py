@@ -27,50 +27,6 @@ REPORT_LABELS = {
     'timetable-export': 'Timetable export',
 }
 
-_reports_table_ready = False
-
-
-def _ensure_processed_reports_table(cursor):
-    """Ensure processed reports metadata table exists for download queue."""
-    global _reports_table_ready
-    if _reports_table_ready:
-        return
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS processed_reports (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            report_type VARCHAR(50) NOT NULL,
-            status VARCHAR(20) NOT NULL DEFAULT 'completed',
-            filters_json TEXT NULL,
-            row_count INT NOT NULL DEFAULT 0,
-            file_name VARCHAR(255) NOT NULL,
-            file_path VARCHAR(500) NOT NULL,
-            created_by INT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            downloaded_at TIMESTAMP NULL DEFAULT NULL,
-            progress TINYINT UNSIGNED NOT NULL DEFAULT 100,
-            INDEX idx_processed_reports_created_at (created_at),
-            INDEX idx_processed_reports_created_by (created_by),
-            INDEX idx_processed_reports_queue (status, id),
-            INDEX idx_processed_reports_recent (status, created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    """)
-    _ensure_job_progress(cursor)
-    _reports_table_ready = True
-
-
-def _ensure_job_progress(cursor):
-    """Add the progress column on tables created before queued exports."""
-    cursor.execute("SHOW COLUMNS FROM processed_reports LIKE 'progress'")
-    if cursor.fetchone():
-        return
-    try:
-        cursor.execute(
-            "ALTER TABLE processed_reports ADD COLUMN progress TINYINT UNSIGNED NOT NULL DEFAULT 100"
-        )
-    except Exception as exc:
-        if 'Duplicate column' not in str(exc):
-            raise
-
 def _get_reports_storage_dir():
     """Get and create storage folder for processed CSV files."""
     reports_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'reports')

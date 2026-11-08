@@ -193,7 +193,6 @@ function Welcome({ name, detail, badge, asideLabel, asideValue }: { name: string
       <div>
         <div className="mb-2 flex items-center gap-3">
           <span className="rounded-full border border-green-100 bg-green-50 px-3 py-1 text-[10px] font-bold tracking-wider text-green-600 uppercase">{badge}</span>
-          <span className="text-xs font-medium text-gray-400">{todayLabel()}</span>
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-gray-800 md:text-4xl">Hello, <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">{name}</span>!</h1>
         <p className="mt-2 max-w-lg text-sm text-gray-500">{detail}</p>

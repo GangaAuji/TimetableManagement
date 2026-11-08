@@ -14,7 +14,8 @@ type LoginPageProps = {
 
 export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
   const admin = mode === 'admin'
-  const loginLogo = staticAssetUrl(branding.login_logo)
+  const loginLogo = staticAssetUrl(branding.login_logo) || staticAssetUrl(branding.site_logo)
+  const background = staticAssetUrl(admin ? branding.admin_login_background : branding.login_background)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -40,34 +41,26 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4 font-sans">
+    <div
+      className={`relative flex min-h-screen items-center justify-center p-6 font-sans ${background ? 'bg-slate-900 bg-cover bg-center' : 'bg-gray-100'}`}
+      style={background ? { backgroundImage: `url("${background}")` } : undefined}
+    >
+      {background ? <div className="absolute inset-0 bg-slate-950/45" /> : null}
       <ThemeModeButton className="fixed top-4 right-4 z-20 border border-gray-200 bg-white text-gray-700 shadow-sm" />
-      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:h-[600px] md:flex-row">
-        <div className={`relative hidden flex-col justify-between overflow-hidden p-12 text-white md:flex md:w-1/2 ${admin ? 'bg-slate-900' : 'bg-blue-900'}`}>
-          <div
-            className="absolute inset-0 bg-cover bg-center opacity-20"
-            style={{
-              backgroundImage: admin
-                ? "url('https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1350&q=80')"
-                : "url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1350&q=80')",
-            }}
-          />
-          <div className={`absolute inset-0 bg-gradient-to-t ${admin ? 'from-slate-900' : 'from-blue-900'} to-transparent`} />
+      <div className="relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:h-[460px] md:flex-row">
+        <div className={`relative hidden flex-col justify-between overflow-hidden p-8 text-white md:flex md:w-5/12 ${admin ? 'bg-slate-900' : 'bg-blue-900'}`}>
           <div className="relative z-10">
-            {admin ? (
-              <div className="mb-6 flex items-center gap-2">
-                <i className="fas fa-shield-alt text-3xl text-red-500" />
-                <span className="text-xl font-bold tracking-wider text-red-500">ADMIN</span>
-              </div>
-            ) : loginLogo ? (
-              <img src={loginLogo} alt="" className="mb-6 h-12 w-auto" />
-            ) : (
-              <div className="mb-6 flex items-center gap-2">
-                <i className="fas fa-graduation-cap text-3xl text-blue-300" />
-                <span className="text-xl font-bold tracking-wider">{branding.institution_short_name}</span>
-              </div>
-            )}
-            <h2 className={`${admin ? 'text-3xl' : 'text-4xl'} mb-4 leading-tight font-bold`}>
+            <div className="mb-4 flex items-center gap-2">
+              {loginLogo ? (
+                <img src={loginLogo} alt="" className="h-10 w-auto max-w-[140px] object-contain" />
+              ) : (
+                <i className={`fas ${admin ? 'fa-shield-alt text-red-500' : 'fa-graduation-cap text-blue-300'} text-2xl`} />
+              )}
+              <span className={`text-lg font-bold tracking-wider ${admin ? 'text-red-500' : ''}`}>
+                {admin ? 'ADMIN' : branding.institution_short_name}
+              </span>
+            </div>
+            <h2 className="mb-3 text-2xl leading-tight font-bold">
               {admin ? 'System Administration' : branding.tagline}
             </h2>
             <p className={admin ? 'text-slate-300' : 'text-blue-200'}>
@@ -89,9 +82,10 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
           </div>
         </div>
 
-        <div className="relative flex w-full flex-col justify-center p-8 md:w-1/2 md:p-12">
-          <div className="mx-auto w-full max-w-md">
-            <div className={`mb-8 ${admin ? 'border-b border-gray-100 pb-4' : ''}`}>
+        <div className="relative flex w-full flex-col justify-center p-6 md:w-7/12 md:p-8">
+          <div className="mx-auto w-full max-w-sm">
+            {loginLogo ? <img src={loginLogo} alt="" className="mb-4 h-9 w-auto max-w-[120px] object-contain md:hidden" /> : null}
+            <div className={`mb-5 ${admin ? 'border-b border-gray-100 pb-3' : ''}`}>
               <h1 className="text-2xl font-bold text-gray-900">{admin ? 'Admin Sign In' : branding.login_title}</h1>
               <p className="mt-2 text-sm text-gray-500">{admin ? 'Please identify yourself to continue.' : 'Please enter your details to sign in.'}</p>
             </div>
@@ -100,7 +94,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
                 {error}
               </div>
             ) : null}
-            <form onSubmit={onSubmit} className="space-y-6">
+            <form onSubmit={onSubmit} className="space-y-4">
               <div>
                 <label htmlFor="username" className="mb-1 block text-sm font-medium text-gray-700">
                   {admin ? 'Username' : 'Username / ID'}
@@ -118,7 +112,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     placeholder={admin ? undefined : 'Enter your ID'}
-                    className={`${admin ? '' : 'pl-10'} w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 ${admin ? 'focus:ring-red-500' : 'focus:ring-blue-500'}`}
+                    className={`${admin ? '' : 'pl-10'} w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm transition-all outline-none focus:border-transparent focus:ring-2 ${admin ? 'focus:ring-red-500' : 'focus:ring-blue-500'}`}
                   />
                 </div>
               </div>
@@ -138,7 +132,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder={admin ? undefined : '••••••••'}
-                    className={`${admin ? '' : 'pl-10'} w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 transition-all outline-none focus:border-transparent focus:ring-2 ${admin ? 'focus:ring-red-500' : 'focus:ring-blue-500'}`}
+                    className={`${admin ? '' : 'pl-10'} w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm transition-all outline-none focus:border-transparent focus:ring-2 ${admin ? 'focus:ring-red-500' : 'focus:ring-blue-500'}`}
                   />
                 </div>
               </div>
@@ -156,7 +150,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`flex w-full transform justify-center rounded-lg border border-transparent px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:scale-[1.02] focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${admin ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'focus:ring-blue-500'}`}
+                className={`flex w-full justify-center rounded-lg border border-transparent px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${admin ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'focus:ring-blue-500'}`}
                 style={admin ? undefined : { backgroundColor: branding.primary_color || '#059669' }}
               >
                 {admin ? <i className="fas fa-lock mt-1 mr-2" /> : null}
@@ -168,7 +162,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
                 Student and teacher sign in
               </Link>
             ) : (
-              <div className="mt-8 text-center text-sm text-gray-500">
+              <div className="mt-5 text-center text-sm text-gray-500">
                 Not a member? Contact the <span className="font-medium text-gray-700">Administration Office</span>.
                 <Link to="/admin/login" className="mt-3 block w-full font-medium text-slate-600 hover:text-slate-900">
                   Admin sign in

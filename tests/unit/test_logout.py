@@ -34,11 +34,12 @@ def _bind(monkeypatch, cursor):
     connection = _Connection()
     activities = []
     monkeypatch.setattr(login_service, 'get_db', lambda: (connection, cursor))
-    monkeypatch.setattr(
-        login_service,
-        'log_activity',
-        lambda *args: activities.append(args),
-    )
+
+    def _log(*args, cursor=None, **kwargs):
+        assert cursor is not None, 'logout is audited in its own transaction'
+        activities.append(args)
+
+    monkeypatch.setattr(login_service, 'log_activity', _log)
     return connection, activities
 
 
@@ -61,23 +62,15 @@ def test_logout_without_a_session_id_still_logs_the_user(monkeypatch):
     login_service.sign_out(session)
     assert activities == [(7, 'logout', 'User unknown logged out')]
     assert cursor.calls == []
-    assert connection.commits == 0
+    assert connection.commits == 1
     assert session == {}
 
 
-def test_logout_deactivates_the_session_before_clearing_it(monkeypatch):
+def test_logout_deactivates_the_session_and_logs_it_in_one_commit(monkeypatch):
     cursor = _Cursor()
     connection, activities = _bind(monkeypatch, cursor)
-    seen = {}
-
-    def _log(user_id, activity_type, description):
-        seen['during_log'] = {'user_id': user_id, 'session_id': session.get('session_id')}
-        activities.append((user_id, activity_type, description))
-
-    monkeypatch.setattr(login_service, 'log_activity', _log)
     session = {'user_id': 7, 'username': 'ada', 'session_id': 'sid-1', 'role': 'Student'}
     login_service.sign_out(session)
-    assert seen['during_log'] == {'user_id': 7, 'session_id': 'sid-1'}
     assert activities == [(7, 'logout', 'User ada logged out')]
     assert cursor.calls == [(
         'UPDATE user_sessions SET is_active = 0 WHERE session_id = %s',
@@ -99,7 +92,7 @@ def test_failed_deactivation_leaves_the_session_in_place(monkeypatch):
         assert str(exc) == 'session locked'
     else:
         raise AssertionError('the logout error was swallowed')
-    assert activities == [(7, 'logout', 'User ada logged out')]
+    assert activities == []
     assert connection.commits == 0
     assert cursor.closed is False
     assert session['session_id'] == 'sid-1'

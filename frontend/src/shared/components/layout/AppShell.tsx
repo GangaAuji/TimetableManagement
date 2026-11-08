@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar'
 import type { Branding, SessionInfo } from '../../api/endpoints'
 import { useThemeMode } from '../ThemeModeButton'
 import { pagePad } from '../../layout/page-frame'
-import { applyBrandingTheme } from '../../theme'
+import { applyBrandingHead, applyBrandingTheme } from '../../theme'
 
 type AppShellProps = {
   branding: Branding
@@ -18,6 +18,7 @@ export function AppShell({ branding, session, header, children }: AppShellProps)
   const [menuOpen, setMenuOpen] = useState(false)
   const mode = useThemeMode()
   applyBrandingTheme(branding, mode)
+  applyBrandingHead(branding)
 
   return (
     <div className="bg-gray-100 font-sans text-gray-800 antialiased">

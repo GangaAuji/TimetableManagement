@@ -1,6 +1,9 @@
 from flask import Flask, session, send_from_directory
 from flask_wtf.csrf import CSRFError
 from config import Config
+from core.runtime import loaded_for_cli_command
+from core.schema.cli import register_commands as register_schema_commands
+from core.schema.status import database_reason
 from extensions import close_db, configure_migrations, csrf, get_db_connection
 import logging
 from logging.handlers import RotatingFileHandler
@@ -13,19 +16,10 @@ from datetime import timedelta
 from utils.dates import format_hhmm
 
 
-def _warm_indexes():
-    """Build missing composite indexes off the request thread."""
-    try:
-        from services.db_indexes import ensure_indexes
-        ensure_indexes()
-    except Exception:
-        logging.getLogger(__name__).exception('Database indexes could not be checked')
-
-
 def _start_quality_model_retrainer(app):
     """Run periodic quality-model retraining in a background daemon thread."""
 
-    interval_minutes = int(app.config.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 180) or 180)
+    interval_minutes = int(app.config.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 180))
     if interval_minutes <= 0:
         app.logger.info('Quality model retrainer disabled (interval=%s).', interval_minutes)
         return
@@ -85,13 +79,72 @@ def format_time_12hr_filter(time_obj):
     else:
         return str(time_obj)
 
-def create_app():
-    """Create and configure an instance of the Flask application."""
+def _configure_logging(app):
+    """Capture all log output to LOG_FILE and the console. Replaces the root logger's handlers."""
+    log_file = app.config.get('LOG_FILE', 'app.log')
+
+    # Ensure logs directory exists
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
+    # File handler for all logs
+    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)  # 10MB per file
+    file_handler.setLevel(logging.DEBUG)  # Capture everything
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Console handler for terminal output
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    # Configure root logger (captures everything from all modules)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Capture all levels
+
+    # Clear any existing handlers to avoid duplicates
+    root_logger.handlers.clear()
+
+    # Add handlers to root logger only (all child loggers will inherit)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    # Set specific logger levels (they inherit handlers from root)
+    app.logger.setLevel(logging.DEBUG)
+    logging.getLogger('werkzeug').setLevel(logging.INFO)  # Flask dev server
+    logging.getLogger('MySQLdb').setLevel(logging.WARNING)  # Only warnings/errors from DB
+
+
+def create_app(config=None):
+    """Create and configure an instance of the Flask application.
+
+    `config` is a config class or a mapping. Without it the module-level Config is used.
+    """
     # Keep the import name "app" so static files, templates, and the logger stay where they are.
     app = Flask('app')
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable cache for static files
-    app.config.from_object(Config)
+    if config is None:
+        app.config.from_object(Config)
+    elif isinstance(config, dict):
+        app.config.from_object(Config)
+        app.config.update(config)
+    else:
+        app.config.from_object(config)
+    if app.config.get('TESTING'):
+        from config.testing import test_database_problem
+
+        problem = test_database_problem(app.config.get('MYSQL_DB'))
+        if problem:
+            raise RuntimeError(f'Refusing to create a testing app: {problem}')
+    proxies = int(app.config.get('TRUSTED_PROXY_COUNT') or 0)
+    if proxies > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxies, x_proto=proxies)
+    # Set when a `flask` command other than `run` loads the app: no background workers start.
+    app.config['CLI_COMMAND'] = loaded_for_cli_command()
     
     # Ensure we have a secret key
     if not app.config.get('SECRET_KEY'):
@@ -104,6 +157,7 @@ def create_app():
     # Initialize extensions
     csrf.init_app(app)
     configure_migrations(app)
+    register_schema_commands(app)
     
     # Register database teardown
     app.teardown_appcontext(close_db)
@@ -122,8 +176,6 @@ def create_app():
             cursor.close()
             connection.close()
             app.logger.info(f"[OK] MySQL connection successful - Test result: {result}")
-            if not os.environ.get('PYTEST_CURRENT_TEST'):
-                threading.Thread(target=_warm_indexes, name='db-indexes', daemon=True).start()
         except Exception as e:
             app.logger.error(f"[ERROR] MySQL connection failed: {str(e)}")
             import traceback
@@ -195,40 +247,10 @@ def create_app():
         
         return dict(branding=branding_settings)
 
-    # Setup Logging - Capture ALL terminal output to app.log
-    log_file = app.config.get('LOG_FILE', 'app.log')
-    
-    # Ensure logs directory exists
-    log_dir = os.path.dirname(log_file)
-    if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-    
-    # File handler for all logs
-    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)  # 10MB per file
-    file_handler.setLevel(logging.DEBUG)  # Capture everything
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    
-    # Console handler for terminal output
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    
-    # Configure root logger (captures everything from all modules)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)  # Capture all levels
-    
-    # Clear any existing handlers to avoid duplicates
-    root_logger.handlers.clear()
-    
-    # Add handlers to root logger only (all child loggers will inherit)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-    
-    # Set specific logger levels (they inherit handlers from root)
-    app.logger.setLevel(logging.DEBUG)
-    logging.getLogger('werkzeug').setLevel(logging.INFO)  # Flask dev server
-    logging.getLogger('MySQLdb').setLevel(logging.WARNING)  # Only warnings/errors from DB
+    if app.config.get('CONFIGURE_LOGGING', True):
+        _configure_logging(app)
+    if app.config['CLI_COMMAND']:
+        logging.getLogger('mysql.connector').setLevel(logging.WARNING)
 
     @app.before_request
     def limit_request_rate():
@@ -360,9 +382,6 @@ def create_app():
         app.register_blueprint(mobile_devices_bp)
         app.register_blueprint(json_api_bp)
         
-        # Initialize branding settings
-        branding.init_app(app)
-        
         # Register error handlers
         from ui.errors import error_handlers_bp
         app.register_blueprint(error_handlers_bp)
@@ -418,10 +437,23 @@ def create_app():
     @app.route('/health')
     def health_check():
         from flask import jsonify
+        maintenance = bool(app.config.get('MAINTENANCE_MODE', False))
+        reason = database_reason(get_db_connection) if app.config.get('REQUIRE_MIGRATED_DB') else None
+        if reason:
+            return jsonify({"status": "unavailable", "reason": reason, "maintenance_mode": maintenance}), 503
         return jsonify({
             "status": "healthy",
-            "maintenance_mode": bool(app.config.get('MAINTENANCE_MODE', False)),
+            "maintenance_mode": maintenance,
         })
+
+    if app.config['CLI_COMMAND']:
+        return app
+
+    if app.config.get('REQUIRE_MIGRATED_DB'):
+        with app.app_context():
+            reason = database_reason(get_db_connection)
+        if reason:
+            app.logger.error('Database schema check failed: %s /health will return 503 until this is fixed.', reason)
 
     should_start_worker = (not app.config.get('DEBUG', False)) or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
     if should_start_worker:

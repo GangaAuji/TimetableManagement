@@ -35,11 +35,19 @@ const fileFields = [
   ['favicon', 'Favicon'],
 ] as const
 
+const backgroundFields = [
+  ['login_background', 'Student and teacher sign-in'],
+  ['admin_login_background', 'Admin sign-in'],
+  ['register_background', 'Registration'],
+] as const
+
+const imageFields = [...fileFields, ...backgroundFields]
+
 const primaryButton = 'rounded-xl bg-gray-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50'
 const secondaryButton = 'rounded-xl border px-3 py-2 text-xs font-bold'
 
 function emptySettings() {
-  return Object.fromEntries([...textFields, ...colorFields, ...fileFields].map(([key]) => [key, '']))
+  return Object.fromEntries([...textFields, ...colorFields, ...imageFields].map(([key]) => [key, '']))
 }
 
 export function SettingsPage() {
@@ -56,7 +64,7 @@ export function SettingsPage() {
     const source = data.settings || {}
     for (const [key] of textFields) next[key] = safeText(source[key], 240)
     for (const [key] of colorFields) next[key] = safeColor(source[key], fallbackBranding[key])
-    for (const [key] of fileFields) next[key] = safeText(source[key], 180)
+    for (const [key] of imageFields) next[key] = safeText(source[key], 180)
     setValues(next)
     setCanChange(data.can_change === true)
     setFiles({})
@@ -80,7 +88,7 @@ export function SettingsPage() {
       const body = new FormData()
       for (const [key] of textFields) body.append(key, values[key] || '')
       for (const [key] of colorFields) body.append(key, values[key] || '')
-      for (const [key] of fileFields) {
+      for (const [key] of imageFields) {
         const file = files[key]
         if (file) body.append(key, file)
       }
@@ -123,14 +131,13 @@ export function SettingsPage() {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="min-h-0 flex-1 overflow-auto">
-      <section className="border-b border-gray-100 px-5 py-4">
+      <section className="shrink-0 border-b border-gray-100 px-5 py-4">
         <h2 className="text-sm font-bold text-gray-800">Branding</h2>
         <p className="text-xs text-gray-500">Titles, colors, and logos. The menu and top bar follow light or dark mode, and text stays readable on the color that matches that mode.</p>
         {!canChange && <p className="mt-2 text-xs text-gray-500">You can view these settings. Changing them needs the branding permission.</p>}
       </section>
-      <form id="branding-form" className="grid gap-2 p-2 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => void save(event)}>
-        <div className="space-y-4">
+      <form id="branding-form" className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px]" onSubmit={(event) => void save(event)}>
+        <div className="min-h-0 space-y-4 overflow-auto p-2">
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <h3 className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">Titles and contact</h3>
             <div className="grid gap-3 md:grid-cols-2">
@@ -159,7 +166,8 @@ export function SettingsPage() {
             </div>
           </section>
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">Logos</h3>
+            <h3 className="mb-1 text-xs font-bold tracking-wide text-gray-500 uppercase">Logos</h3>
+            <p className="mb-3 text-xs text-gray-500">The login logo appears on the sign-in and registration pages. The site logo is the menu mark. The favicon is the browser tab icon.</p>
             <div className="grid gap-4 md:grid-cols-3">
               {fileFields.map(([key, label]) => {
                 const current = staticAssetUrl(values[key])
@@ -174,16 +182,52 @@ export function SettingsPage() {
               })}
             </div>
           </section>
+          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">Page backgrounds</h3>
+            <p className="mb-3 text-xs text-gray-500">Shown behind the sign-in and registration cards. Use a wide photo so the edges stay visible.</p>
+            <div className="grid gap-4 md:grid-cols-3">
+              {backgroundFields.map(([key, label]) => {
+                const current = staticAssetUrl(values[key])
+                return (
+                  <label key={key} className="block text-xs font-semibold text-gray-700">{label}
+                    <span className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-200 bg-gray-50">
+                      {current ? <img src={current} alt="" className="h-full w-full object-cover" /> : <span className="text-[10px] font-medium text-gray-400">No image yet</span>}
+                    </span>
+                    <input type="file" accept=".png,.jpg,.jpeg,.gif,.svg" disabled={!canChange} onChange={(event) => setFiles({ ...files, [key]: event.target.files?.[0] || null })} className="mt-2 block w-full text-xs" />
+                  </label>
+                )
+              })}
+            </div>
+          </section>
         </div>
-        <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <aside className="flex min-h-0 flex-col overflow-auto border-t border-gray-100 bg-white p-4 xl:border-t-0 xl:border-l">
           <h3 className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">Preview</h3>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between px-3 py-2 text-xs font-bold" style={{ background: header, color: inkFor(header) }}>
-              <span>{values.site_title || 'Site title'}</span>
+          <div className="mb-3 flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+              {staticAssetUrl(values.site_logo) ? <img src={staticAssetUrl(values.site_logo)} alt="" className="h-10 w-10 object-contain" /> : <i className="fas fa-image text-gray-300" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-bold text-gray-800">{values.site_title || 'Site title'}</span>
+              <span className="block truncate text-[10px] text-gray-400">Site logo</span>
+            </span>
+            <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-gray-200 bg-gray-50" title="Favicon">
+              {staticAssetUrl(values.favicon) ? <img src={staticAssetUrl(values.favicon)} alt="" className="h-6 w-6 object-contain" /> : <i className="fas fa-star text-[10px] text-gray-300" />}
+            </span>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200">
+            <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold" style={{ background: header, color: inkFor(header) }}>
+              {staticAssetUrl(values.login_logo) || staticAssetUrl(values.site_logo) ? (
+                <img src={staticAssetUrl(values.login_logo) || staticAssetUrl(values.site_logo)} alt="" className="h-5 w-auto max-w-16 object-contain" />
+              ) : null}
+              <span className="min-w-0 flex-1 truncate">{values.site_title || 'Site title'}</span>
               <span style={{ color: secondary }}>12:00</span>
             </div>
-            <div className="flex h-52">
-              <div className="w-32 p-3 text-[11px]" style={{ background: sidebar, color: inkFor(sidebar) }}>
+            <div className="flex min-h-44 flex-1">
+              <div className="w-28 p-3 text-[11px]" style={{ background: sidebar, color: inkFor(sidebar) }}>
+                <div className="mb-2 flex items-center gap-1">
+                  {staticAssetUrl(values.site_logo) ? <img src={staticAssetUrl(values.site_logo)} alt="" className="h-4 w-4 object-contain" /> : null}
+                  <span className="truncate text-[10px] font-bold">{values.site_title || 'Menu'}</span>
+                </div>
                 <div className="mb-2 rounded px-2 py-1 font-bold" style={{ background: primary, color: inkFor(primary) }}>Dashboard</div>
                 <div className="px-2 py-1 opacity-70">Settings</div>
                 <div className="px-2 py-1 opacity-70">Audit</div>
@@ -191,10 +235,9 @@ export function SettingsPage() {
               <div className="flex-1 bg-gray-100 p-3 text-[11px] text-gray-500">Page content stays on the light background.</div>
             </div>
           </div>
-          <p className="mt-3 text-[11px] leading-5 text-gray-500">This preview uses the colors in the form. A light menu color appears in light mode. A dark one appears in dark mode.</p>
+          <p className="mt-3 text-[11px] leading-5 text-gray-500">The login logo is used on sign-in and registration. The favicon is the browser icon. Colors follow light or dark mode.</p>
         </aside>
       </form>
-      </div>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-gray-200 bg-white px-4 py-2">
         <div>
           {error && <p className="text-xs text-red-700">{error}</p>}

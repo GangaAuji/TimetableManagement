@@ -64,7 +64,7 @@ def _bind(monkeypatch, module, connection):
     if hasattr(module, 'flash'):
         monkeypatch.setattr(module, 'flash', lambda message, category: flashes.append((message, category)))
     if hasattr(module, 'log_activity'):
-        monkeypatch.setattr(module, 'log_activity', lambda *args: activities.append(args))
+        monkeypatch.setattr(module, 'log_activity', lambda *args, **kwargs: activities.append(args))
 
     class _Logger:
         def error(self, message):
@@ -113,6 +113,7 @@ def test_bulk_activate_updates_teachers_and_students(monkeypatch):
         {'id': 3, 'role': 'Student'},
     ]])
     _flashes, activities = _bind(monkeypatch, user_actions, connection)
+    monkeypatch.setattr(user_actions, 'account_problem', lambda cursor, actor_id, user_id, new_role=None: None)
     payload, status = user_actions.apply_bulk_user_action('activate', ['1', '2', '3'], None, {'user_id': 9})
     assert status == 200
     assert payload['message'] == 'Users activated successfully.'
@@ -123,6 +124,20 @@ def test_bulk_activate_updates_teachers_and_students(monkeypatch):
     assert connection.cursor_obj.calls[3][0].startswith('UPDATE students')
     assert activities == [(9, 'bulk_activate_users', 'Affected IDs: 1,2,3')]
     assert connection.actions == ['commit', 'close']
+
+
+def test_bulk_action_naming_a_protected_account_or_yourself_is_refused(monkeypatch):
+    for ids, problem in ((['2', '3'], 'protected'), (['2', '9'], None)):
+        connection = _Connection([])
+        _flashes, activities = _bind(monkeypatch, user_actions, connection)
+        monkeypatch.setattr(
+            user_actions, 'account_problem', lambda cursor, actor_id, user_id, new_role=None: problem,
+        )
+        _payload, status = user_actions.apply_bulk_user_action('deactivate', ids, None, {'user_id': 9})
+        assert status == 403
+        assert connection.cursor_obj.calls == []
+        assert activities == []
+        assert 'commit' not in connection.actions
 
 
 def test_user_export_leaves_the_connection_open(monkeypatch):

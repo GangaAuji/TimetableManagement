@@ -7,9 +7,13 @@ type HeaderProps = {
 }
 
 function formatClock(date: Date) {
-  const day = date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return `${day} • ${time}`
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const hours = date.getHours()
+  const hour12 = hours % 12 || 12
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const suffix = hours >= 12 ? 'PM' : 'AM'
+  return `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()} • ${hour12}:${minutes} ${suffix}`
 }
 
 export function Header({ title, onMenuToggle }: HeaderProps) {

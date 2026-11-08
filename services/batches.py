@@ -1,8 +1,7 @@
 """Course-batch reads and saves for the academic screen. This module does not read the request."""
 
-import mysql.connector
 
-from config import Config
+from models.db import get_db_connection as _shared_connection
 from data_access.academic_years import fetch_academic_years
 from data_access.batches import delete_batch, fetch_batches, insert_batch, update_batch
 from data_access.subjects import fetch_active_courses
@@ -10,12 +9,7 @@ from data_access.subjects import fetch_active_courses
 
 def _connect():
     """Open the same direct connection the academic screens use."""
-    return mysql.connector.connect(
-        host=Config.MYSQL_HOST,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB,
-    )
+    return _shared_connection()
 
 
 def list_batches():

@@ -10,6 +10,7 @@ from api.web.access import InputError, allowed, body, close, optional_text, perm
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_count, safe_stamp, safe_text
 from security import log_activity
+from security.authority import role_level_by_id, role_permission_ids, role_problem
 
 _ROLE_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9 _-]{0,49}$')
 _MESSAGES = {
@@ -22,7 +23,15 @@ _MESSAGES = {
     'role_level_invalid': 'Hierarchy level must be a number from 1 to 99.',
     'role_name_taken': 'A role with this name already exists.',
     'role_name_locked': 'The Super Admin role cannot be renamed.',
+    'role_protected': 'You cannot change a role senior to your own or make a role senior to yours.',
+    'role_permission_unheld': 'You can only grant permissions you hold yourself.',
 }
+
+
+def _role_denied(problem):
+    if problem == 'unheld':
+        return json_error(_MESSAGES['role_permission_unheld'], 403, 'role_permission_unheld')
+    return json_error(_MESSAGES['role_protected'], 403, 'role_protected')
 
 
 def register_role_routes(blueprint):
@@ -32,63 +41,6 @@ def register_role_routes(blueprint):
     blueprint.add_url_rule('/roles/<int:role_id>/users', 'role_users', _users, methods=['GET'])
     blueprint.add_url_rule('/roles/<int:role_id>/permissions', 'role_permissions', _permissions, methods=['GET'])
     blueprint.add_url_rule('/roles/<int:role_id>/permissions', 'role_permissions_replace', _replace, methods=['PUT'])
-
-
-_KNOWN_LEVELS = (
-    ('Super Admin', 1),
-    ('Admin', 2),
-    ('HOD', 3),
-    ('Teacher', 4),
-    ('Student', 5),
-)
-
-
-def _cell(row, key, index):
-    if isinstance(row, dict):
-        return row.get(key)
-    return row[index]
-
-
-def _ensure_level(cursor):
-    cursor.execute(
-        """
-        SELECT 1 AS present FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'roles' AND COLUMN_NAME = 'hierarchy_level'
-        LIMIT 1
-        """
-    )
-    if cursor.fetchone():
-        return
-    cursor.execute('ALTER TABLE roles ADD COLUMN hierarchy_level INT NOT NULL DEFAULT 50')
-
-
-def _seed_levels(cursor):
-    """Give the built-in roles 1 through 5. 50 is only the unset default."""
-    changed = False
-    for name, level in _KNOWN_LEVELS:
-        cursor.execute(
-            'UPDATE roles SET hierarchy_level = %s WHERE name = %s AND hierarchy_level = 50',
-            (level, name),
-        )
-        if cursor.rowcount:
-            changed = True
-    cursor.execute('SELECT COALESCE(MAX(hierarchy_level), 0) AS top_level FROM roles WHERE hierarchy_level <> 50')
-    top = cursor.fetchone()
-    next_level = int(_cell(top, 'top_level', 0) or 0) + 1
-    if next_level < 2:
-        next_level = 2
-    cursor.execute('SELECT id FROM roles WHERE hierarchy_level = 50 ORDER BY id')
-    for row in cursor.fetchall():
-        if next_level > 99:
-            break
-        cursor.execute(
-            'UPDATE roles SET hierarchy_level = %s WHERE id = %s AND hierarchy_level = 50',
-            (next_level, _cell(row, 'id', 0)),
-        )
-        if cursor.rowcount:
-            changed = True
-            next_level += 1
-    return changed
 
 
 def _role_fields(payload):
@@ -135,9 +87,6 @@ def _list():
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        _ensure_level(cursor)
-        if _seed_levels(cursor):
-            connection.commit()
         cursor.execute(
             """
             SELECT r.id, r.name, r.description, r.hierarchy_level,
@@ -183,14 +132,16 @@ def _create():
         name, description, level = _role_fields(body(frozenset(('name', 'description', 'hierarchy_level'))))
         connection = get_db_connection()
         cursor = connection.cursor()
-        _ensure_level(cursor)
-        _seed_levels(cursor)
+        problem = role_problem(cursor, session.get('user_id'), new_level=level)
+        if problem:
+            return _role_denied(problem)
         cursor.execute(
             'INSERT INTO roles (name, description, hierarchy_level) VALUES (%s, %s, %s)',
             (name, description or None, level),
         )
         role_id = cursor.lastrowid
-        log_activity(session.get('user_id'), 'create_role', f'Created new role: {name}')
+        log_activity(session.get('user_id'), 'create_role', f'Created new role: {name}',
+                     entity_type='role', entity_id=role_id, cursor=cursor)
         connection.commit()
         return json_ok({'id': safe_count(role_id), 'name': name}, 201)
     except InputError as exc:
@@ -218,23 +169,27 @@ def _update(role_id):
         name, description, level = _role_fields(body(frozenset(('name', 'description', 'hierarchy_level'))))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        _ensure_level(cursor)
-        cursor.execute('SELECT name FROM roles WHERE id = %s', (role_id,))
-        current = cursor.fetchone()
-        if not current:
+        old_name, current_level = role_level_by_id(cursor, role_id)
+        if old_name is None:
             return json_error(_MESSAGES['role_not_found'], 404, 'role_not_found')
-        old_name = current.get('name') or ''
         if old_name == 'Super Admin' and name != 'Super Admin':
             return json_error(_MESSAGES['role_name_locked'], 400, 'role_name_locked')
         if old_name == 'Super Admin':
             level = 1
+        problem = role_problem(cursor, session.get('user_id'), current_level=current_level, new_level=level)
+        if problem:
+            return _role_denied(problem)
         cursor.execute(
             'UPDATE roles SET name = %s, description = %s, hierarchy_level = %s WHERE id = %s',
             (name, description or None, level, role_id),
         )
         if old_name != name:
             cursor.execute('UPDATE users SET role = %s WHERE role = %s', (name, old_name))
-        log_activity(session.get('user_id'), 'edit_role', f'Edited role {name} (ID: {role_id})')
+        log_activity(
+            session.get('user_id'), 'edit_role', f'Edited role {name} (ID: {role_id})', entity_type='role',
+            entity_id=role_id, old_values={'name': old_name, 'hierarchy_level': current_level},
+            new_values={'name': name, 'hierarchy_level': level}, cursor=cursor,
+        )
         connection.commit()
         return json_ok({'saved': True})
     except InputError as exc:
@@ -308,9 +263,6 @@ def _permissions(role_id):
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        _ensure_level(cursor)
-        if _seed_levels(cursor):
-            connection.commit()
         cursor.execute('SELECT name, description, hierarchy_level FROM roles WHERE id = %s', (role_id,))
         role = cursor.fetchone()
         if not role:
@@ -360,8 +312,8 @@ def _replace(role_id):
         ids = _permission_ids(body(frozenset(('permission_ids',))))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT id FROM roles WHERE id = %s', (role_id,))
-        if not cursor.fetchone():
+        role_name, current_level = role_level_by_id(cursor, role_id)
+        if role_name is None:
             return json_error(_MESSAGES['role_not_found'], 404, 'role_not_found')
         if ids:
             placeholders = ', '.join(['%s'] * len(ids))
@@ -369,13 +321,18 @@ def _replace(role_id):
             found = {safe_count(row.get('id')) for row in cursor.fetchall()}
             if found != set(ids):
                 raise InputError('permission_ids_invalid')
+        added = set(ids) - role_permission_ids(cursor, role_id)
+        problem = role_problem(cursor, session.get('user_id'), current_level=current_level, added_permission_ids=added)
+        if problem:
+            return _role_denied(problem)
         cursor.execute('DELETE FROM role_permissions WHERE role_id = %s', (role_id,))
         for permission_id in ids:
             cursor.execute(
                 'INSERT INTO role_permissions (role_id, permission_id) VALUES (%s, %s)',
                 (role_id, permission_id),
             )
-        log_activity(session.get('user_id'), 'update_role_permissions', f'Updated permissions for role ID {role_id}')
+        log_activity(session.get('user_id'), 'update_role_permissions', f'Updated permissions for role ID {role_id}',
+                     entity_type='role', entity_id=role_id, new_values={'permission_ids': ids}, cursor=cursor)
         connection.commit()
         return json_ok({'saved': True, 'count': len(ids)})
     except InputError as exc:

@@ -38,6 +38,9 @@ class _Logger:
     def error(self, message):
         self.errors.append(message)
 
+    def exception(self, message):
+        self.errors.append(message)
+
 
 class _App:
     def __init__(self):
@@ -50,11 +53,17 @@ def _bind(monkeypatch, rows, password_ok=True, password_error=None):
     flashes = []
     attempts = []
     activities = []
+    failures = []
+    resets = []
     app = _App()
     monkeypatch.setattr(login_service, 'get_db', lambda: (connection, cursor))
     monkeypatch.setattr(login_service, 'flash', lambda message, category: flashes.append((message, category)))
-    monkeypatch.setattr(login_service, 'log_login_attempt', lambda *args: attempts.append(args))
-    monkeypatch.setattr(login_service, 'log_activity', lambda *args: activities.append(args))
+    monkeypatch.setattr(login_service, 'log_login_attempt', lambda *args, **kwargs: attempts.append(args))
+    monkeypatch.setattr(login_service, 'log_activity', lambda *args, **kwargs: activities.append(args))
+    monkeypatch.setattr(login_service, 'record_failed_sign_in', lambda user_id: failures.append(user_id))
+    monkeypatch.setattr(login_service, 'clear_after_sign_in', lambda cursor, user: resets.append(user['id']))
+    monkeypatch.setattr(login_service, 'count_unknown_username', lambda address: None)
+    monkeypatch.setattr(login_service, '_spend_one_hash', lambda password: None)
     monkeypatch.setattr(login_service, 'current_app', app)
     monkeypatch.setattr(login_service.uuid, 'uuid4', lambda: 'sid-9')
 
@@ -63,7 +72,8 @@ def _bind(monkeypatch, rows, password_ok=True, password_error=None):
             raise RuntimeError(password_error)
         return password_ok and stored == 'hash' and raw == 'secret'
 
-    monkeypatch.setattr(login_service, 'check_password_hash', _check)
+    monkeypatch.setattr(login_service, 'password_matches', _check)
+    monkeypatch.setattr(login_service, 'upgraded_hash', lambda stored, raw: None)
 
     class _Clock(datetime):
         @classmethod
@@ -71,7 +81,7 @@ def _bind(monkeypatch, rows, password_ok=True, password_error=None):
             return datetime(2026, 10, 26, 12, 0, 0)
 
     monkeypatch.setattr(login_service, 'datetime', _Clock)
-    return connection, cursor, flashes, attempts, activities, app
+    return connection, cursor, flashes, attempts, activities, app, failures, resets
 
 
 def _user(role='Admin', status='active'):
@@ -79,37 +89,38 @@ def _user(role='Admin', status='active'):
 
 
 def test_unknown_and_blocked_admin_accounts_do_not_commit(monkeypatch):
-    connection, cursor, flashes, attempts, _activities, app = _bind(monkeypatch, [None])
+    connection, cursor, flashes, attempts, _activities, _app, failures, _resets = _bind(monkeypatch, [None])
     assert login_service.sign_in_admin('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
     assert cursor.calls[0][0].endswith("role IN ('Admin', 'Super Admin', 'HOD')")
-    assert app.logger.debugs == [
-        'Login attempt for username: ada',
-        'User found in database: False',
-    ]
-    assert flashes == [('Admin user not found or not authorized.', 'danger')]
+    assert flashes == [('Sign in failed.', 'danger')]
     assert connection.commits == 0
-    assert attempts == []
+    assert attempts == [('ada', 'failed', 'Unknown account')]
+    assert failures == []
 
-    connection, _cursor, flashes, attempts, _activities, app = _bind(monkeypatch, [_user(status='inactive')])
+    connection, _cursor, flashes, attempts, _activities, _app, failures, _resets = _bind(monkeypatch, [_user(status='inactive')])
     assert login_service.sign_in_admin('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
-    assert 'status=inactive' in app.logger.debugs[2]
     assert flashes == [('Your admin account has been deactivated. Please contact the system administrator.', 'warning')]
     assert connection.commits == 0
+    assert attempts == [('ada', 'failed', 'Account inactive')]
+    assert failures == []
 
-    connection, _cursor, flashes, attempts, _activities, _app = _bind(monkeypatch, [_user(status='locked')])
-    assert login_service.sign_in_admin('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
+    connection, _cursor, flashes, attempts, _activities, _app, failures, _resets = _bind(monkeypatch, [_user(status='locked')])
+    session = {}
+    assert login_service.sign_in_admin('ada', 'secret', '10.0.0.8', 'browser', session) == 'render'
     assert flashes == [('Your admin account has been locked due to security reasons. Please contact the system administrator.', 'danger')]
     assert connection.commits == 0
-    assert attempts == []
+    assert session == {}
+    assert failures == []
 
 
 def test_password_check_error_stays_on_the_login_response(monkeypatch):
-    connection, cursor, flashes, attempts, activities, app = _bind(
+    connection, cursor, flashes, attempts, activities, app, _failures, _resets = _bind(
         monkeypatch, [_user()], password_error='bad hash',
     )
     assert login_service.sign_in_admin('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
-    assert app.logger.errors == ['Error checking password: bad hash']
-    assert flashes == [('An error occurred during login.', 'danger')]
+    assert app.logger.errors == ['Sign-in could not check the password']
+    assert 'bad hash' not in app.logger.errors[0]
+    assert flashes == [('Sign in failed.', 'danger')]
     assert connection.commits == 0
     assert attempts == []
     assert activities == []
@@ -117,18 +128,19 @@ def test_password_check_error_stays_on_the_login_response(monkeypatch):
 
 
 def test_wrong_admin_password_uses_its_own_failure_reason(monkeypatch):
-    connection, _cursor, flashes, attempts, activities, app = _bind(monkeypatch, [_user()], password_ok=False)
+    connection, _cursor, flashes, attempts, activities, _app, failures, resets = _bind(monkeypatch, [_user()], password_ok=False)
     assert login_service.sign_in_admin('ada', 'nope', '10.0.0.8', 'browser', {}) == 'render'
-    assert app.logger.debugs[-1] == 'Password verification result: False'
     assert attempts == [('ada', 'failed', 'Invalid admin password')]
-    assert flashes == [('Invalid Admin credentials.', 'danger')]
+    assert flashes == [('Sign in failed.', 'danger')]
+    assert failures == [4]
+    assert resets == []
     assert connection.commits == 0
     assert activities == []
 
 
 def test_admin_sign_in_stores_the_username_as_the_display_name(monkeypatch):
     profile = {'department_id': 2, 'is_hod': 1, 'profile_photo': None}
-    connection, cursor, flashes, attempts, activities, _app = _bind(
+    connection, cursor, flashes, attempts, activities, _app, _failures, resets = _bind(
         monkeypatch, [_user(role='HOD'), profile],
     )
     session = {}
@@ -145,4 +157,5 @@ def test_admin_sign_in_stores_the_username_as_the_display_name(monkeypatch):
     assert session['profile_photo'] == 'default-avatar.svg'
     assert session['is_hod'] == 1
     assert session.get('faculty_id') is None
+    assert resets == [4]
     assert flashes == []

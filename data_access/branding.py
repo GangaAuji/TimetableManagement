@@ -15,6 +15,9 @@ DEFAULT_SETTINGS = [
     ('site_logo', '', 'image'),
     ('login_logo', '', 'image'),
     ('favicon', '', 'image'),
+    ('login_background', '', 'image'),
+    ('admin_login_background', '', 'image'),
+    ('register_background', '', 'image'),
     ('primary_color', '#059669', 'color'),
     ('secondary_color', '#10b981', 'color'),
     ('accent_color', '#047857', 'color'),
@@ -53,21 +56,7 @@ COLOR_SETTINGS = [
     'sidebar_bg', 'header_bg',
 ]
 
-FILE_SETTINGS = ['site_logo', 'login_logo', 'favicon']
-
-
-def ensure_branding_table(cursor):
-    """Create the branding table when it is missing."""
-    cursor.execute("""
-            CREATE TABLE IF NOT EXISTS branding_settings (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                setting_key VARCHAR(100) UNIQUE NOT NULL,
-                setting_value TEXT,
-                setting_type VARCHAR(50) DEFAULT 'text',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        """)
+FILE_SETTINGS = ['site_logo', 'login_logo', 'favicon', 'login_background', 'admin_login_background', 'register_background']
 
 
 def insert_default_setting(cursor, key, value, setting_type):

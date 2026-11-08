@@ -12,6 +12,9 @@ export type Branding = {
   site_logo: string
   login_logo: string
   favicon: string
+  login_background: string
+  admin_login_background: string
+  register_background: string
   primary_color: string
   secondary_color: string
   accent_color: string

@@ -1,4 +1,4 @@
-"""Branding settings load, save, and reset."""
+"""Branding settings seed, load, save, and reset."""
 
 from datetime import datetime
 
@@ -11,7 +11,6 @@ from data_access.branding import (
     DEFAULT_VALUES,
     FILE_SETTINGS,
     TEXT_SETTINGS,
-    ensure_branding_table,
     fetch_branding_settings,
     insert_default_setting,
     update_branding_value,
@@ -26,26 +25,13 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def init_branding_settings():
-    """Create branding defaults. The connection stays open."""
-    try:
-        get_db_connection()
-    except:
-        current_app.logger.warning("MySQL connection not available, skipping branding initialization")
-        return
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        ensure_branding_table(cursor)
-        for key, value, setting_type in DEFAULT_SETTINGS:
-            insert_default_setting(cursor, key, value, setting_type)
-        with transaction(connection):
-            pass
-    except Exception as exc:
-        connection.rollback()
-        current_app.logger.error(f"Error initializing branding settings: {str(exc)}")
-    finally:
-        cursor.close()
+def seed_branding_defaults(cursor):
+    """Insert any missing default setting; existing values are never changed. Returns the number added."""
+    added = 0
+    for key, value, setting_type in DEFAULT_SETTINGS:
+        insert_default_setting(cursor, key, value, setting_type)
+        added += max(cursor.rowcount, 0)
+    return added
 
 
 def load_branding_settings():

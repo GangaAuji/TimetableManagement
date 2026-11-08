@@ -38,6 +38,8 @@ class Config:
     MYSQL_USER = os.environ.get('MYSQL_USER')
     MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD')
     MYSQL_DB = os.environ.get('MYSQL_DB')
+    # At startup and on /health, require the database to be at the newest migration.
+    REQUIRE_MIGRATED_DB = os.environ.get('REQUIRE_MIGRATED_DB', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
     # MYSQL_PORT = int(os.environ.get('MYSQL_PORT', 3306))  # Flask-MySQLdb doesn't use this
     MYSQL_CURSORCLASS = DictCursor  # Must be a class, not a string!
 
@@ -103,8 +105,27 @@ class Config:
         os.path.join(basedir, 'ml', 'models', 'face-recognition', 'yolov8n_float32.tflite'),
         os.path.join(basedir, 'assets', 'yolov8n_float32.tflite'),
     )
-    FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD'))
-    FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD'))
-    FACE_TEMPLATE_MIN_QUALITY = float(os.environ.get('FACE_TEMPLATE_MIN_QUALITY'))
+    FACE_DETECT_CONF_THRESHOLD = float(os.environ.get('FACE_DETECT_CONF_THRESHOLD') or 0.5)
+    FACE_DETECT_IOU_THRESHOLD = float(os.environ.get('FACE_DETECT_IOU_THRESHOLD') or 0.45)
+    FACE_TEMPLATE_MIN_QUALITY = float(os.environ.get('FACE_TEMPLATE_MIN_QUALITY') or 0.55)
+
+    # Export and timetable queue workers, and the root log handlers app_factory installs.
+    BACKGROUND_WORKERS = True
+    CONFIGURE_LOGGING = True
+
+    # Optional SQL run on every new app connection (mysql-connector init_command).
+    MYSQL_INIT_COMMAND = None
+
+    # Sign-in lock, per account: this many wrong passwords within the window lock it for SIGN_IN_LOCK_MINUTES.
+    SIGN_IN_MAX_FAILED_ATTEMPTS = int(os.environ.get('SIGN_IN_MAX_FAILED_ATTEMPTS', 5))
+    SIGN_IN_FAILURE_WINDOW_MINUTES = int(os.environ.get('SIGN_IN_FAILURE_WINDOW_MINUTES', 15))
+    SIGN_IN_LOCK_MINUTES = int(os.environ.get('SIGN_IN_LOCK_MINUTES', 15))
+    # Sign-in POSTs per 10 minutes, per address and username and per address, and unknown usernames
+    # per address per SIGN_IN_FAILURE_WINDOW_MINUTES.
+    SIGN_IN_LIMIT_PER_ACCOUNT = int(os.environ.get('SIGN_IN_LIMIT_PER_ACCOUNT', 10))
+    SIGN_IN_LIMIT_PER_ADDRESS = int(os.environ.get('SIGN_IN_LIMIT_PER_ADDRESS', 300))
+    SIGN_IN_UNKNOWN_LIMIT_PER_ADDRESS = int(os.environ.get('SIGN_IN_UNKNOWN_LIMIT_PER_ADDRESS', 20))
+    # Reverse proxies in front of the app whose X-Forwarded-For and X-Forwarded-Proto are trusted. 0 trusts none.
+    TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', 0))
 
 

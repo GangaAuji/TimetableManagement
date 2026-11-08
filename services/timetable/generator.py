@@ -11,6 +11,7 @@ from extensions import get_db_connection
 from academic_rules.clashes import times_overlap
 from academic_rules.holidays import holidays_for_week
 from academic_rules.availability import faculty_is_available as generation_faculty_available
+from academic_rules.weekdays import weekday_name
 from services.timetable_quality_service import score_timetable_candidate
 
 # Timetable generation. Callers import this module.
@@ -365,11 +366,8 @@ def generate_timetable_for_class(
         )
         availability_map: dict[int, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
         
-        # Convert day_of_week integer (1-7) to day name
-        day_number_to_name = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday'}
-        
         for row in cursor.fetchall():
-            day_name = day_number_to_name.get(row['day_of_week'])
+            day_name = weekday_name(row['day_of_week'])
             if not day_name:
                 continue
                 

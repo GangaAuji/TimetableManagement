@@ -4,6 +4,7 @@ import { canOpenPage } from './page-access'
 import { LoginPage } from '../features/auth/pages/LoginPage'
 import { getBranding, getSession, type Branding, type SessionInfo } from '../shared/api/endpoints'
 import { fallbackBranding } from '../shared/security/sanitize'
+import { applyBrandingHead } from '../shared/theme'
 import { AdminFrame } from './page-header'
 
 const allowedRoles = new Set(['Admin', 'Super Admin', 'HOD', 'Teacher', 'Student'])
@@ -28,6 +29,10 @@ export function RootGate() {
   useEffect(() => {
     void load().catch(() => setError('The Flask server is not reachable. Start it on port 5000 and try again.'))
   }, [load])
+
+  useEffect(() => {
+    applyBrandingHead(branding)
+  }, [branding])
 
   useEffect(() => {
     const refresh = () => {

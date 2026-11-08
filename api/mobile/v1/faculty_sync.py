@@ -149,7 +149,7 @@ def upload_faculty_attendance_logs():
     try:
         if not _table_exists(cursor, "faculty_attendance_logs") or not _table_exists(cursor, "faculty_attendance"):
             return _json_error(
-                "Faculty attendance sync tables are missing. Run add_mobile_faculty_attendance_sync.sql migration.",
+                "Faculty attendance sync tables are missing. Run `flask db upgrade`.",
                 503,
             )
 
@@ -400,7 +400,7 @@ def reprocess_failed_faculty_logs():
     try:
         if not _table_exists(cursor, "faculty_attendance_logs") or not _table_exists(cursor, "faculty_attendance"):
             return _json_error(
-                "Faculty attendance sync tables are missing. Run add_mobile_faculty_attendance_sync.sql migration.",
+                "Faculty attendance sync tables are missing. Run `flask db upgrade`.",
                 503,
             )
 

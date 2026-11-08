@@ -16,7 +16,7 @@ function typeBadge(sessionType: string) {
   return 'border border-green-100 bg-green-50 text-green-700'
 }
 
-export function DashboardHeader({ summary, canGenerate }: { summary: DashboardSummary; canGenerate: boolean }) {
+export function DashboardHeader({ canGenerate }: { canGenerate: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -24,10 +24,6 @@ export function DashboardHeader({ summary, canGenerate }: { summary: DashboardSu
         <p className="hidden truncate text-sm font-normal text-gray-500 sm:block">Welcome back, here's what's happening today.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm sm:text-sm">
-          <i className="far fa-calendar-alt mr-2 text-indigo-500" />
-          <span className="truncate">{summary.today_day}</span>
-        </div>
         {canGenerate ? (
           <a
             href="/admin/timetable/generate"
@@ -55,7 +51,7 @@ export function DashboardRoute() {
   }, [])
 
   useEffect(() => {
-    setPageHeader(summary ? <DashboardHeader summary={summary} canGenerate={canGenerate} /> : 'Dashboard')
+    setPageHeader(summary ? <DashboardHeader canGenerate={canGenerate} /> : 'Dashboard')
   }, [canGenerate, setPageHeader, summary])
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>

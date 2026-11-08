@@ -79,29 +79,54 @@ def test_proxy_request_is_stored_as_pending(monkeypatch):
     assert connection.actions == ['commit', 'close']
 
 
+def _attendance_today(monkeypatch, module):
+    from datetime import date as real_date
+
+    class _Today(real_date):
+        @classmethod
+        def today(cls):
+            return real_date(2026, 10, 26)
+
+    monkeypatch.setattr(module, 'date', _Today)
+
+
 def test_attendance_save_marks_with_the_faculty_table_id(monkeypatch):
     from services import teacher_attendance
-    connection = _Connection([{'id': 15}, {'id': 8}])
+    lecture = {'course_id': 1, 'class_id': 2, 'division_id': 3, 'day_of_week': 'Monday'}
+    connection = _Connection([{'id': 15}, lecture, [{'id': 4}]])
     flashes = _bind(monkeypatch, teacher_attendance, connection)
+    _attendance_today(monkeypatch, teacher_attendance)
     form = {'attendance_date': '2026-10-26', 'status_4': 'Present', 'remarks_4': 'ok'}
     assert teacher_attendance.save_teacher_attendance(9, 8, form) == 1
     sql, params = connection.cursor_obj.calls[-1]
     assert 'marked_by' in sql
+    assert 'ON DUPLICATE KEY UPDATE' in sql
     assert params[4] == 15
+    assert params[0] == 4
     assert connection.actions == ['commit', 'close']
     assert flashes == []
 
 
 def test_attendance_error_rolls_back_and_leaves_the_connection_open(monkeypatch):
     from services import teacher_attendance
-    connection = _Connection([{'id': 15}, {'id': 8}])
+    lecture = {'course_id': 1, 'class_id': 2, 'division_id': 3, 'day_of_week': 'Monday'}
+    connection = _Connection([{'id': 15}, lecture, [{'id': 4}]])
+
+    def _execute(sql, params=None):
+        text = ' '.join(sql.split())
+        connection.cursor_obj.calls.append((text, params))
+        if 'INSERT INTO attendance' in text:
+            raise RuntimeError('attendance locked')
+
+    connection.cursor_obj.execute = _execute
     _bind(monkeypatch, teacher_attendance, connection)
+    _attendance_today(monkeypatch, teacher_attendance)
     try:
-        teacher_attendance.save_teacher_attendance(9, 8, {'attendance_date': '2026-10-26', 'status_bad': 'Present'})
-    except ValueError:
-        pass
+        teacher_attendance.save_teacher_attendance(9, 8, {'attendance_date': '2026-10-26', 'status_4': 'Present'})
+    except RuntimeError as exc:
+        assert str(exc) == 'attendance locked'
     else:
-        raise AssertionError('expected ValueError')
+        raise AssertionError('expected the attendance write to fail')
     assert connection.actions == ['rollback']
 
 

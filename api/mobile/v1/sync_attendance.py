@@ -9,7 +9,6 @@ import decimal
 from flask import Blueprint, current_app, g, jsonify, request, url_for
 from utils.uploads import save_uploaded_file
 
-from config import Config
 from extensions import get_db_connection
 from .security import authenticate_mobile_request
 
@@ -21,7 +20,10 @@ EXPECTED_FACE_TEMPLATE_LENGTH = 192
 DEFAULT_FACE_TEMPLATE_VERSION = "mobilefacenet_192_l2_v1"
 IST_TIMEZONE = timezone(timedelta(hours=5, minutes=30))
 FACULTY_CUSTOM_SHIFT_KEY_PREFIX = 1000000
-FACULTY_SHIFT_LATE_GRACE_MINUTES = int(getattr(Config, "FACULTY_SHIFT_LATE_GRACE_MINUTES", 15) or 15)
+
+
+def _late_grace_minutes():
+    return int(current_app.config.get("FACULTY_SHIFT_LATE_GRACE_MINUTES", 15) or 15)
 
 
 def _json_error(message, status=400):
@@ -136,12 +138,12 @@ def _column_exists(cursor, table_name, column_name):
         """
         SELECT 1
         FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = %s
+        WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = %s
           AND COLUMN_NAME = %s
         LIMIT 1
         """,
-        (Config.MYSQL_DB, table_name, column_name),
+        (table_name, column_name),
     )
     return cursor.fetchone() is not None
 
@@ -151,11 +153,11 @@ def _table_exists(cursor, table_name):
         """
         SELECT 1
         FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = %s
+        WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = %s
         LIMIT 1
         """,
-        (Config.MYSQL_DB, table_name),
+        (table_name,),
     )
     return cursor.fetchone() is not None
 
@@ -202,7 +204,7 @@ def _normalize_face_template(raw_template):
 
 def _quality_threshold():
     try:
-        return float(getattr(Config, "FACE_TEMPLATE_MIN_QUALITY", 0.55) or 0.55)
+        return float(current_app.config.get("FACE_TEMPLATE_MIN_QUALITY", 0.55) or 0.55)
     except (TypeError, ValueError):
         return 0.55
 
@@ -686,7 +688,7 @@ def _resolve_faculty_attendance_status(raw_status, captured_time, shift_start_ti
     if captured_seconds is None or start_seconds is None:
         return "Present"
 
-    return "Late" if captured_seconds > (start_seconds + (FACULTY_SHIFT_LATE_GRACE_MINUTES * 60)) else "Present"
+    return "Late" if captured_seconds > (start_seconds + (_late_grace_minutes() * 60)) else "Present"
 
 
 def _promote_log_to_faculty_attendance(cursor, log_row):
@@ -766,7 +768,9 @@ def _promote_log_to_attendance(cursor, log_row):
 
 @mobile_sync_bp.before_request
 def _mobile_auth_guard():
-    return authenticate_mobile_request(allow_legacy_api_key=Config.MOBILE_SYNC_ALLOW_LEGACY_API_KEY)
+    return authenticate_mobile_request(
+        allow_legacy_api_key=bool(current_app.config.get("MOBILE_SYNC_ALLOW_LEGACY_API_KEY", False))
+    )
 
 
 @mobile_sync_bp.route("/health", methods=["GET"])

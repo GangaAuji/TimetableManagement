@@ -57,8 +57,8 @@ def fetch_user_record(cursor, user_id):
 
 
 def fetch_user_for_edit(cursor, user_id):
-    """Return the id and role for the user being edited."""
-    cursor.execute('SELECT id, role FROM users WHERE id = %s', [user_id])
+    """Return the id, role, status, and lock for the user being edited."""
+    cursor.execute('SELECT id, role, status, locked_until FROM users WHERE id = %s', [user_id])
     return cursor.fetchone()
 
 

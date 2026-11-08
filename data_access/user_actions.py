@@ -59,8 +59,8 @@ def update_user_password(cursor, hashed_password, user_id):
 
 
 def fetch_user_status(cursor, user_id):
-    """Return the status and role row used by the status toggle."""
-    cursor.execute("SELECT status, role FROM users WHERE id = %s", [user_id])
+    """Return the status, role, and lock row used by the status toggle."""
+    cursor.execute("SELECT status, role, locked_until FROM users WHERE id = %s", [user_id])
     return cursor.fetchone()
 
 

@@ -165,7 +165,7 @@ def faculty_mobile_sync_logs():
     try:
         if not _table_exists(cursor, 'faculty_attendance_logs'):
             flash(
-                "faculty_attendance_logs table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "faculty_attendance_logs table not found. Run `flask db upgrade`.",
                 "warning",
             )
             return render_template(

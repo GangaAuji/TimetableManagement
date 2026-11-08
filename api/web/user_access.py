@@ -1,6 +1,8 @@
 """User edits and permission assignment for the React users screens.
 
-Each action uses the same permission name as the old user-management screen.
+Account edits need users_change_user. Granting or revoking a user's
+permissions or groups needs users_manage_permissions. The services refuse an
+account the actor may not manage and a permission the actor does not hold.
 """
 
 from flask import current_app, session
@@ -11,8 +13,14 @@ from api.web.security import safe_count, safe_stamp, safe_text
 from data_access.user_actions import fetch_users_for_export
 from data_access.user_permissions import fetch_departments
 from extensions import get_db_connection
-from security import grant_user_permission, revoke_user_permission
-from services.user_actions import apply_bulk_user_action, reset_user_password, toggle_user_status
+from security import (
+    ACCOUNT_PROTECTED,
+    PERMISSION_UNHELD,
+    grant_user_permission,
+    permission_grant_problem,
+    revoke_user_permission,
+)
+from services.user_actions import apply_bulk_user_action, reset_user_password, toggle_user_status, unlock_user
 from services.user_permissions import assign_permission_group, load_user_permission_page, unassign_permission_group
 from services.users import change_user, find_user, normalize_role
 
@@ -33,6 +41,7 @@ _MESSAGES = {
     'user_permission_failed': 'That permission could not be changed.',
     'user_group_invalid': 'Choose a permission group.',
     'user_bulk_invalid': 'Choose users and an action.',
+    'user_permission_unheld': 'You can only grant permissions you hold yourself.',
 }
 
 
@@ -42,6 +51,7 @@ def register_user_access_routes(blueprint):
     blueprint.add_url_rule('/users/<int:user_id>', 'users_detail', _detail, methods=['GET'])
     blueprint.add_url_rule('/users/<int:user_id>', 'users_update', _update, methods=['POST'])
     blueprint.add_url_rule('/users/<int:user_id>/status', 'users_status', _status, methods=['POST'])
+    blueprint.add_url_rule('/users/<int:user_id>/unlock', 'users_unlock', _unlock, methods=['POST'])
     blueprint.add_url_rule('/users/<int:user_id>/password', 'users_password', _password, methods=['POST'])
     blueprint.add_url_rule('/users/<int:user_id>/access', 'users_access', _access, methods=['GET'])
     blueprint.add_url_rule('/users/<int:user_id>/permissions', 'users_grant', _grant, methods=['POST'])
@@ -60,7 +70,7 @@ def _service_error(payload, status):
     if status == 404:
         return json_error(_MESSAGES['user_not_found'], 404, 'user_not_found')
     if status == 403:
-        return json_error(_MESSAGES['user_protected'], 403, 'user_protected')
+        return _refused(payload.get('error')) or json_error(_MESSAGES['user_protected'], 403, 'user_protected')
     if status == 400:
         return json_error(safe_text(message, 160), 400, 'invalid_body')
     return json_error(_MESSAGES['users_unavailable'], 500, 'users_unavailable')
@@ -148,6 +158,8 @@ def _update(user_id):
         )
         if result == 'missing':
             return json_error(_MESSAGES['user_not_found'], 404, 'user_not_found')
+        if result == 'protected':
+            return json_error(_MESSAGES['user_protected'], 403, 'user_protected')
         if result == 'username':
             return json_error(_MESSAGES['user_username_taken'], 400, 'user_username_taken')
         if result == 'email':
@@ -170,6 +182,16 @@ def _status(user_id):
     if status != 200:
         return _service_error(payload, status)
     return json_ok({'id': safe_count(user_id), 'status': safe_text(payload.get('status'), 20)})
+
+
+def _unlock(user_id):
+    denied = _denied('users_change_user')
+    if denied:
+        return denied
+    payload, status = unlock_user(user_id, session)
+    if status != 200:
+        return _service_error(payload, status)
+    return json_ok({'id': safe_count(user_id), 'unlocked': True})
 
 
 def _password(user_id):
@@ -261,9 +283,20 @@ def _permission_name(payload):
     return name.strip()
 
 
+def _refused(message):
+    if message == PERMISSION_UNHELD:
+        return json_error(_MESSAGES['user_permission_unheld'], 403, 'user_permission_unheld')
+    if message == ACCOUNT_PROTECTED:
+        return json_error(_MESSAGES['user_protected'], 403, 'user_protected')
+    return None
+
+
 def _grant_result(success, message):
     if success:
         return json_ok({'message': 'Permission granted.'})
+    refused = _refused(message)
+    if refused:
+        return refused
     if message == 'Permission not found':
         return json_error(_MESSAGES['user_permission_invalid'], 400, 'user_permission_invalid')
     if message == 'Permission already granted with these restrictions':
@@ -271,8 +304,14 @@ def _grant_result(success, message):
     return json_error(_MESSAGES['user_permission_failed'], 400, 'user_permission_failed')
 
 
+def _manage_denied():
+    return _denied('users_manage_permissions')
+
+
 def _access(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
+    if denied:
+        denied = _denied('users_change_user')
     if denied:
         return denied
     page = load_user_permission_page(user_id)
@@ -326,12 +365,12 @@ def _access(user_id):
             for item in page['permission_groups']
         ],
         'assigned_groups': groups,
-        'can_change': allowed('users_change_user'),
+        'can_change': allowed('users_manage_permissions'),
     })
 
 
 def _grant(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
     if denied:
         return denied
     try:
@@ -353,7 +392,7 @@ def _grant(user_id):
 
 
 def _revoke(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
     if denied:
         return denied
     try:
@@ -368,6 +407,9 @@ def _revoke(user_id):
         )
         if success:
             return json_ok({'message': 'Permission revoked.'})
+        refused = _refused(message)
+        if refused:
+            return refused
         if message == 'Permission not found':
             return json_error(_MESSAGES['user_permission_invalid'], 400, 'user_permission_invalid')
         return json_error(_MESSAGES['user_permission_failed'], 400, 'user_permission_failed')
@@ -379,7 +421,7 @@ def _revoke(user_id):
 
 
 def _grant_many(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
     if denied:
         return denied
     try:
@@ -388,16 +430,25 @@ def _grant_many(user_id):
         if not isinstance(names, list) or not names or len(names) > 100:
             raise InputError('user_permission_invalid')
         department_id = _optional_id(payload.get('department_id'))
-        granted = 0
         for name in names:
             if not isinstance(name, str) or not name.strip() or len(name) > 80:
                 raise InputError('user_permission_invalid')
-            success, _message = grant_user_permission(
+        refused = _refused(permission_grant_problem(
+            session.get('user_id'), user_id, [name.strip() for name in names], department_id,
+        ))
+        if refused:
+            return refused
+        granted = 0
+        for name in names:
+            success, message = grant_user_permission(
                 user_id=user_id,
                 permission_name=name.strip(),
                 department_id=department_id,
                 granted_by=session.get('user_id'),
             )
+            refused = _refused(message)
+            if refused:
+                return refused
             if success:
                 granted += 1
         return json_ok({'granted': granted})
@@ -409,7 +460,7 @@ def _grant_many(user_id):
 
 
 def _grant_group(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
     if denied:
         return denied
     try:
@@ -430,7 +481,7 @@ def _grant_group(user_id):
 
 
 def _revoke_group(user_id):
-    denied = _denied('users_change_user')
+    denied = _manage_denied()
     if denied:
         return denied
     try:

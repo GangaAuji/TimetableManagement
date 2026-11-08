@@ -1,20 +1,21 @@
 """Teacher attendance load and save. Exceptions are left for the route."""
 
-from datetime import date
+from datetime import date, datetime
 
 from flask import flash
+
+from academic_rules.weekdays import weekday_name
 
 from data_access.teacher_attendance import (
     count_attendance_for_date,
     fetch_attendance_history,
     fetch_attendance_summary,
-    fetch_class_students,
     fetch_existing_attendance,
     fetch_faculty_table_id,
     fetch_history_lecture,
     fetch_lecture_filters,
+    fetch_lecture_roster,
     fetch_owned_lecture_detail,
-    fetch_owned_timetable_id,
     fetch_teacher_lectures,
     upsert_attendance,
 )
@@ -66,9 +67,7 @@ def load_mark_page(user_id, timetable_id):
         return 'denied'
     lecture['start_time'] = format_hhmm(lecture['start_time'])
     lecture['end_time'] = format_hhmm(lecture['end_time'])
-    students = fetch_class_students(
-        cursor, lecture['course_id'], lecture['class_id'], lecture['division_id'],
-    )
+    students = fetch_lecture_roster(cursor, lecture)
     existing_attendance = {
         row['student_id']: {'status': row['status'], 'remarks': row['remarks']}
         for row in fetch_existing_attendance(cursor, timetable_id, attendance_date)
@@ -91,6 +90,43 @@ def load_mark_page(user_id, timetable_id):
     }
 
 
+_MARK_STATUSES = frozenset(('Present', 'Late', 'Absent'))
+
+
+def _close(cursor, connection):
+    cursor.close()
+    connection.close()
+
+
+def _marks(form):
+    """Return student marks, or None when a status or student id is not acceptable."""
+    marks = {}
+    for key, value in form.items():
+        if not str(key).startswith('status_'):
+            continue
+        if value not in _MARK_STATUSES:
+            return None
+        try:
+            student_id = int(str(key).split('_', 1)[1])
+        except (TypeError, ValueError):
+            return None
+        if student_id < 1 or student_id in marks:
+            return None
+        marks[student_id] = (value, form.get(f'remarks_{student_id}', '') or '')
+    return marks
+
+
+def _date_allowed(raw, lecture_day):
+    """Attendance is taken today, and only when today is the lecture weekday."""
+    try:
+        chosen = datetime.strptime(str(raw), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return False
+    if chosen != date.today():
+        return False
+    return weekday_name(chosen) == weekday_name(lecture_day)
+
+
 def save_teacher_attendance(user_id, timetable_id, form):
     """Save marks. A database error rolls back and is raised again. The connection stays open on that path."""
     connection = None
@@ -99,33 +135,33 @@ def save_teacher_attendance(user_id, timetable_id, form):
         faculty_row = fetch_faculty_table_id(cursor, user_id)
         if not faculty_row:
             flash("Faculty profile not found.", "danger")
-            cursor.close()
-            connection.close()
+            _close(cursor, connection)
             return 'missing'
         faculty_id = faculty_row['id']
-        if not fetch_owned_timetable_id(cursor, timetable_id, user_id):
+        lecture = fetch_owned_lecture_detail(cursor, timetable_id, user_id)
+        if not lecture:
             flash("Unauthorized access.", "danger")
-            cursor.close()
-            connection.close()
+            _close(cursor, connection)
             return 'denied'
         attendance_date = form.get('attendance_date')
-        if not attendance_date:
-            flash("Attendance date is required.", "danger")
-            cursor.close()
-            connection.close()
+        if not attendance_date or not _date_allowed(attendance_date, lecture.get('day_of_week')):
+            flash("Attendance can only be marked today, on the lecture's scheduled day.", "danger")
+            _close(cursor, connection)
             return 'date'
+        marks = _marks(form)
+        enrolled = {row['id'] for row in fetch_lecture_roster(cursor, lecture)}
+        if marks is None or not set(marks) <= enrolled:
+            flash("A student in this request is not in this class.", "danger")
+            _close(cursor, connection)
+            return 'student'
         saved_count = 0
-        for key, value in form.items():
-            if key.startswith('status_'):
-                student_id = int(key.split('_')[1])
-                remarks = form.get(f'remarks_{student_id}', '')
-                upsert_attendance(
-                    cursor, student_id, timetable_id, attendance_date, value, faculty_id, remarks,
-                )
-                saved_count += 1
+        for student_id, (status, remarks) in marks.items():
+            upsert_attendance(
+                cursor, student_id, timetable_id, attendance_date, status, faculty_id, remarks,
+            )
+            saved_count += 1
         connection.commit()
-        cursor.close()
-        connection.close()
+        _close(cursor, connection)
         return saved_count
     except Exception:
         if connection:

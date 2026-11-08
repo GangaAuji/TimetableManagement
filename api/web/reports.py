@@ -14,7 +14,6 @@ from services.export_jobs import enqueue_job, ensure_worker
 from services.reports_admin._common import (
     ALLOWED_REPORT_TYPES,
     REPORT_LABELS,
-    _ensure_processed_reports_table,
     _get_reports_storage_dir,
 )
 
@@ -66,8 +65,6 @@ def _list():
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        _ensure_processed_reports_table(cursor)
-        connection.commit()
         ensure_worker(current_app._get_current_object())
         cursor.execute(
             """
@@ -146,7 +143,6 @@ def _download(report_id):
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        _ensure_processed_reports_table(cursor)
         cursor.execute(
             """
             SELECT id, report_type, status, row_count, file_name, file_path, created_by
@@ -166,21 +162,30 @@ def _download(report_id):
                 inside = False
         if not record or record.get('status') != 'completed' or not inside or not os.path.isfile(candidate):
             return json_error(_MESSAGES['report_not_found'], 404, 'report_not_found')
-        if not _may_download(record):
-            return json_error(_MESSAGES['reports_unavailable'], 403, 'forbidden')
+        denied = _download_denied(record)
+        if denied:
+            try:
+                log_activity(
+                    session.get('user_id'),
+                    'reports_download_denied',
+                    f"Denied download of processed report #{report_id}",
+                    entity_type='processed_report',
+                    entity_id=report_id,
+                )
+            except Exception:
+                current_app.logger.exception('Denied report download could not be audited')
+            return denied
         cursor.execute('UPDATE processed_reports SET downloaded_at = NOW() WHERE id = %s', (report_id,))
+        log_activity(
+            session.get('user_id'),
+            'reports_download',
+            f"Downloaded processed report #{report_id} ({record['report_type']})",
+            entity_type='processed_report',
+            entity_id=report_id,
+            new_values={'report_type': record['report_type'], 'row_count': record['row_count'], 'file_name': record['file_name']},
+            cursor=cursor,
+        )
         connection.commit()
-        try:
-            log_activity(
-                session.get('user_id'),
-                'reports_download',
-                f"Downloaded processed report #{report_id} ({record['report_type']})",
-                entity_type='processed_report',
-                entity_id=report_id,
-                new_values={'report_type': record['report_type'], 'row_count': record['row_count'], 'file_name': record['file_name']},
-            )
-        except Exception:
-            current_app.logger.exception('Report download was served but the activity log failed')
         return send_file(candidate, as_attachment=True, download_name=record['file_name'], mimetype='text/csv')
     except Exception:
         current_app.logger.exception('Report download failed')
@@ -393,6 +398,23 @@ def _timetable_export_filters(payload):
     if not course_id or not class_id or not division_id:
         raise InputError('export_filters_invalid')
     return {'course_id': course_id, 'class_id': class_id, 'division_id': division_id}
+
+
+def _download_denied(record):
+    """Return the shared permission denial, or None when this download is allowed."""
+    if _may_download(record):
+        return None
+    kind = record.get('report_type')
+    owner = safe_count(record.get('created_by') or record.get('owner_id')) == safe_count(session.get('user_id'))
+    if owner and kind == 'users-export':
+        permission = 'users_export_data'
+    elif owner and kind == 'audit-export':
+        permission = 'reports_view_audit'
+    elif owner and kind == 'timetable-export':
+        permission = 'timetable_change'
+    else:
+        permission = 'reports_export'
+    return permission_denied(permission, 'reports_unavailable', _MESSAGES['reports_unavailable'])
 
 
 def _may_download(record):

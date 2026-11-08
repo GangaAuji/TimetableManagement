@@ -8,6 +8,8 @@ from flask import abort
 from app_factory import create_app
 from core.exceptions import AppError, ForbiddenError, NotFoundError, UnavailableError
 
+pytestmark = pytest.mark.live_db
+
 
 @pytest.fixture(scope='module')
 def client():

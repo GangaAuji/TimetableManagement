@@ -22,6 +22,7 @@ from core.schema.introspect import compare, missing_fk_targets
 from core.schema.sqlfile import split_statements
 
 LIVE_DUMP = ROOT / 'sql' / 'college_timetable_db.sql'
+CHECKS_DUMP = ROOT / 'sql' / 'college_timetable_db.checks.sql'
 
 SAMPLE_DUMP = """-- phpMyAdmin SQL Dump
 -- Server version: 10.4.32-MariaDB
@@ -130,9 +131,57 @@ def test_committed_baseline_has_the_expected_shape():
     assert 'rate_limit_counters' not in tables
 
 
-@pytest.mark.skipif(not LIVE_DUMP.exists(), reason='the local phpMyAdmin dump is not in sql/')
+def test_committed_baseline_keeps_check_constraints_and_table_options():
+    tables = [statement for statement in baseline_statements() if statement.startswith('CREATE TABLE')]
+    assert all(') ENGINE=InnoDB ' in statement for statement in tables)
+    checks = [line for statement in tables for line in statement.split('\n') if ' CHECK (' in line]
+    assert len(checks) == 10
+    assert sum('CONSTRAINT `chk_' in line for line in checks) == 8
+
+
+_CHECKS_DUMP = """/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `rooms` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `capacity` int(11) DEFAULT 60,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_room_capacity` CHECK (`capacity` > 0)
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Rooms';
+"""
+
+_ROOMS_WITHOUT_OPTIONS = """
+CREATE TABLE `rooms` (
+  `id` int(11) NOT NULL,
+  `capacity` int(11) DEFAULT 60
+) ;
+"""
+
+
+def test_clean_dump_restores_checks_and_options_phpmyadmin_dropped():
+    statements = split_statements(clean_dump(SAMPLE_DUMP + _ROOMS_WITHOUT_OPTIONS, _CHECKS_DUMP))
+    rooms = next(statement for statement in statements if statement.startswith('CREATE TABLE `rooms`'))
+    assert rooms == (
+        'CREATE TABLE `rooms` (\n'
+        '  `id` int(11) NOT NULL,\n'
+        '  `capacity` int(11) DEFAULT 60,\n'
+        '  CONSTRAINT `chk_room_capacity` CHECK (`capacity` > 0)\n'
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Rooms'"
+    )
+
+
+def test_clean_dump_refuses_a_table_without_options_or_with_different_columns():
+    with pytest.raises(ValueError, match='no table options'):
+        clean_dump(SAMPLE_DUMP + _ROOMS_WITHOUT_OPTIONS)
+    with pytest.raises(ValueError, match='Columns of `rooms` differ'):
+        clean_dump(SAMPLE_DUMP + _ROOMS_WITHOUT_OPTIONS.replace('DEFAULT 60', 'DEFAULT 50'), _CHECKS_DUMP)
+    with pytest.raises(ValueError, match='not in the dump'):
+        clean_dump(SAMPLE_DUMP, _CHECKS_DUMP)
+
+
+@pytest.mark.skipif(
+    not (LIVE_DUMP.exists() and CHECKS_DUMP.exists()), reason='the local dumps are not in sql/',
+)
 def test_committed_baseline_is_what_the_cleaner_produces_from_the_dump():
-    expected = clean_dump(LIVE_DUMP.read_text(encoding='utf-8'))
+    expected = clean_dump(LIVE_DUMP.read_text(encoding='utf-8'), CHECKS_DUMP.read_text(encoding='utf-8'))
     assert BASELINE_SQL.read_text(encoding='utf-8') == expected
 
 
@@ -248,3 +297,14 @@ def test_flask_db_migrate_refuses_autogenerate_without_touching_a_database():
     assert 'Can\'t connect' not in output and 'OperationalError' not in output
     after = sorted(path.name for path in (MIGRATIONS_DIR / 'versions').iterdir())
     assert after == before
+
+
+def test_create_app_registers_db_adopt(monkeypatch):
+    import app_factory
+
+    monkeypatch.setattr(app_factory, '_start_quality_model_retrainer', lambda app: None)
+    app = app_factory.create_app()
+    assert 'db-adopt' in app.cli.commands
+    result = app.test_cli_runner().invoke(args=['db-adopt', '--help'])
+    assert result.exit_code == 0
+    assert '--check' in result.output

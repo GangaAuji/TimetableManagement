@@ -169,7 +169,7 @@ def _password():
             'UPDATE users SET password = %s WHERE id = %s',
             (generate_password_hash(new_password), session.get('user_id')),
         )
-        log_activity(session.get('user_id'), 'change_password', 'Changed password')
+        log_activity(session.get('user_id'), 'change_password', 'Changed password', cursor=cursor)
         connection.commit()
         return json_ok({'saved': True})
     except InputError as exc:

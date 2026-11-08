@@ -1,8 +1,7 @@
 """Course reads and saves for the academic screen. This module does not read the request."""
 
-import mysql.connector
 
-from config import Config
+from models.db import get_db_connection as _shared_connection
 from data_access.courses import (
     count_active_courses,
     delete_course,
@@ -15,12 +14,7 @@ from data_access.courses import (
 
 def _connect():
     """Open the same direct connection the academic screens use."""
-    return mysql.connector.connect(
-        host=Config.MYSQL_HOST,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB,
-    )
+    return _shared_connection()
 
 
 def list_courses():

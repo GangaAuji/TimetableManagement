@@ -37,6 +37,8 @@ from data_access.users import (
 )
 from extensions import get_db_connection
 from security import log_activity
+from security.authority import account_problem, may_manage_role, removes_last_super_admin
+from security.lockout import unlock_account
 
 
 def list_users(role_filter, status_filter, search):
@@ -57,12 +59,18 @@ def create_user(username, password, role, status, _email, session):
         if fetch_user_id_by_username(cursor, username):
             flash('Username already exists.', 'danger')
             return
+        if not may_manage_role(cursor, session['user_id'], role):
+            flash('You cannot create an account with that role.', 'danger')
+            return
         hashed = generate_password_hash(password) if password else ''
         user_id = insert_user(cursor, username, hashed, role, status)
         log_activity(
             session['user_id'],
             'create_user',
             f'Created new user: {username} with role {role}',
+            entity_type='user',
+            entity_id=user_id,
+            cursor=cursor,
         )
         connection.commit()
         flash('User created successfully.', 'success')
@@ -235,18 +243,28 @@ def _sync_role_profiles(cursor, user_id, target_role, username, email, departmen
 
 
 def change_user(user_id, username, password, role, status, email, department_id, is_hod, session):
-    """Update one user. Return missing, username, email, ok, or error."""
+    """Update one user. Return missing, protected, username, email, ok, or error.
+
+    protected: the actor may not manage this account or give it this role, or
+    the change would leave no active Super Admin.
+    """
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
         current_user = fetch_user_for_edit(cursor, user_id)
         if not current_user:
             return 'missing'
+        if account_problem(cursor, session['user_id'], user_id, new_role=role):
+            return 'protected'
+        if removes_last_super_admin(cursor, user_id, role, status):
+            return 'protected'
         if fetch_other_user_by_username(cursor, username, user_id):
             return 'username'
         if email:
             if fetch_other_user_by_email(cursor, email, user_id):
                 return 'email'
+        if status == 'active' and (current_user.get('status') == 'locked' or current_user.get('locked_until')):
+            unlock_account(cursor, user_id, session['user_id'])
         dept_id = int(department_id) if department_id and department_id != '' else None
         stored_email = email or None
         if password:
@@ -268,6 +286,11 @@ def change_user(user_id, username, password, role, status, email, department_id,
             session['user_id'],
             'edit_user',
             f'Updated user {username} (ID: {user_id})',
+            entity_type='user',
+            entity_id=user_id,
+            old_values={'role': current_user.get('role'), 'status': current_user.get('status')},
+            new_values={'role': role, 'status': status, 'password_changed': bool(password)},
+            cursor=cursor,
         )
         connection.commit()
         return 'ok'
@@ -290,7 +313,11 @@ def soft_delete_user_relations(cursor, user_id, role):
 
 
 def deactivate_user(user_id, session):
-    """Deactivate one user. Return missing, protected, ok, or error."""
+    """Deactivate one user. Return missing, protected, ok, or error.
+
+    Your own account, an account you may not manage, and the last active
+    Super Admin are protected.
+    """
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
@@ -299,13 +326,18 @@ def deactivate_user(user_id, session):
             return 'missing'
         username = user['username']
         role = user['role']
-        if role == 'Super Admin':
+        if (user_id == session['user_id']
+                or account_problem(cursor, session['user_id'], user_id)
+                or removes_last_super_admin(cursor, user_id, role, 'inactive')):
             return 'protected'
         soft_delete_user_relations(cursor, user_id, role)
         log_activity(
             session['user_id'],
             'delete_user',
             f'Soft-deleted user {username} (ID: {user_id})',
+            entity_type='user',
+            entity_id=user_id,
+            cursor=cursor,
         )
         connection.commit()
         return 'ok'

@@ -43,7 +43,12 @@ def _bind(monkeypatch, rows):
     connection = _Connection(rows)
     activities = []
     monkeypatch.setattr(profile_service, 'get_db_connection', lambda: connection)
-    monkeypatch.setattr(profile_service, 'log_activity', lambda *args: activities.append(args))
+    def _log(*args, cursor=None, **kwargs):
+        assert cursor is connection.cursor_obj, 'the audit row shares the change transaction'
+        assert 'commit' not in connection.actions
+        activities.append(args)
+
+    monkeypatch.setattr(profile_service, 'log_activity', _log)
     monkeypatch.setattr(profile_service, 'check_password_hash', lambda stored, raw: stored == 'hash' and raw == 'old-secret')
     monkeypatch.setattr(profile_service, 'generate_password_hash', lambda raw: f'hashed:{raw}')
     return connection, activities

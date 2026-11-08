@@ -1,9 +1,8 @@
-"""Faculty shift management. Uses a private MySQL connection, not the shared helper."""
+"""Faculty shift management."""
 
-import mysql.connector
 from flask import flash
 
-from config import Config
+from models.db import get_db_connection as _shared_connection
 from data_access.admin_shifts import (
     count_active_shifts,
     count_faculty_with_shifts,
@@ -32,12 +31,7 @@ from data_access.admin_shifts import (
 
 def get_db_connection():
     """Get database connection"""
-    return mysql.connector.connect(
-        host=Config.MYSQL_HOST,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB
-    )
+    return _shared_connection()
 
 
 def _format_time_td(td):

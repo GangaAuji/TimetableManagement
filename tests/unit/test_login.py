@@ -22,6 +22,16 @@ class _Cursor:
             return None
         return self.rows.pop(0)
 
+    def fetchall(self):
+        if not self.rows:
+            return []
+        row = self.rows.pop(0)
+        if row is None:
+            return []
+        if isinstance(row, list):
+            return row
+        return [row]
+
 
 class _Connection:
     def __init__(self):
@@ -50,11 +60,18 @@ def _bind(monkeypatch, rows, raise_on=None, password_ok=True):
     flashes = []
     attempts = []
     activities = []
+    failures = []
+    resets = []
     monkeypatch.setattr(login_service, 'get_db', lambda: (connection, cursor))
     monkeypatch.setattr(login_service, 'flash', lambda message, category: flashes.append((message, category)))
-    monkeypatch.setattr(login_service, 'log_login_attempt', lambda *args: attempts.append(args))
-    monkeypatch.setattr(login_service, 'log_activity', lambda *args: activities.append(args))
-    monkeypatch.setattr(login_service, 'check_password_hash', lambda stored, raw: password_ok and stored == 'hash' and raw == 'secret')
+    monkeypatch.setattr(login_service, 'log_login_attempt', lambda *args, **kwargs: attempts.append(args))
+    monkeypatch.setattr(login_service, 'log_activity', lambda *args, **kwargs: activities.append(args))
+    monkeypatch.setattr(login_service, 'record_failed_sign_in', lambda user_id: failures.append(user_id))
+    monkeypatch.setattr(login_service, 'clear_after_sign_in', lambda cursor, user: resets.append(user['id']))
+    monkeypatch.setattr(login_service, 'count_unknown_username', lambda address: None)
+    monkeypatch.setattr(login_service, '_spend_one_hash', lambda password: None)
+    monkeypatch.setattr(login_service, 'password_matches', lambda stored, raw: password_ok and stored == 'hash' and raw == 'secret')
+    monkeypatch.setattr(login_service, 'upgraded_hash', lambda stored, raw: None)
     monkeypatch.setattr(login_service.uuid, 'uuid4', lambda: 'sid-1')
 
     class _Clock(datetime):
@@ -65,7 +82,7 @@ def _bind(monkeypatch, rows, raise_on=None, password_ok=True):
     monkeypatch.setattr(login_service, 'datetime', _Clock)
     app = _App()
     monkeypatch.setattr(login_service, 'current_app', app)
-    return connection, cursor, flashes, attempts, activities, app
+    return connection, cursor, flashes, attempts, activities, app, failures, resets
 
 
 def _user(role='Student', status='active'):
@@ -73,34 +90,39 @@ def _user(role='Student', status='active'):
 
 
 def test_unknown_inactive_and_locked_accounts_do_not_commit(monkeypatch):
-    connection, cursor, flashes, attempts, activities, _app = _bind(monkeypatch, [None])
+    connection, cursor, flashes, attempts, activities, _app, failures, _resets = _bind(monkeypatch, [None])
     session = {}
     assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', session) == 'render'
-    assert flashes == [('User not found.', 'danger')]
+    assert flashes == [('Sign in failed.', 'danger')]
     assert cursor.calls[0][0].endswith("role NOT IN ('Admin', 'Super Admin')")
     assert cursor.calls[0][1] == ('ada',)
     assert connection.commits == 0
-    assert attempts == []
+    assert attempts == [('ada', 'failed', 'Unknown account')]
+    assert failures == []
     assert session == {}
 
-    connection, _cursor, flashes, attempts, _activities, _app = _bind(monkeypatch, [_user(status='inactive')])
+    connection, _cursor, flashes, attempts, _activities, _app, failures, _resets = _bind(monkeypatch, [_user(status='inactive')])
     assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
     assert flashes == [("Your account has been deactivated. Please contact the administrator for assistance.", 'warning')]
     assert connection.commits == 0
-    assert attempts == []
+    assert attempts == [('ada', 'failed', 'Account inactive')]
+    assert failures == []
 
-    connection, _cursor, flashes, attempts, _activities, _app = _bind(monkeypatch, [_user(status='locked')])
+    connection, _cursor, flashes, attempts, _activities, _app, failures, _resets = _bind(monkeypatch, [_user(status='locked')])
     assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', {}) == 'render'
     assert flashes == [("Your account has been locked due to security reasons. Please contact the administrator.", 'danger')]
     assert connection.commits == 0
-    assert attempts == []
+    assert attempts == [('ada', 'failed', 'Account locked')]
+    assert failures == []
 
 
 def test_wrong_password_is_logged_and_not_committed(monkeypatch):
-    connection, cursor, flashes, attempts, activities, _app = _bind(monkeypatch, [_user()], password_ok=False)
+    connection, cursor, flashes, attempts, activities, _app, failures, resets = _bind(monkeypatch, [_user()], password_ok=False)
     assert login_service.sign_in('ada', 'nope', '10.0.0.8', 'browser', {}) == 'render'
     assert attempts == [('ada', 'failed', 'Invalid password')]
-    assert flashes == [('Invalid credentials for Student/Teacher.', 'danger')]
+    assert flashes == [('Sign in failed.', 'danger')]
+    assert failures == [7]
+    assert resets == []
     assert connection.commits == 0
     assert activities == []
     assert len(cursor.calls) == 1
@@ -109,16 +131,20 @@ def test_wrong_password_is_logged_and_not_committed(monkeypatch):
 def test_student_sign_in_keeps_session_and_query_order(monkeypatch):
     profile = {'department_id': 3, 'is_hod': 0, 'profile_photo': ''}
     student = {'id': 15, 'name': 'Ada', 'email': 'ada@school', 'course_id': 2, 'class_id': 4, 'division_id': 6}
-    connection, cursor, flashes, attempts, activities, _app = _bind(monkeypatch, [_user(), profile, student])
+    connection, cursor, flashes, attempts, activities, _app, _failures, resets = _bind(
+        monkeypatch, [_user(), student, profile],
+    )
     session = {}
     assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', session) == 'redirect'
-    assert [call[0].split(' ', 1)[0] for call in cursor.calls] == ['SELECT', 'INSERT', 'UPDATE', 'SELECT', 'SELECT']
-    assert 'students LIMIT 1' not in cursor.calls[-1][0]
-    assert cursor.calls[1][1] == ('sid-1', 7, '10.0.0.8', 'browser', datetime(2026, 10, 26, 12, 0, 0) + timedelta(days=7))
-    assert cursor.calls[2][1] == (7,)
+    assert [call[0].split(' ', 1)[0] for call in cursor.calls] == ['SELECT', 'SELECT', 'INSERT', 'UPDATE', 'SELECT']
+    assert 'LIMIT 1' not in ' '.join(call[0] for call in cursor.calls)
+    assert 'WHERE user_id = %s' in cursor.calls[1][0]
+    assert cursor.calls[2][1] == ('sid-1', 7, '10.0.0.8', 'browser', datetime(2026, 10, 26, 12, 0, 0) + timedelta(days=7))
+    assert cursor.calls[3][1] == (7,)
     assert connection.commits == 1
     assert attempts == [('ada', 'success')]
     assert activities == [(7, 'login', 'User ada logged in as Student')]
+    assert resets == [7]
     assert session['student_id'] == 15
     assert session.get('faculty_id') is None
     assert session['name'] == 'Ada'
@@ -127,18 +153,44 @@ def test_student_sign_in_keeps_session_and_query_order(monkeypatch):
     assert flashes == []
 
 
-def test_teacher_fallback_uses_the_faculty_row_id(monkeypatch):
+def test_teacher_sign_in_uses_only_the_linked_row(monkeypatch):
     profile = {'department_id': 3, 'is_hod': 1, 'profile_photo': 'ada.png'}
     faculty = {'id': 21, 'name': 'Grace', 'email': 'grace@school', 'department_id': 9}
-    connection, cursor, flashes, _attempts, _activities, app = _bind(
-        monkeypatch, [_user(role='Teacher'), profile, faculty], raise_on='WHERE user_id',
+    _connection, cursor, flashes, _attempts, _activities, _app, _failures, resets = _bind(
+        monkeypatch, [_user(role='Teacher'), faculty, profile],
     )
     session = {}
     assert login_service.sign_in('grace', 'secret', '10.0.0.8', 'browser', session) == 'redirect'
-    assert app.logger.warnings[0][0] == 'Teacher mapping by user_id failed: %s'
-    assert cursor.calls[-1][0] == 'SELECT id, name, email, department_id FROM faculty LIMIT 1'
+    assert cursor.calls[1][1] == (7,)
+    assert 'LIMIT 1' not in cursor.calls[1][0]
     assert session['faculty_id'] == 21
+    assert session['name'] == 'Grace'
     assert session['department_id'] == 9
-    assert session['profile_photo'] == 'ada.png'
-    assert flashes == [("Your account isn't linked to a teacher profile yet. Showing default teacher data. Ask admin to link your user.", 'warning')]
-    assert connection.commits == 1
+    assert resets == [7]
+    assert flashes == []
+
+
+def test_teacher_without_a_link_is_denied(monkeypatch):
+    connection, cursor, flashes, _attempts, _activities, _app, _failures, resets = _bind(
+        monkeypatch, [_user(role='Teacher'), None],
+    )
+    session = {}
+    assert login_service.sign_in('grace', 'secret', '10.0.0.8', 'browser', session) == 'render'
+    assert 'LIMIT 1' not in ' '.join(call[0] for call in cursor.calls)
+    assert session == {}
+    assert flashes == [('This account is not linked to a faculty record.', 'danger')]
+    assert connection.commits == 0
+    assert resets == []
+
+
+def test_several_student_rows_do_not_pick_one(monkeypatch):
+    first = {'id': 15, 'name': 'Ada', 'email': 'ada@school', 'course_id': 2, 'class_id': 4, 'division_id': 6}
+    second = {'id': 16, 'name': 'Bea', 'email': 'bea@school', 'course_id': 2, 'class_id': 4, 'division_id': 6}
+    connection, _cursor, flashes, _attempts, _activities, _app, _failures, _resets = _bind(
+        monkeypatch, [_user(), [first, second]],
+    )
+    session = {}
+    assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', session) == 'render'
+    assert session == {}
+    assert connection.commits == 0
+    assert flashes == [('This account is not linked to a student record.', 'danger')]

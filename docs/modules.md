@@ -58,7 +58,6 @@ Staff links point at `/admin/...`. Teacher and student links stay at `/my-...`. 
 | Reports | `export_jobs.py`, `reports_admin/` | Queued CSV jobs and report datasets |
 | People and access | `users.py`, `roles.py`, `user_permissions.py`, `faculty_admin.py`, `admin_students.py` | Accounts, roles, faculty, and students |
 | Audit | `audit_logs.py` | Activity, sessions, and failed sign-ins |
-| Database | `db_indexes.py` | Composite indexes added once at startup |
 | Face | `face/face_embedding.py` | Embedding used by invitation registration |
 
 `academic_rules` holds clash, holiday, and availability checks used while a timetable is built. `data_access` holds the SQL helpers those services call. `models/db.py` is the shared database connection used by the older request path. `security` holds permission checks, session activity, and the in-process rate limit.

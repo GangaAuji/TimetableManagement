@@ -41,9 +41,13 @@ class _Connection:
         self.actions.append('close')
 
 
-def _bind(monkeypatch, connection, activities):
+def _bind(monkeypatch, connection, activities, problem=None, last_super_admin=False):
     monkeypatch.setattr(user_service, 'get_db_connection', lambda: connection)
-    monkeypatch.setattr(user_service, 'log_activity', lambda *args: activities.append(args))
+    monkeypatch.setattr(user_service, 'log_activity', lambda *args, **kwargs: activities.append(args))
+    monkeypatch.setattr(user_service, 'account_problem', lambda cursor, actor_id, user_id, new_role=None: problem)
+    monkeypatch.setattr(
+        user_service, 'removes_last_super_admin', lambda cursor, user_id, role, status: last_super_admin,
+    )
 
     class _Logger:
         def error(self, message):
@@ -55,7 +59,7 @@ def _bind(monkeypatch, connection, activities):
     monkeypatch.setattr(user_service, 'current_app', _App())
 
 
-def test_missing_and_super_admin_are_not_deactivated(monkeypatch):
+def test_missing_and_protected_accounts_are_not_deactivated(monkeypatch):
     activities = []
     connection = _Connection(None)
     _bind(monkeypatch, connection, activities)
@@ -63,11 +67,17 @@ def test_missing_and_super_admin_are_not_deactivated(monkeypatch):
     assert connection.actions == ['close']
     assert activities == []
 
-    connection = _Connection({'username': 'root', 'role': 'Super Admin'})
-    _bind(monkeypatch, connection, activities)
-    assert user_service.deactivate_user(4, {'user_id': 1}) == 'protected'
-    assert len(connection.cursor_obj.calls) == 1
-    assert connection.actions == ['close']
+    for session, kwargs in (
+        ({'user_id': 1}, {'problem': 'protected'}),
+        ({'user_id': 1}, {'last_super_admin': True}),
+        ({'user_id': 4}, {}),
+    ):
+        connection = _Connection({'username': 'root', 'role': 'Super Admin'})
+        _bind(monkeypatch, connection, activities, **kwargs)
+        assert user_service.deactivate_user(4, session) == 'protected'
+        assert len(connection.cursor_obj.calls) == 1
+        assert connection.actions == ['close']
+    assert activities == []
 
 
 def test_teacher_deactivation_marks_the_faculty_row(monkeypatch):

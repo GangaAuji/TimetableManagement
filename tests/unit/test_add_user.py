@@ -57,8 +57,9 @@ class _App:
         self.logger = _Logger()
 
 
-def _bind(monkeypatch, connection, activities=None):
+def _bind(monkeypatch, connection, activities=None, may_manage=True):
     flashes = []
+    monkeypatch.setattr(user_service, 'may_manage_role', lambda cursor, actor_id, role: may_manage)
     monkeypatch.setattr(user_service, 'get_db_connection', lambda: connection)
     monkeypatch.setattr(user_service, 'flash', lambda message, category: flashes.append((message, category)))
     monkeypatch.setattr(user_service, 'current_app', _App())
@@ -70,9 +71,20 @@ def _bind(monkeypatch, connection, activities=None):
     monkeypatch.setattr(
         user_service,
         'log_activity',
-        lambda *args: activities.append(args) if activities is not None else None,
+        lambda *args, **kwargs: activities.append(args) if activities is not None else None,
     )
     return flashes
+
+
+def test_a_role_the_actor_may_not_manage_is_refused(monkeypatch):
+    connection = _Connection()
+    activities = []
+    flashes = _bind(monkeypatch, connection, activities, may_manage=False)
+    user_service.create_user('ada', 'secret', 'Super Admin', 'active', None, {'user_id': 9})
+    assert flashes == [('You cannot create an account with that role.', 'danger')]
+    assert all('INSERT' not in call[0] for call in connection.cursor_obj.calls)
+    assert activities == []
+    assert 'commit' not in connection.actions
 
 
 def test_taken_username_does_not_insert_or_roll_back(monkeypatch):

@@ -1,5 +1,6 @@
+import json
 from functools import wraps
-from flask import session, flash, redirect, url_for, request, current_app
+from flask import session, flash, redirect, url_for, request, current_app, has_request_context
 from extensions import get_db_connection
 import datetime
 
@@ -133,163 +134,101 @@ def has_permission(permission_name, department_id=None):
     return decorator
 
 
-def log_activity(user_id, activity_type, description=None, entity_type=None, entity_id=None, old_values=None, new_values=None):
-    """
-    Log user activity to both user_activity_log (old) and audit_logs (new enhanced table)
-    """
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        # Get username
-        username = None
-        if user_id:
-            cursor.execute("SELECT username FROM users WHERE id = %s", [user_id])
-            user_result = cursor.fetchone()
-            if user_result:
-                username = user_result['username']
-        
-        # Log to old table for backward compatibility
-        cursor.execute("""
-            INSERT INTO user_activity_log 
-            (user_id, activity_type, description, ip_address, user_agent) 
+def _request_details():
+    if not has_request_context():
+        return None, None, None, None, None
+    return (
+        request.remote_addr,
+        request.user_agent.string,
+        request.method,
+        request.path,
+        session.get('session_id'),
+    )
+
+
+def _write_activity(cursor, user_id, activity_type, description, entity_type, entity_id, old_values, new_values):
+    address, agent, method, path, session_id = _request_details()
+    if user_id:
+        cursor.execute(
+            """
+            INSERT INTO user_activity_log (user_id, activity_type, description, ip_address, user_agent)
             VALUES (%s, %s, %s, %s, %s)
-        """, [
+            """,
+            (user_id, activity_type, description, address, agent),
+        )
+    cursor.execute(
+        """
+        INSERT INTO audit_logs
+        (user_id, username, action, entity_type, entity_id, old_values, new_values,
+         ip_address, user_agent, request_method, request_url, status, session_id)
+        VALUES (%s, (SELECT username FROM users WHERE id = %s), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
             user_id,
-            activity_type,
-            description,
-            request.remote_addr,
-            request.user_agent.string
-        ])
-        
-        # Log to new audit_logs table with enhanced fields
-        import json
-        cursor.execute("""
-            INSERT INTO audit_logs 
-            (user_id, username, action, entity_type, entity_id, old_values, new_values,
-             ip_address, user_agent, request_method, request_url, status, session_id) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, [
             user_id,
-            username,
             activity_type,
             entity_type,
             entity_id,
-            json.dumps(old_values) if old_values else None,
-            json.dumps(new_values) if new_values else None,
-            request.remote_addr,
-            request.user_agent.string,
-            request.method,
-            request.path,
+            json.dumps(old_values, default=str) if old_values else None,
+            json.dumps(new_values, default=str) if new_values else None,
+            address,
+            agent,
+            method,
+            path,
             'success',
-            session.get('session_id')
-        ])
-        
+            session_id,
+        ),
+    )
+
+
+def log_activity(user_id, activity_type, description=None, entity_type=None, entity_id=None,
+                 old_values=None, new_values=None, cursor=None):
+    """Write the action to user_activity_log and audit_logs.
+
+    Pass the cursor of the transaction that made the change: the audit rows then
+    commit or roll back with it, and a failed write raises so the caller rolls
+    back. Without a cursor the rows are committed on their own connection and a
+    failure is only logged; that is for events that change nothing else.
+    """
+    if cursor is not None:
+        _write_activity(cursor, user_id, activity_type, description, entity_type, entity_id, old_values, new_values)
+        return
+    connection = get_db_connection()
+    own = connection.cursor()
+    try:
+        _write_activity(own, user_id, activity_type, description, entity_type, entity_id, old_values, new_values)
         connection.commit()
     except Exception as e:
         current_app.logger.error(f"Failed to log activity: {str(e)}")
     finally:
-        cursor.close()
+        own.close()
         connection.close()
 
-def log_login_attempt(username, status='success', failure_reason=None):
+
+def log_login_attempt(username, status='success', failure_reason=None, cursor=None):
+    """Record a sign-in attempt.
+
+    A failure is always committed on its own connection, so it survives the
+    request rolling back. A success passes the sign-in's cursor.
     """
-    Log login attempts to login_attempts table
+    address, agent = _request_details()[:2]
+    statement = """
+        INSERT INTO login_attempts (username, ip_address, user_agent, status, failure_reason)
+        VALUES (%s, %s, %s, %s, %s)
     """
+    values = (username, address or '', agent, status, failure_reason)
+    if cursor is not None:
+        cursor.execute(statement, values)
+        return
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
+    own = connection.cursor()
     try:
-        cursor.execute("""
-            INSERT INTO login_attempts 
-            (username, ip_address, user_agent, status, failure_reason) 
-            VALUES (%s, %s, %s, %s, %s)
-        """, [
-            username,
-            request.remote_addr,
-            request.user_agent.string,
-            status,
-            failure_reason
-        ])
+        own.execute(statement, values)
         connection.commit()
     except Exception as e:
         current_app.logger.error(f"Failed to log login attempt: {str(e)}")
     finally:
-        cursor.close()
-        connection.close()
-
-def check_account_lockout(user_id):
-    """
-    Check if account should be locked due to failed attempts
-    Returns True if account is locked
-    """
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT failed_attempts, status FROM users WHERE id = %s", [user_id])
-        result = cursor.fetchone()
-        if not result:
-            connection.close()
-            return False
-        
-        failed_attempts = result['failed_attempts']
-        status = result['status']
-
-        if failed_attempts >= 5 and status != 'locked':
-            cursor.execute("""
-                UPDATE users 
-                SET status = 'locked' 
-                WHERE id = %s
-            """, [user_id])
-            connection.commit()
-
-            log_activity(user_id, 'account_locked', 'Account locked due to too many failed attempts')
-            cursor.close()
-            connection.close()
-            return True
-
-        cursor.close()
-        connection.close()
-        return status == 'locked'
-    except:
-        connection.close()
-        raise
-
-
-def reset_failed_attempts(user_id):
-    """
-    Reset failed login attempts counter after successful login
-    """
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            UPDATE users 
-            SET failed_attempts = 0,
-                last_login = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """, [user_id])
-        connection.commit()
-    finally:
-        cursor.close()
-        connection.close()
-
-def increment_failed_attempts(user_id):
-    """
-    Increment failed login attempts counter
-    """
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            UPDATE users 
-            SET failed_attempts = failed_attempts + 1
-            WHERE id = %s
-        """, [user_id])
-        connection.commit()
-
-        # Check if account should be locked
-        check_account_lockout(user_id)
-    finally:
-        cursor.close()
+        own.close()
         connection.close()
 
 def get_user_permissions(user_id):
@@ -493,13 +432,44 @@ def get_accessible_departments(user_id):
         raise
 
 
+ACCOUNT_PROTECTED = 'You cannot change permissions for that account.'
+PERMISSION_UNHELD = 'You can only grant permissions you hold yourself.'
+
+
+def _grant_problem(cursor, actor_id, user_id, permission_names, department_id):
+    from security.authority import account_problem, unheld_permissions
+
+    if not actor_id or account_problem(cursor, actor_id, user_id) == 'protected':
+        return ACCOUNT_PROTECTED
+    if unheld_permissions(cursor, actor_id, permission_names, department_id):
+        return PERMISSION_UNHELD
+    return None
+
+
+def permission_grant_problem(actor_id, user_id, permission_names, department_id=None):
+    """Return ACCOUNT_PROTECTED, PERMISSION_UNHELD, or None before granting several permissions."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        return _grant_problem(cursor, actor_id, user_id, permission_names, department_id)
+    finally:
+        cursor.close()
+        connection.close()
+
+
 def grant_user_permission(user_id, permission_name, department_id=None, course_id=None, class_id=None, granted_by=None, expires_at=None, notes=None):
     """
-    Grant a specific permission to a user with optional department/course/class restrictions
+    Grant a specific permission to a user with optional department/course/class restrictions.
+    granted_by must manage the account and hold the permission (ACCOUNT_PROTECTED, PERMISSION_UNHELD).
     """
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
+        problem = _grant_problem(cursor, granted_by, user_id, [permission_name], department_id)
+        if problem:
+            cursor.close()
+            connection.close()
+            return False, problem
         # Get permission ID
         cursor.execute("SELECT id FROM permissions WHERE name = %s", [permission_name])
         perm_result = cursor.fetchone()
@@ -531,9 +501,6 @@ def grant_user_permission(user_id, permission_name, department_id=None, course_i
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, [user_id, permission_id, department_id, course_id, class_id, granted_by, expires_at, notes])
         
-        connection.commit()
-        
-        # Log activity
         restriction_parts = []
         if department_id:
             restriction_parts.append(f'department {department_id}')
@@ -545,10 +512,15 @@ def grant_user_permission(user_id, permission_name, department_id=None, course_i
         restriction_msg = f" for {', '.join(restriction_parts)}" if restriction_parts else ""
         
         log_activity(
-            granted_by or user_id,
+            granted_by,
             'grant_permission',
-            f'Granted permission {permission_name} to user {user_id}{restriction_msg}'
+            f'Granted permission {permission_name} to user {user_id}{restriction_msg}',
+            entity_type='user',
+            entity_id=user_id,
+            new_values={'permission': permission_name, 'department_id': department_id},
+            cursor=cursor,
         )
+        connection.commit()
         
         cursor.close()
         connection.close()
@@ -562,11 +534,17 @@ def grant_user_permission(user_id, permission_name, department_id=None, course_i
 
 def revoke_user_permission(user_id, permission_name, department_id=None, revoked_by=None):
     """
-    Revoke a specific permission from a user
+    Revoke a specific permission from a user. revoked_by must manage the account (ACCOUNT_PROTECTED).
     """
+    from security.authority import account_problem
+
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
+        if not revoked_by or account_problem(cursor, revoked_by, user_id) == 'protected':
+            cursor.close()
+            connection.close()
+            return False, ACCOUNT_PROTECTED
         # Get permission ID
         cursor.execute("SELECT id FROM permissions WHERE name = %s", [permission_name])
         perm_result = cursor.fetchone()
@@ -589,15 +567,17 @@ def revoke_user_permission(user_id, permission_name, department_id=None, revoked
             connection.close()
             return False, "Permission not found or already revoked"
         
-        connection.commit()
-        
-        # Log activity
         log_activity(
-            revoked_by or user_id,
+            revoked_by,
             'revoke_permission',
             f'Revoked permission {permission_name} from user {user_id}' + 
-            (f' for department {department_id}' if department_id else '')
+            (f' for department {department_id}' if department_id else ''),
+            entity_type='user',
+            entity_id=user_id,
+            old_values={'permission': permission_name, 'department_id': department_id},
+            cursor=cursor,
         )
+        connection.commit()
         
         cursor.close()
         connection.close()

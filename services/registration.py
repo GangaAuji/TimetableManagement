@@ -10,7 +10,6 @@ from datetime import datetime
 from flask import current_app, flash
 from werkzeug.security import generate_password_hash
 
-from config import Config
 from data_access.registration import (
     fetch_faculty_id_by_email,
     fetch_invitation,
@@ -78,7 +77,7 @@ def _meets_face_quality_threshold(quality_score):
     if quality_score is None:
         return False
     try:
-        min_quality = float(getattr(Config, 'FACE_TEMPLATE_MIN_QUALITY', 0.55) or 0.55)
+        min_quality = float(current_app.config.get('FACE_TEMPLATE_MIN_QUALITY', 0.55) or 0.55)
     except (TypeError, ValueError):
         min_quality = 0.55
     return quality_score >= min_quality
@@ -200,15 +199,15 @@ def register_account(invitation, username, password, form):
             form.get('face_template_quality') or form.get('quality_score')
         )
 
-        if not face_template and Config.MOBILE_FACE_EMBEDDING_ENABLED:
+        if not face_template and current_app.config['MOBILE_FACE_EMBEDDING_ENABLED']:
             try:
                 from services.face.face_embedding import get_face_pipeline
 
                 pipeline = get_face_pipeline(
-                    detector_model_path=Config.YOLO_FACE_DETECTOR_MODEL_PATH,
-                    embedder_model_path=Config.MOBILEFACENET_MODEL_PATH,
-                    detector_conf_threshold=Config.FACE_DETECT_CONF_THRESHOLD,
-                    detector_iou_threshold=Config.FACE_DETECT_IOU_THRESHOLD,
+                    detector_model_path=current_app.config['YOLO_FACE_DETECTOR_MODEL_PATH'],
+                    embedder_model_path=current_app.config['MOBILEFACENET_MODEL_PATH'],
+                    detector_conf_threshold=current_app.config['FACE_DETECT_CONF_THRESHOLD'],
+                    detector_iou_threshold=current_app.config['FACE_DETECT_IOU_THRESHOLD'],
                 )
                 generated = pipeline.generate(captured_bytes)
                 face_template = generated.embedding
@@ -219,25 +218,25 @@ def register_account(invitation, username, password, form):
                     if quality_score is None:
                         raise ValueError("No detectable face found in capture")
                     raise ValueError(
-                        f"Detected face quality too low ({quality_score:.3f}); minimum is {Config.FACE_TEMPLATE_MIN_QUALITY:.3f}"
+                        f"Detected face quality too low ({quality_score:.3f}); minimum is {current_app.config['FACE_TEMPLATE_MIN_QUALITY']:.3f}"
                     )
             except Exception as generation_error:
                 current_app.logger.exception(
                     "Failed to generate face template during registration: %s",
                     str(generation_error)
                 )
-                if Config.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS:
+                if current_app.config['MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS']:
                     flash(
                         (
                             "Unable to generate face embedding. Check runtime installation and model paths: "
-                            f"embedder={Config.MOBILEFACENET_MODEL_PATH}, "
-                            f"detector={Config.YOLO_FACE_DETECTOR_MODEL_PATH}"
+                            f"embedder={current_app.config['MOBILEFACENET_MODEL_PATH']}, "
+                            f"detector={current_app.config['YOLO_FACE_DETECTOR_MODEL_PATH']}"
                         ),
                         "danger"
                     )
                     return 'form'
 
-        if not face_template and Config.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS:
+        if not face_template and current_app.config['MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS']:
             flash(
                 "Face template is required for recognition. Please retry capture.",
                 "danger"

@@ -9,6 +9,7 @@ from services.user_actions import (
     export_user_rows,
     reset_user_password,
     toggle_user_status,
+    unlock_user,
 )
 from security import check_user_permission, grant_user_permission, has_permission, revoke_user_permission
 
@@ -56,9 +57,33 @@ def toggle_status(user_id):
     return jsonify(payload), status
 
 
+@user_mgmt_bp.route('/unlock/<int:user_id>', methods=['POST'])
+@has_permission('users_change_user')
+def unlock(user_id):
+    form = EmptyForm()
+    if not form.validate_on_submit():
+        return jsonify({'error': 'Invalid request (CSRF).'}), 400
+    payload, status = unlock_user(user_id, session)
+    return jsonify(payload), status
+
+
+def _export_allowed(permission_name):
+    """Return a 401 or 403 response, or None when this account may export."""
+    if 'user_id' not in session:
+        return 'Authentication required.', 401
+    if session.get('role') == 'Super Admin':
+        return None
+    has_perm, _, _ = check_user_permission(session.get('user_id'), permission_name)
+    if not has_perm:
+        return 'You do not have permission to do that.', 403
+    return None
+
+
 @user_mgmt_bp.route('/export')
-@has_permission('users_view_user')
 def export_users():
+    denied = _export_allowed('users_export_data')
+    if denied:
+        return denied
     role_filter = request.args.get('role', '')
     status_filter = request.args.get('status', '')
     search = request.args.get('search', '')
@@ -71,8 +96,10 @@ def export_users():
 
 
 @user_mgmt_bp.route('/activity-log/export')
-@has_permission('users_view_user')
 def export_activity_log():
+    denied = _export_allowed('users_view_activity_log')
+    if denied:
+        return denied
     rows = export_activity_rows()
     return _csv_response(
         ['Time', 'Username', 'Activity', 'Description', 'IP', 'User Agent'],

@@ -103,7 +103,12 @@ def require_authenticated_api():
 def reject_unsafe_request():
     """Block oversized bodies and cross-site writes before a route runs."""
     upload = _profile_photo_upload() or _settings_upload()
-    limit = 2 * 1024 * 1024 if upload else _MAX_BODY_BYTES
+    if _settings_upload():
+        limit = 8 * 1024 * 1024
+    elif upload:
+        limit = 2 * 1024 * 1024
+    else:
+        limit = _MAX_BODY_BYTES
     if request.content_length is not None and request.content_length > limit:
         return json_error('The request was blocked.', 413, 'blocked')
 

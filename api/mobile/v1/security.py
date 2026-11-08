@@ -5,7 +5,6 @@ import hmac
 import time
 from flask import current_app, g, jsonify, request
 
-from config import Config
 from extensions import get_db_connection
 
 
@@ -67,7 +66,7 @@ def _verify_device_signature(cursor, device_id, timestamp, nonce, signature):
         WHERE device_id = %s
         LIMIT 1
         """,
-        (Config.MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE, device_id),
+        (current_app.config["MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE"], device_id),
     )
     device = cursor.fetchone()
 
@@ -111,11 +110,11 @@ def _enforce_rate_limit_and_nonce(cursor, device, nonce):
     count_row = cursor.fetchone() or {"request_count": 0}
     request_count = int(count_row.get("request_count", 0))
 
-    limit_value = int(device.get("rate_limit_per_minute") or Config.MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE)
+    limit_value = int(device.get("rate_limit_per_minute") or current_app.config["MOBILE_SYNC_DEFAULT_RATE_LIMIT_PER_MINUTE"])
     if request.path.startswith("/mobile-sync/v1/attendance/sync") or request.path.startswith(
         "/mobile-sync/v1/faculty-attendance/sync"
     ):
-        multiplier = int(getattr(Config, "MOBILE_SYNC_ATTENDANCE_RATE_LIMIT_MULTIPLIER", 1) or 1)
+        multiplier = int(current_app.config.get("MOBILE_SYNC_ATTENDANCE_RATE_LIMIT_MULTIPLIER", 1) or 1)
         if multiplier > 1:
             limit_value *= multiplier
 
@@ -158,7 +157,7 @@ def authenticate_mobile_request(allow_legacy_api_key=False):
             )
 
         api_key = _extract_bearer_or_header()
-        configured = str(Config.MOBILE_SYNC_API_KEY or "")
+        configured = str(current_app.config.get("MOBILE_SYNC_API_KEY") or "")
         if not configured:
             current_app.logger.error("MOBILE_SYNC_API_KEY is not configured.")
             return _json_error("Mobile sync is not configured on server", 503)
@@ -179,7 +178,7 @@ def authenticate_mobile_request(allow_legacy_api_key=False):
         return _json_error("Invalid X-Mobile-Timestamp", 400)
 
     now_utc = int(time.time())
-    allowed_skew = int(Config.MOBILE_SYNC_SIGNATURE_WINDOW_SECONDS)
+    allowed_skew = int(current_app.config["MOBILE_SYNC_SIGNATURE_WINDOW_SECONDS"])
     if abs(now_utc - timestamp) > allowed_skew:
         return _json_error("Request timestamp outside allowed window", 401)
 

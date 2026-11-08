@@ -6,11 +6,15 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 METHOD_ORDER = ('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD')
 
 
-def sample_values(rule):
+def sample_values(rule, overrides=None):
+    """Values for the rule's URL parameters. `overrides` maps a parameter name to a value."""
     values = {}
+    overrides = overrides or {}
     for name, converter in rule._converters.items():
         kind = type(converter).__name__
-        if kind == 'IntegerConverter':
+        if name in overrides:
+            values[name] = overrides[name]
+        elif kind == 'IntegerConverter':
             values[name] = 1
         elif kind == 'FloatConverter':
             values[name] = 1.0
@@ -24,8 +28,8 @@ def sample_values(rule):
     return values
 
 
-def sample_path(rule):
-    built = rule.build(sample_values(rule), append_unknown=False)
+def sample_path(rule, overrides=None):
+    built = rule.build(sample_values(rule, overrides), append_unknown=False)
     if not built:
         return rule.rule
     path = built[1]

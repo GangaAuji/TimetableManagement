@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
-import { getCsrfToken } from '../../../shared/api/endpoints'
+import { getBranding, getCsrfToken } from '../../../shared/api/endpoints'
 import { messageFrom } from '../../../shared/components/data-list'
 import { ThemeModeButton } from '../../../shared/components/ThemeModeButton'
-import { safeText } from '../../../shared/security/sanitize'
+import { fallbackBranding, safeText, staticAssetUrl } from '../../../shared/security/sanitize'
+import { applyBrandingHead } from '../../../shared/theme'
 
 const tokenPattern = /^[A-Za-z0-9_-]{16,200}$/
 const fieldClass = 'w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500'
@@ -52,7 +53,10 @@ export function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [state, setState] = useState<InviteState>('checking')
   const [invite, setInvite] = useState({ name: '', role: '' })
+  const [branding, setBranding] = useState(fallbackBranding)
   const validToken = tokenPattern.test(token)
+  const background = staticAssetUrl(branding.register_background)
+  const loginLogo = staticAssetUrl(branding.login_logo) || staticAssetUrl(branding.site_logo)
 
   function attach(node: HTMLVideoElement | null) {
     videoRef.current = node
@@ -93,6 +97,14 @@ export function RegisterPage() {
       setCameraError(cameraMessage(reason))
     }
   }
+
+  useEffect(() => {
+    void getBranding().then(setBranding).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    applyBrandingHead(branding)
+  }, [branding])
 
   useEffect(() => {
     if (!validToken) {
@@ -198,22 +210,27 @@ export function RegisterPage() {
   const blocked = state === 'expired' || state === 'used' || state === 'invalid'
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4 font-sans">
+    <div
+      className={`relative flex min-h-screen items-center justify-center p-6 font-sans ${background ? 'bg-slate-900 bg-cover bg-center' : 'bg-gray-100'}`}
+      style={background ? { backgroundImage: `url("${background}")` } : undefined}
+    >
+      {background ? <div className="absolute inset-0 bg-slate-950/45" /> : null}
       <ThemeModeButton className="fixed top-4 right-4 z-20 border border-gray-200 bg-white text-gray-700 shadow-sm" />
-      <div className="flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:min-h-[640px] md:flex-row">
-        <div className="relative hidden flex-col justify-between overflow-hidden bg-slate-900 p-12 text-white md:flex md:w-5/12">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:flex-row">
+        <div className="relative hidden flex-col justify-between overflow-hidden bg-slate-900 p-8 text-white md:flex md:w-5/12">
           <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950" />
           <div className="relative z-10">
-            <div className="mb-6 flex items-center gap-2">
-              <i className="fas fa-user-check text-3xl text-blue-300" />
-              <span className="text-xl font-bold tracking-wider">REGISTER</span>
+            <div className="mb-4 flex items-center gap-2">
+              {loginLogo ? <img src={loginLogo} alt="" className="h-10 w-auto max-w-[140px] object-contain" /> : <i className="fas fa-user-check text-2xl text-blue-300" />}
+              <span className="text-lg font-bold tracking-wider">REGISTER</span>
             </div>
-            <h2 className="mb-4 text-3xl leading-tight font-bold">Create your account</h2>
+            <h2 className="mb-3 text-2xl leading-tight font-bold">Create your account</h2>
             <p className="text-slate-300">Use the invitation from your college, choose a username, and capture a clear face photo.</p>
           </div>
           <p className="relative z-10 text-sm text-slate-400">The photo is used for attendance. Face the camera in good light.</p>
         </div>
-        <div className="flex flex-1 flex-col justify-center p-8 md:p-12">
+        <div className="flex flex-1 flex-col justify-center p-6 md:p-8">
+          {loginLogo ? <img src={loginLogo} alt="" className="mb-4 h-9 w-auto max-w-[120px] object-contain md:hidden" /> : null}
           {state === 'checking' && <p className="text-sm text-gray-500">Checking this invitation…</p>}
           {blocked && (
             <div>
@@ -231,7 +248,7 @@ export function RegisterPage() {
             </div>
           )}
           {state === 'open' && !done && (
-            <form onSubmit={(event) => void onSubmit(event)} className="space-y-5">
+            <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Complete registration</h1>
                 <p className="mt-1 text-sm text-gray-500">{invite.name || 'Invited user'}{invite.role ? ` · ${invite.role}` : ''}</p>

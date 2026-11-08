@@ -1,8 +1,7 @@
 """Faculty-allocation reads and saves. This module does not read the request."""
 
-import mysql.connector
 
-from config import Config
+from models.db import get_db_connection as _shared_connection
 from data_access.allocations import (
     delete_allocation,
     fetch_active_batches,
@@ -23,12 +22,7 @@ from data_access.subjects import (
 
 def _connect():
     """Open the same direct connection the academic screens use."""
-    return mysql.connector.connect(
-        host=Config.MYSQL_HOST,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB,
-    )
+    return _shared_connection()
 
 
 def _normalize_allocations(allocations):

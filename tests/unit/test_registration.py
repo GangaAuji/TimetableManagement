@@ -51,12 +51,11 @@ class _App:
     def __init__(self, root):
         self.root_path = root
         self.logger = _Logger()
-
-
-class _Flags:
-    MOBILE_FACE_EMBEDDING_ENABLED = False
-    MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = False
-    FACE_TEMPLATE_MIN_QUALITY = 0.55
+        self.config = {
+            'MOBILE_FACE_EMBEDDING_ENABLED': False,
+            'MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS': False,
+            'FACE_TEMPLATE_MIN_QUALITY': 0.55,
+        }
 
 
 def _bind(monkeypatch, rows, root):
@@ -66,7 +65,6 @@ def _bind(monkeypatch, rows, root):
     monkeypatch.setattr(registration, 'get_db', lambda: (connection, cursor))
     monkeypatch.setattr(registration, 'flash', lambda message, category: flashes.append((message, category)))
     monkeypatch.setattr(registration, 'current_app', _App(root))
-    monkeypatch.setattr(registration, 'Config', _Flags)
     monkeypatch.setattr(registration, 'generate_password_hash', lambda _password: 'hashed')
 
     class _Clock(datetime):
@@ -153,14 +151,11 @@ def test_supplied_face_template_still_fails_before_quality_is_read(monkeypatch):
 
 
 def test_missing_capture_does_not_roll_back(monkeypatch):
-    _Flags.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = True
-    try:
-        connection, _cursor, flashes = _bind(monkeypatch, [None, None], '.')
-        assert registration.register_account(_invitation(), 'ada', 'secret', {}) == 'form'
-        assert flashes == [('Face template is required for recognition. Please retry capture.', 'danger')]
-        assert connection.rollbacks == 0
-    finally:
-        _Flags.MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS = False
+    connection, _cursor, flashes = _bind(monkeypatch, [None, None], '.')
+    registration.current_app.config['MOBILE_FACE_EMBEDDING_REQUIRE_SUCCESS'] = True
+    assert registration.register_account(_invitation(), 'ada', 'secret', {}) == 'form'
+    assert flashes == [('Face template is required for recognition. Please retry capture.', 'danger')]
+    assert connection.rollbacks == 0
 
     connection, _cursor, flashes = _bind(monkeypatch, [None, None], '.')
     assert registration.register_account(_invitation(), 'ada', 'secret', {}) == 'form'

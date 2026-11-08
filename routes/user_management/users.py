@@ -103,6 +103,8 @@ def edit_user(user_id):
     )
     if result == 'missing':
         return error_response('User not found.', 404)
+    if result == 'protected':
+        return error_response('You cannot change that account this way.', 403)
     if result == 'username':
         return error_response('Username already exists.', 409)
     if result == 'email':
@@ -129,7 +131,7 @@ def delete_user(user_id):
     if result == 'missing':
         return jsonify({'error': 'User not found'}), 404
     if result == 'protected':
-        return jsonify({'error': 'Cannot delete Super Admin users'}), 403
+        return jsonify({'error': 'You cannot deactivate that account.'}), 403
     if result == 'ok':
         return jsonify({'message': 'User deactivated successfully'})
     return jsonify({'error': 'Error deleting user'}), 500

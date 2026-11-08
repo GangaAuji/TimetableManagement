@@ -19,14 +19,14 @@ def fetch_teacher_lectures(cursor, user_id):
                 s.name as subject_name,
                 c.id as class_id,
                 c.name as class_name,
-                d.id as division_id,
+                t.division_id as division_id,
                 d.name as division_name,
                 co.id as course_id,
                 co.name as course_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
-            JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN divisions d ON t.division_id = d.id
             JOIN courses co ON t.course_id = co.id
             WHERE t.faculty_id = %s
             ORDER BY t.day_of_week, t.start_time
@@ -45,45 +45,69 @@ def count_attendance_for_date(cursor, timetable_id, today):
 
 
 def fetch_owned_lecture_detail(cursor, timetable_id, user_id):
-    """Return one lecture when it belongs to this faculty user."""
+    """Return one lecture when it belongs to this faculty user. division_id is None for a whole-class lecture."""
     cursor.execute("""
             SELECT 
                 t.id as timetable_id,
                 t.day_of_week,
                 t.start_time,
                 t.end_time,
+                t.semester_id,
+                t.academic_year_id,
                 s.id as subject_id,
                 s.name as subject_name,
+                (s.is_elective = 1 OR s.course_type IN ('Elective', 'Elective Practical')) as is_elective,
                 c.id as class_id,
                 c.name as class_name,
-                d.id as division_id,
+                t.division_id as division_id,
                 d.name as division_name,
                 co.id as course_id,
                 co.name as course_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
-            JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN divisions d ON t.division_id = d.id
             JOIN courses co ON t.course_id = co.id
             WHERE t.id = %s AND t.faculty_id = %s
         """, (timetable_id, user_id))
     return cursor.fetchone()
 
 
-def fetch_class_students(cursor, course_id, class_id, division_id):
-    """Return students in one class division."""
-    cursor.execute("""
+def fetch_lecture_roster(cursor, lecture):
+    """Return the students who may be marked for this lecture.
+
+    Everyone in the lecture's course and class, narrowed to its division when
+    it has one. For an elective subject, only students with a
+    student_subject_selections row for that subject (not withdrawn, and in
+    the lecture's semester and academic year when the lecture names them).
+    """
+    clauses = ['s.course_id = %s', 's.class_id = %s']
+    params = [lecture['course_id'], lecture['class_id']]
+    if lecture.get('division_id') is not None:
+        clauses.append('s.division_id = %s')
+        params.append(lecture['division_id'])
+    if lecture.get('is_elective'):
+        chosen = [
+            'sss.student_id = s.id', 'sss.subject_id = %s', "(sss.status IS NULL OR sss.status <> 'Withdrawn')",
+        ]
+        params.append(lecture['subject_id'])
+        if lecture.get('semester_id') is not None:
+            chosen.append('sss.semester_id = %s')
+            params.append(lecture['semester_id'])
+        if lecture.get('academic_year_id') is not None:
+            chosen.append('sss.academic_year_id = %s')
+            params.append(lecture['academic_year_id'])
+        clauses.append(f"EXISTS (SELECT 1 FROM student_subject_selections sss WHERE {' AND '.join(chosen)})")
+    cursor.execute(f"""
             SELECT 
                 s.id,
                 s.name,
                 s.roll_number,
                 s.email
             FROM students s
-            WHERE s.course_id = %s 
-              AND s.class_id = %s 
-              AND s.division_id = %s
+            WHERE {' AND '.join(clauses)}
             ORDER BY s.roll_number, s.name
-        """, (course_id, class_id, division_id))
+        """, tuple(params))
     return cursor.fetchall()
 
 
@@ -178,7 +202,7 @@ def fetch_history_lecture(cursor, timetable_id, user_id):
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
-            JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN divisions d ON t.division_id = d.id
             WHERE t.id = %s AND t.faculty_id = %s
         """, (timetable_id, user_id))
     return cursor.fetchone()

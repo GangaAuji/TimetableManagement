@@ -15,8 +15,10 @@ _started = False
 
 
 def ensure_worker(app):
-    """Start the single generation worker for this process."""
+    """Start the single generation worker for this process. Never under a Flask CLI command."""
     global _started
+    if app.config.get('CLI_COMMAND') or not app.config.get('BACKGROUND_WORKERS', True):
+        return
     with _guard:
         if _started:
             return
@@ -29,7 +31,6 @@ def enqueue_job(settings, user_id):
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
-        _ensure_table(cursor)
         cursor.execute(
             """
             SELECT id FROM timetable_jobs
@@ -72,8 +73,6 @@ def load_job(job_id):
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
-        _ensure_table(cursor)
-        connection.commit()
         cursor.execute(
             """
             SELECT id, status, progress, total_count, done_count, assigned_count,
@@ -135,39 +134,6 @@ def allocated_targets(course_id=None):
     return [item for item in targets if item['course_id'] and item['class_id'] and item['division_id']], overflow
 
 
-_jobs_table_ready = False
-
-
-def _ensure_table(cursor):
-    global _jobs_table_ready
-    if _jobs_table_ready:
-        return
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS timetable_jobs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            status VARCHAR(20) NOT NULL DEFAULT 'queued',
-            progress TINYINT UNSIGNED NOT NULL DEFAULT 0,
-            total_count INT NOT NULL DEFAULT 0,
-            done_count INT NOT NULL DEFAULT 0,
-            assigned_count INT NOT NULL DEFAULT 0,
-            unassigned_count INT NOT NULL DEFAULT 0,
-            failed_count INT NOT NULL DEFAULT 0,
-            settings_json MEDIUMTEXT NOT NULL,
-            summary_json MEDIUMTEXT NULL,
-            message VARCHAR(300) NULL,
-            created_by INT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            finished_at TIMESTAMP NULL DEFAULT NULL,
-            INDEX idx_timetable_jobs_status (status),
-            INDEX idx_timetable_jobs_queue (status, id),
-            INDEX idx_timetable_jobs_created_at (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """
-    )
-    _jobs_table_ready = True
-
-
 def _loop(app):
     try:
         with app.app_context():
@@ -192,7 +158,6 @@ def _requeue_interrupted():
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        _ensure_table(cursor)
         cursor.execute(
             "UPDATE timetable_jobs SET status = 'queued', progress = 0, done_count = 0, message = 'Queued' WHERE status = 'running'"
         )

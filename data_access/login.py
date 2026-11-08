@@ -1,19 +1,24 @@
 """Sign-in SQL. Callers pass a cursor."""
 
 
+_LOGIN_COLUMNS = """id, password, role, status, locked_until,
+    locked_until IS NOT NULL AND locked_until > NOW() AS locked_now,
+    GREATEST(TIMESTAMPDIFF(SECOND, NOW(), locked_until), 0) AS lock_seconds"""
+
+
 def fetch_login_user(cursor, username):
-    """Return a non-admin user row for this username."""
+    """Return a non-admin user row for this username, with its lock state."""
     cursor.execute(
-        "SELECT id, password, role, status FROM users WHERE username = %s AND role NOT IN ('Admin', 'Super Admin')",
+        f"SELECT {_LOGIN_COLUMNS} FROM users WHERE username = %s AND role NOT IN ('Admin', 'Super Admin')",
         (username,),
     )
     return cursor.fetchone()
 
 
 def fetch_admin_login_user(cursor, username):
-    """Return an admin, super admin, or HOD row for this username."""
+    """Return an admin, super admin, or HOD row for this username, with its lock state."""
     cursor.execute(
-        "SELECT id, password, role, status FROM users WHERE username = %s AND role IN ('Admin', 'Super Admin', 'HOD')",
+        f"SELECT {_LOGIN_COLUMNS} FROM users WHERE username = %s AND role IN ('Admin', 'Super Admin', 'HOD')",
         (username,),
     )
     return cursor.fetchone()
@@ -48,35 +53,27 @@ def fetch_user_profile(cursor, user_id):
     return cursor.fetchone()
 
 
-def fetch_student_by_user(cursor, user_id):
-    """Return the student row linked to this user."""
+def fetch_student_links(cursor, user_id):
+    """Return every student row linked to this user. Login requires exactly one."""
     cursor.execute(
         "SELECT id, name, email, course_id, class_id, division_id FROM students WHERE user_id = %s",
         (user_id,),
     )
-    return cursor.fetchone()
+    return cursor.fetchall()
 
 
-def fetch_student_fallback(cursor):
-    """Return the first student row when the user link is missing."""
-    cursor.execute(
-        "SELECT id, name, email, course_id, class_id, division_id FROM students LIMIT 1"
-    )
-    return cursor.fetchone()
-
-
-def fetch_faculty_by_user(cursor, user_id):
-    """Return the faculty row linked to this user."""
+def fetch_faculty_links(cursor, user_id):
+    """Return every faculty row linked to this user. Login requires exactly one."""
     cursor.execute(
         "SELECT id, name, email, department_id FROM faculty WHERE user_id = %s",
         (user_id,),
     )
-    return cursor.fetchone()
+    return cursor.fetchall()
 
 
-def fetch_faculty_fallback(cursor):
-    """Return the first faculty row when the user link is missing."""
+def update_password_hash(cursor, hashed_password, user_id):
+    """Replace a stored password with a one-way hash."""
     cursor.execute(
-        "SELECT id, name, email, department_id FROM faculty LIMIT 1"
+        "UPDATE users SET password = %s WHERE id = %s",
+        (hashed_password, user_id),
     )
-    return cursor.fetchone()

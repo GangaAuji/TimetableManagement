@@ -1,6 +1,6 @@
 """Admin report screens."""
 
-from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _ensure_processed_reports_table, _get_reports_storage_dir, _write_csv_file, _get_redirect_target, _create_csv_response, _clean_filters
+from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _get_reports_storage_dir, _write_csv_file, _get_redirect_target, _create_csv_response, _clean_filters
 from services.reports_admin.dataset import _build_report_export_dataset
 from services.reports_admin.center import preview_report, reports_index, reports_processor
 from services.reports_admin.attendance import attendance_report
@@ -14,7 +14,6 @@ from services.reports_admin.queue import export_report, process_report, download
 __all__ = [
     'ALLOWED_REPORT_TYPES',
     'REPORT_LABELS',
-    '_ensure_processed_reports_table',
     '_get_reports_storage_dir',
     '_write_csv_file',
     '_get_redirect_target',

@@ -17,7 +17,8 @@ from data_access.user_permissions import (
     insert_user_group,
 )
 from extensions import get_db_connection
-from security import get_user_permissions, log_activity
+from security import ACCOUNT_PROTECTED, PERMISSION_UNHELD, get_user_permissions, log_activity
+from security.authority import account_problem, group_permission_names, unheld_permissions
 
 
 def _cursor():
@@ -113,22 +114,34 @@ def load_user_permission_page(user_id):
 
 
 def assign_permission_group(user_id, group_id, department_id, session):
-    """Grant a permission group. Return the JSON payload and status."""
+    """Grant a permission group. Return the JSON payload and status.
+
+    The actor must manage the account and hold every permission in the group.
+    """
     connection, cursor = _cursor()
     try:
         department_id = int(department_id) if department_id else None
         group_id = int(group_id)
+        group = fetch_group_name(cursor, group_id)
+        if not group:
+            return {'error': 'Permission group not found'}, 404
+        if account_problem(cursor, session['user_id'], user_id) == 'protected':
+            return {'error': ACCOUNT_PROTECTED}, 403
+        if unheld_permissions(cursor, session['user_id'], group_permission_names(cursor, group_id), department_id):
+            return {'error': PERMISSION_UNHELD}, 403
         if fetch_active_user_group(cursor, user_id, group_id, department_id):
             return {'error': 'Permission group already assigned'}, 400
         insert_user_group(cursor, user_id, group_id, department_id, session.get('user_id'))
-        connection.commit()
-        group_name = fetch_group_name(cursor, group_id)['name']
         log_activity(
             session['user_id'],
             'grant_permission_group',
-            f'Granted permission group {group_name} to user {user_id}' +
+            f"Granted permission group {group['name']} to user {user_id}" +
             (f' for department {department_id}' if department_id else ''),
+            entity_type='user',
+            entity_id=user_id,
+            cursor=cursor,
         )
+        connection.commit()
         return {'message': 'Permission group granted successfully'}, 200
     except Exception as exc:
         connection.rollback()
@@ -148,17 +161,22 @@ def unassign_permission_group(user_id, group_id, department_id, session):
         group_result = fetch_group_name(cursor, group_id)
         if not group_result:
             return {'error': 'Permission group not found'}, 404
+        if account_problem(cursor, session['user_id'], user_id) == 'protected':
+            return {'error': ACCOUNT_PROTECTED}, 403
         group_name = group_result['name']
         delete_user_group(cursor, user_id, group_id, department_id)
         if cursor.rowcount == 0:
             return {'error': 'Permission group assignment not found'}, 404
-        connection.commit()
         log_activity(
             session['user_id'],
             'revoke_permission_group',
             f'Revoked permission group {group_name} from user {user_id}' +
             (f' for department {department_id}' if department_id else ''),
+            entity_type='user',
+            entity_id=user_id,
+            cursor=cursor,
         )
+        connection.commit()
         return {'message': 'Permission group revoked successfully'}, 200
     except Exception as exc:
         connection.rollback()

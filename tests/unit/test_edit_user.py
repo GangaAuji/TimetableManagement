@@ -60,15 +60,23 @@ class _App:
         self.logger = _Logger()
 
 
-def _bind(monkeypatch, rows, activities=None, fail_on=None):
+def _bind(monkeypatch, rows, activities=None, fail_on=None, problem=None, last_super_admin=False, unlocks=None):
     connection = _Connection(rows, fail_on)
+    monkeypatch.setattr(user_service, 'account_problem', lambda cursor, actor_id, user_id, new_role=None: problem)
+    monkeypatch.setattr(
+        user_service, 'removes_last_super_admin', lambda cursor, user_id, role, status: last_super_admin,
+    )
+    monkeypatch.setattr(
+        user_service, 'unlock_account',
+        lambda cursor, user_id, actor_id: unlocks.append(user_id) if unlocks is not None else None,
+    )
     monkeypatch.setattr(user_service, 'get_db_connection', lambda: connection)
     monkeypatch.setattr(user_service, 'current_app', _App())
     monkeypatch.setattr(user_service, 'generate_password_hash', lambda password: f'hashed:{password}')
     monkeypatch.setattr(
         user_service,
         'log_activity',
-        lambda *args: activities.append(args) if activities is not None else None,
+        lambda *args, **kwargs: activities.append(args) if activities is not None else None,
     )
 
     class _Clock(datetime):
@@ -135,6 +143,29 @@ def test_teacher_edit_updates_the_faculty_row_and_then_its_active_flag(monkeypat
     assert activities == [(9, 'edit_user', 'Updated user ada (ID: 4)')]
     assert connection.actions == ['commit', 'close']
     assert connection.dictionary is True
+
+
+def test_protected_accounts_are_refused_before_any_write(monkeypatch):
+    connection = _bind(monkeypatch, [{'id': 4, 'role': 'Super Admin', 'status': 'active'}], problem='protected')
+    assert user_service.change_user(4, 'root', '', 'Teacher', 'active', '', '', False, {'user_id': 2}) == 'protected'
+    assert len(connection.cursor_obj.calls) == 1
+    assert connection.actions == ['close']
+
+    connection = _bind(monkeypatch, [{'id': 4, 'role': 'Super Admin', 'status': 'active'}], last_super_admin=True)
+    assert user_service.change_user(4, 'root', '', 'Super Admin', 'inactive', '', '', False, {'user_id': 4}) == 'protected'
+    assert connection.actions == ['close']
+
+
+def test_activating_a_locked_account_unlocks_it(monkeypatch):
+    unlocks = []
+    _bind(monkeypatch, [{'id': 4, 'role': 'Admin', 'status': 'locked', 'locked_until': None}, None], [], unlocks=unlocks)
+    assert user_service.change_user(4, 'ada', '', 'Admin', 'active', '', '', False, {'user_id': 1}) == 'ok'
+    assert unlocks == [4]
+
+    unlocks = []
+    _bind(monkeypatch, [{'id': 4, 'role': 'Admin', 'status': 'active', 'locked_until': None}, None], [], unlocks=unlocks)
+    assert user_service.change_user(4, 'ada', '', 'Admin', 'active', '', '', False, {'user_id': 1}) == 'ok'
+    assert unlocks == []
 
 
 def test_bad_department_id_rolls_back(monkeypatch):

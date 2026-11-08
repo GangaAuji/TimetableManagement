@@ -38,13 +38,11 @@ def _install_migration_context_defaults():
 
 
 def configure_migrations(app):
-    """Attach Flask-Migrate without using it for request queries."""
-    from config import Config
-
-    user = quote_plus(Config.MYSQL_USER or '')
-    password = quote_plus(Config.MYSQL_PASSWORD or '')
-    host = Config.MYSQL_HOST or 'localhost'
-    name = Config.MYSQL_DB or ''
+    """Attach Flask-Migrate without using it for request queries. Reads the app's own config."""
+    user = quote_plus(app.config.get('MYSQL_USER') or '')
+    password = quote_plus(app.config.get('MYSQL_PASSWORD') or '')
+    host = app.config.get('MYSQL_HOST') or 'localhost'
+    name = app.config.get('MYSQL_DB') or ''
     app.config.setdefault('SQLALCHEMY_DATABASE_URI', f'mysql+mysqldb://{user}:{password}@{host}/{name}')
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
     _install_migration_context_defaults()

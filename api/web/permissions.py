@@ -95,7 +95,8 @@ def _create():
             (name, module, description),
         )
         permission_id = cursor.lastrowid
-        log_activity(session.get('user_id'), 'add_permission', f'Added permission {name}')
+        log_activity(session.get('user_id'), 'add_permission', f'Added permission {name}',
+                     entity_type='permission', entity_id=permission_id, cursor=cursor)
         connection.commit()
         return json_ok({'id': safe_count(permission_id), 'name': name, 'module': module}, 201)
     except InputError as exc:

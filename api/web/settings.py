@@ -13,7 +13,7 @@ from services.branding import allowed_file, load_branding_settings, reset_brandi
 _MESSAGES = {
     'settings_unavailable': 'The page could not be loaded.',
     'settings_invalid': 'Check the branding fields and try again.',
-    'settings_file_invalid': 'Logos must be PNG, JPG, GIF, or SVG.',
+    'settings_file_invalid': 'Images must be PNG, JPG, GIF, or SVG.',
 }
 _TEXT_LIMITS = {
     'site_title': 80,

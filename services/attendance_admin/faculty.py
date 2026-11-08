@@ -16,7 +16,7 @@ def faculty_attendance_overview():
     try:
         if not _table_exists(cursor, 'faculty_attendance'):
             flash(
-                "faculty_attendance table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "faculty_attendance table not found. Run `flask db upgrade`.",
                 "warning",
             )
             return render_template(
@@ -327,7 +327,7 @@ def faculty_attendance_details(faculty_id):
     try:
         if not _table_exists(cursor, 'faculty_attendance'):
             flash(
-                "faculty_attendance table not found. Run add_mobile_faculty_attendance_sync.sql migration first.",
+                "faculty_attendance table not found. Run `flask db upgrade`.",
                 "warning",
             )
             return redirect(url_for('attendance_admin.faculty_attendance_overview'))

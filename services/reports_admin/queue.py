@@ -9,7 +9,7 @@ import json
 import os
 import uuid
 
-from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _ensure_processed_reports_table, _get_reports_storage_dir, _write_csv_file, _get_redirect_target, _clean_filters
+from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _get_reports_storage_dir, _write_csv_file, _get_redirect_target, _clean_filters
 from services.reports_admin.dataset import _build_report_export_dataset
 
 def export_report(report_type):
@@ -34,7 +34,6 @@ def process_report(report_type):
     redirect_target = _get_redirect_target()
 
     try:
-        _ensure_processed_reports_table(cursor)
         rows, fieldnames = _build_report_export_dataset(cursor, report_type, request.form)
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -58,8 +57,6 @@ def process_report(report_type):
             session.get('user_id')
         ))
         processed_id = cursor.lastrowid
-        connection.commit()
-
         log_activity(
             session.get('user_id'),
             'reports_process',
@@ -72,8 +69,11 @@ def process_report(report_type):
                 'filters': filters,
                 'status': 'completed',
                 'file_name': file_name
-            }
+            },
+            cursor=cursor,
         )
+        connection.commit()
+
 
         flash(f"{REPORT_LABELS.get(report_type, report_type.title())} report processed successfully. Download from Reports Center table.", 'success')
         return redirect(redirect_target)
@@ -125,8 +125,6 @@ def download_processed_report(processed_report_id):
     cursor = connection.cursor(dictionary=True)
 
     try:
-        _ensure_processed_reports_table(cursor)
-
         cursor.execute("""
             SELECT id, report_type, status, row_count, file_name, file_path
             FROM processed_reports
@@ -150,8 +148,6 @@ def download_processed_report(processed_report_id):
             "UPDATE processed_reports SET downloaded_at = NOW() WHERE id = %s",
             (processed_report_id,)
         )
-        connection.commit()
-
         log_activity(
             session.get('user_id'),
             'reports_download',
@@ -163,8 +159,11 @@ def download_processed_report(processed_report_id):
                 'row_count': report_record['row_count'],
                 'status': report_record['status'],
                 'file_name': report_record['file_name']
-            }
+            },
+            cursor=cursor,
         )
+        connection.commit()
+
 
         return send_file(
             report_record['file_path'],
@@ -185,8 +184,6 @@ def delete_processed_report(processed_report_id):
     cursor = connection.cursor(dictionary=True)
 
     try:
-        _ensure_processed_reports_table(cursor)
-
         cursor.execute("""
             SELECT id, report_type, file_name, file_path, row_count
             FROM processed_reports
@@ -202,8 +199,6 @@ def delete_processed_report(processed_report_id):
             "UPDATE processed_reports SET status = 'deleted' WHERE id = %s",
             (processed_report_id,)
         )
-        connection.commit()
-
         log_activity(
             session.get('user_id'),
             'reports_soft_delete',
@@ -216,8 +211,11 @@ def delete_processed_report(processed_report_id):
                 'file_name': report_record['file_name'],
                 'status': 'deleted',
                 'mode': 'soft_delete'
-            }
+            },
+            cursor=cursor,
         )
+        connection.commit()
+
 
         flash('Processed report moved to trash.', 'success')
         return redirect(url_for('admin_reports.reports_index'))
@@ -238,8 +236,6 @@ def restore_processed_report(processed_report_id):
     cursor = connection.cursor(dictionary=True)
 
     try:
-        _ensure_processed_reports_table(cursor)
-
         cursor.execute("""
             SELECT id, report_type, status, file_name, file_path, row_count
             FROM processed_reports
@@ -263,8 +259,6 @@ def restore_processed_report(processed_report_id):
             "UPDATE processed_reports SET status = 'completed' WHERE id = %s",
             (processed_report_id,)
         )
-        connection.commit()
-
         log_activity(
             session.get('user_id'),
             'reports_restore',
@@ -277,8 +271,11 @@ def restore_processed_report(processed_report_id):
                 'file_name': report_record['file_name'],
                 'status': 'completed',
                 'mode': 'restore'
-            }
+            },
+            cursor=cursor,
         )
+        connection.commit()
+
 
         flash('Processed report restored successfully.', 'success')
         return redirect(url_for('admin_reports.reports_index'))

@@ -78,7 +78,7 @@ def save_attendance(timetable_id):
             return redirect(url_for('attendance.index'))
         if result == 'denied':
             return redirect(url_for('attendance.index'))
-        if result == 'date':
+        if result == 'date' or result == 'student':
             return redirect(url_for('attendance.mark_attendance', timetable_id=timetable_id))
         flash(f"Attendance saved successfully for {result} students!", "success")
         return redirect(url_for('attendance.index'))

@@ -12,6 +12,7 @@ from api.web.access import InputError, allowed, body, close, permission_denied, 
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_count, safe_stamp, safe_text
 from security import log_activity
+from security.authority import account_problem, may_manage_role, removes_last_super_admin
 
 _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 _STATUSES = frozenset(('active', 'inactive', 'locked'))
@@ -176,6 +177,8 @@ def _create():
         cursor.execute('SELECT id FROM roles WHERE name = %s', (role,))
         if not cursor.fetchone():
             raise InputError('user_role_invalid')
+        if not may_manage_role(cursor, session.get('user_id'), role):
+            return json_error(_MESSAGES['user_protected'], 403, 'user_protected')
         cursor.execute('SELECT id FROM users WHERE username = %s', (username,))
         if cursor.fetchone():
             return json_error(_MESSAGES['user_username_taken'], 400, 'user_username_taken')
@@ -184,7 +187,8 @@ def _create():
             (username, generate_password_hash(password), role, status),
         )
         user_id = cursor.lastrowid
-        log_activity(session.get('user_id'), 'create_user', f'Created new user: {username} with role {role}')
+        log_activity(session.get('user_id'), 'create_user', f'Created new user: {username} with role {role}',
+                     entity_type='user', entity_id=user_id, cursor=cursor)
         connection.commit()
         return json_ok({'id': safe_count(user_id)}, 201)
     except InputError as exc:
@@ -215,14 +219,17 @@ def _deactivate(user_id):
         user = cursor.fetchone()
         if not user:
             return json_error(_MESSAGES['user_not_found'], 404, 'user_not_found')
-        if user.get('role') == 'Super Admin' or user_id == session.get('user_id'):
+        if (user_id == session.get('user_id')
+                or account_problem(cursor, session.get('user_id'), user_id)
+                or removes_last_super_admin(cursor, user_id, user.get('role'), 'inactive')):
             return json_error(_MESSAGES['user_protected'], 403, 'user_protected')
         cursor.execute("UPDATE users SET status = 'inactive' WHERE id = %s", (user_id,))
         if user.get('role') == 'Teacher':
             cursor.execute('UPDATE faculty SET is_active = 0 WHERE user_id = %s', (user_id,))
         elif user.get('role') == 'Student':
             cursor.execute('UPDATE students SET is_active = 0 WHERE user_id = %s', (user_id,))
-        log_activity(session.get('user_id'), 'delete_user', f"Soft-deleted user {user.get('username')}")
+        log_activity(session.get('user_id'), 'delete_user', f"Soft-deleted user {user.get('username')}",
+                     entity_type='user', entity_id=user_id, cursor=cursor)
         connection.commit()
         return json_ok({'id': safe_count(user_id)})
     except Exception:

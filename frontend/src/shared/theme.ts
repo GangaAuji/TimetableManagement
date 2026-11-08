@@ -1,4 +1,5 @@
 import type { Branding } from './api/endpoints'
+import { staticAssetUrl } from './security/sanitize'
 
 function channel(hex: string, start: number) {
   return Number.parseInt(hex.slice(start, start + 2), 16)
@@ -47,6 +48,19 @@ export function applyBrandingTheme(branding: Pick<Branding, 'primary_color' | 's
   root.style.setProperty('--header-muted', mutedFor(header))
   root.style.setProperty('--header-line', isLightColor(header) ? '#e5e7eb' : 'rgba(255,255,255,0.16)')
   root.style.setProperty('--accent-fg', inkFor(accent))
+}
+
+export function applyBrandingHead(branding: Pick<Branding, 'site_title' | 'favicon'>) {
+  if (branding.site_title) document.title = branding.site_title
+  const href = staticAssetUrl(branding.favicon)
+  if (!href) return
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (!link) {
+    link = document.createElement('link')
+    link.rel = 'icon'
+    document.head.appendChild(link)
+  }
+  if (link.href !== new URL(href, window.location.origin).href) link.href = href
 }
 
 export function publishBranding() {

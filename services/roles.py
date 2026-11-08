@@ -34,6 +34,12 @@ from data_access.roles import (
 )
 from extensions import get_db_connection
 from security import log_activity
+from security.authority import DEFAULT_LEVEL, role_level_by_id, role_permission_ids, role_problem
+
+_ROLE_REFUSED = {
+    'protected': 'You cannot change a role senior to your own.',
+    'unheld': 'You can only grant permissions you hold yourself.',
+}
 
 
 def _cursor():
@@ -72,13 +78,26 @@ def permission_form_choices():
         connection.close()
 
 
-def _store_permission_ids(cursor, role_id, permissions):
-    for perm_id in permissions:
+def _permission_ids(permissions):
+    ids = []
+    for perm_id in permissions or ():
         try:
-            pid = int(perm_id)
+            ids.append(int(perm_id))
         except (TypeError, ValueError):
             continue
+    return ids
+
+
+def _store_permission_ids(cursor, role_id, permissions):
+    for pid in _permission_ids(permissions):
         insert_role_permission(cursor, role_id, pid)
+
+
+def _role_change_problem(cursor, session, role_id, permissions=None):
+    """Return 'protected', 'unheld', or None for a change to an existing role."""
+    _name, level = role_level_by_id(cursor, role_id)
+    added = set(_permission_ids(permissions)) - role_permission_ids(cursor, role_id) if permissions else ()
+    return role_problem(cursor, session['user_id'], current_level=level, added_permission_ids=added)
 
 
 def create_role(name, description, permissions, session):
@@ -88,9 +107,15 @@ def create_role(name, description, permissions, session):
         if fetch_role_id_by_name(cursor, name):
             flash('Role already exists.', 'danger')
             return
+        problem = role_problem(cursor, session['user_id'], new_level=DEFAULT_LEVEL,
+                               added_permission_ids=_permission_ids(permissions))
+        if problem:
+            flash(_ROLE_REFUSED[problem], 'danger')
+            return
         role_id = insert_role(cursor, name, description)
         _store_permission_ids(cursor, role_id, permissions)
-        log_activity(session['user_id'], 'create_role', f'Created new role: {name}')
+        log_activity(session['user_id'], 'create_role', f'Created new role: {name}',
+                     entity_type='role', entity_id=role_id, cursor=cursor)
         connection.commit()
         flash('Role created successfully.', 'success')
     except Exception as exc:
@@ -114,12 +139,19 @@ def remove_role(role_id, session):
         if role_name == 'Super Admin':
             flash('Cannot delete Super Admin role.', 'danger')
             return
+        problem = _role_change_problem(cursor, session, role_id)
+        if problem:
+            flash(_ROLE_REFUSED[problem], 'danger')
+            return
         delete_role_permissions(cursor, role_id)
         delete_role_row(cursor, role_id)
         log_activity(
             session['user_id'],
             'delete_role',
             f'Deleted role {role_name} (ID: {role_id})',
+            entity_type='role',
+            entity_id=role_id,
+            cursor=cursor,
         )
         connection.commit()
         flash('Role deleted successfully.', 'success')
@@ -144,10 +176,15 @@ def change_role(role_id, name, description, permissions, session):
         if old_name == 'Super Admin' and name != 'Super Admin':
             flash('Cannot rename Super Admin role.', 'danger')
             return
+        problem = _role_change_problem(cursor, session, role_id, permissions or [])
+        if problem:
+            flash(_ROLE_REFUSED[problem], 'danger')
+            return
         update_role_row(cursor, name, description, role_id)
         delete_role_permissions(cursor, role_id)
         _store_permission_ids(cursor, role_id, permissions)
-        log_activity(session['user_id'], 'edit_role', f'Edited role {name} (ID: {role_id})')
+        log_activity(session['user_id'], 'edit_role', f'Edited role {name} (ID: {role_id})',
+                     entity_type='role', entity_id=role_id, cursor=cursor)
         connection.commit()
         flash('Role updated successfully.', 'success')
     except Exception as exc:
@@ -227,19 +264,25 @@ def load_role_permission_page(role_id):
 
 
 def replace_role_permissions(role_id, permission_ids, session):
-    """Replace a role's permissions. Return ok or error."""
+    """Replace a role's permissions. Return ok, protected, unheld, or error."""
     connection, cursor = _cursor()
     try:
+        problem = _role_change_problem(cursor, session, role_id, permission_ids or [])
+        if problem:
+            return problem
         delete_role_permissions_for_update(cursor, role_id)
         if permission_ids:
             for perm_id in permission_ids:
                 insert_role_permission_for_update(cursor, role_id, perm_id)
-        connection.commit()
         log_activity(
             session['user_id'],
             'update_role_permissions',
             f'Updated permissions for role ID {role_id}',
+            entity_type='role',
+            entity_id=role_id,
+            cursor=cursor,
         )
+        connection.commit()
         return 'ok'
     except Exception as exc:
         connection.rollback()
@@ -257,6 +300,10 @@ def copy_role(role_id, session):
         role = fetch_role_name_and_description(cursor, role_id)
         if not role:
             return {'error': 'Role not found.'}, 404
+        problem = role_problem(cursor, session['user_id'], new_level=DEFAULT_LEVEL,
+                               added_permission_ids=role_permission_ids(cursor, role_id))
+        if problem:
+            return {'error': _ROLE_REFUSED[problem]}, 403
         new_name = f"{role['name']} (Copy)"
         counter = 1
         while True:
@@ -272,6 +319,9 @@ def copy_role(role_id, session):
             session['user_id'],
             'clone_role',
             f'Cloned role "{role["name"]}" to "{new_name}" (ID: {new_role_id})',
+            entity_type='role',
+            entity_id=new_role_id,
+            cursor=cursor,
         )
         connection.commit()
         return {
@@ -292,6 +342,10 @@ def update_many_role_permissions(action, role_ids, perm_ids, session):
     """Add or remove permissions on several roles. Return the JSON payload and status."""
     connection, cursor = _cursor()
     try:
+        for role_id in role_ids:
+            problem = _role_change_problem(cursor, session, role_id, perm_ids if action == 'add' else None)
+            if problem:
+                return {'error': _ROLE_REFUSED[problem]}, 403
         if action == 'add':
             for role_id in role_ids:
                 role = fetch_role_name(cursor, role_id)
@@ -300,12 +354,13 @@ def update_many_role_permissions(action, role_ids, perm_ids, session):
                 for perm_id in perm_ids:
                     if not fetch_existing_role_permission(cursor, role_id, perm_id):
                         insert_role_permission(cursor, role_id, perm_id)
-            connection.commit()
             log_activity(
                 session['user_id'],
                 'bulk_add_permissions',
                 f'Added permissions to roles: {",".join(role_ids)}',
+                cursor=cursor,
             )
+            connection.commit()
             return {'message': 'Permissions added successfully.'}, 200
         if action == 'remove':
             for role_id in role_ids:
@@ -314,12 +369,13 @@ def update_many_role_permissions(action, role_ids, perm_ids, session):
                     continue
                 for perm_id in perm_ids:
                     delete_one_role_permission(cursor, role_id, perm_id)
-            connection.commit()
             log_activity(
                 session['user_id'],
                 'bulk_remove_permissions',
                 f'Removed permissions from roles: {",".join(role_ids)}',
+                cursor=cursor,
             )
+            connection.commit()
             return {'message': 'Permissions removed successfully.'}, 200
         return {'error': 'Invalid action.'}, 400
     except Exception as exc:

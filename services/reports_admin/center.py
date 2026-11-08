@@ -5,7 +5,7 @@ from ui.pages import render_template
 from extensions import get_db_connection
 from security import has_permission, log_activity
 
-from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _ensure_processed_reports_table, _clean_filters
+from services.reports_admin._common import ALLOWED_REPORT_TYPES, REPORT_LABELS, _clean_filters
 from services.reports_admin.dataset import _build_report_export_dataset
 
 def preview_report(report_type):
@@ -71,9 +71,6 @@ def reports_index():
     cursor = connection.cursor(dictionary=True)
 
     try:
-        _ensure_processed_reports_table(cursor)
-        connection.commit()
-
         cursor.execute("""
             SELECT
                 pr.id,

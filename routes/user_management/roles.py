@@ -117,7 +117,12 @@ def update_role_permissions(role_id):
     if result == 'ok':
         flash('Role permissions updated successfully.', 'success')
         return redirect(url_for('user_mgmt_bp.manage_role_permissions', role_id=role_id))
-    flash('Error updating role permissions.', 'danger')
+    if result == 'protected':
+        flash('You cannot change a role senior to your own.', 'danger')
+    elif result == 'unheld':
+        flash('You can only grant permissions you hold yourself.', 'danger')
+    else:
+        flash('Error updating role permissions.', 'danger')
     return redirect(url_for('user_mgmt_bp.manage_roles'))
 
 

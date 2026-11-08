@@ -63,6 +63,7 @@ static/js/tailwind.js
 *.db
 *.sqlite
 *.sqlite3
+legacy/
 !legacy/college_timetable.sql
 migrations/*
 !migrations/alembic.ini

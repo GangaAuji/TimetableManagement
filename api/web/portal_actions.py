@@ -86,6 +86,8 @@ def _service_error(result):
         return json_error(_MESSAGES['portal_denied'], 403, 'portal_denied')
     if result == 'date':
         return json_error(_MESSAGES['portal_date'], 400, 'portal_date')
+    if result == 'student':
+        return json_error('That student is not in this class.', 400, 'portal_invalid')
     return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
 
 

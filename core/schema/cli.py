@@ -1,4 +1,6 @@
-"""`flask db-adopt`: put an existing database under Alembic without changing it.
+"""`flask db-adopt`, `flask seed run`, and registration of `flask admin`.
+
+db-adopt puts an existing database under Alembic without changing it.
 
 The live schema is read inside a READ ONLY transaction and compared with the
 baseline snapshot. Any difference is printed and nothing is written. Only an
@@ -97,5 +99,48 @@ def db_adopt(check):
     click.echo(f'Stamped `{name}` at {BASELINE_REVISION}. Run `flask db upgrade` for later revisions.')
 
 
+@click.group('seed')
+def seed():
+    """Insert reference rows the app expects."""
+
+
+@seed.command('run')
+@click.option(
+    '--apply-role-defaults',
+    is_flag=True,
+    help='Grant default role permissions this database has not had yet. Each one is granted only once.',
+)
+@with_appcontext
+def seed_run(apply_role_defaults):
+    """Insert missing default rows. Existing rows are never changed or deleted."""
+    from core.schema.status import database_reason
+    from extensions import get_db_connection
+    from seeders import run_seeders
+
+    reason = database_reason(get_db_connection)
+    if reason:
+        raise click.ClickException(reason)
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        results = run_seeders(cursor, apply_role_defaults=apply_role_defaults)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+    for result in results:
+        click.echo(result.summary())
+    for result in results:
+        for line in result.lines:
+            click.echo(line)
+
+
 def register_commands(app):
+    from core.admin_cli import admin
+
     app.cli.add_command(db_adopt)
+    app.cli.add_command(seed)
+    app.cli.add_command(admin)

@@ -132,10 +132,10 @@ def save_profile(session, email, phone, address, bio, date_of_birth, photo_file)
             update_faculty_email(cursor, email, user_id)
         elif user_role == 'Student':
             update_student_email(cursor, email, user_id)
+        log_activity(user_id, 'update_profile', 'Updated user profile', cursor=cursor)
         connection.commit()
         if profile_photo:
             session['profile_photo'] = profile_photo
-        log_activity(user_id, 'update_profile', 'Updated user profile')
         return 'ok'
     except Exception as exc:
         connection.rollback()
@@ -154,8 +154,8 @@ def change_password(session, current_password, new_password):
         if not result or not check_password_hash(result['password'], current_password):
             return 'wrong'
         update_password(cursor, generate_password_hash(new_password), user_id)
+        log_activity(user_id, 'change_password', 'Changed password', cursor=cursor)
         connection.commit()
-        log_activity(user_id, 'change_password', 'Changed password')
         return 'ok'
     except Exception as exc:
         connection.rollback()

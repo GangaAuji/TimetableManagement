@@ -17,6 +17,9 @@ PUBLIC_BRANDING_KEYS = (
     'site_logo',
     'login_logo',
     'favicon',
+    'login_background',
+    'admin_login_background',
+    'register_background',
     'primary_color',
     'secondary_color',
     'accent_color',
@@ -28,7 +31,7 @@ PUBLIC_BRANDING_KEYS = (
 def _branding_value(current, key, value):
     if key in ('primary_color', 'secondary_color', 'accent_color', 'sidebar_bg', 'header_bg'):
         return safe_color(value, current)
-    if key in ('site_logo', 'login_logo', 'favicon'):
+    if key in ('site_logo', 'login_logo', 'favicon', 'login_background', 'admin_login_background', 'register_background'):
         return safe_asset_path(value)
     limits = {
         'site_title': 80,
@@ -71,6 +74,9 @@ def register_branding_routes(blueprint):
             'site_logo': '',
             'login_logo': '',
             'favicon': '',
+            'login_background': '',
+            'admin_login_background': '',
+            'register_background': '',
             'primary_color': '#059669',
             'secondary_color': '#10b981',
             'accent_color': '#047857',

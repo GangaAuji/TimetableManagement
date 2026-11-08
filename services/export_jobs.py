@@ -16,7 +16,6 @@ from extensions import get_db_connection
 from services.audit_logs import _EXPORT_QUERY, _append_filters
 from services.reports_admin._common import (
     ALLOWED_REPORT_TYPES,
-    _ensure_processed_reports_table,
     _get_reports_storage_dir,
     _write_csv_file,
 )
@@ -33,7 +32,6 @@ def enqueue_job(report_type, filters, user_id):
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        _ensure_processed_reports_table(cursor)
         cursor.execute(
             """
             INSERT INTO processed_reports (
@@ -55,8 +53,10 @@ def enqueue_job(report_type, filters, user_id):
 
 
 def ensure_worker(app):
-    """Start the single background worker for this process."""
+    """Start the single background worker for this process. Never under a Flask CLI command."""
     global _started
+    if app.config.get('CLI_COMMAND') or not app.config.get('BACKGROUND_WORKERS', True):
+        return
     with _guard:
         if _started:
             return
@@ -95,7 +95,6 @@ def _requeue_interrupted():
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        _ensure_processed_reports_table(cursor)
         cursor.execute(
             "UPDATE processed_reports SET status = 'queued', progress = 0 WHERE status = 'running'"
         )

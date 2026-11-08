@@ -1,4 +1,8 @@
-"""User Management permissions."""
+"""User Management permissions.
+
+Granting or revoking needs users_manage_permissions. The services refuse an
+account the actor may not manage and a permission the actor does not hold.
+"""
 
 from flask import Blueprint, request, redirect, url_for, flash, jsonify, session
 from ui.pages import render_template
@@ -7,9 +11,24 @@ from services.user_permissions import (
     load_user_permission_page,
     unassign_permission_group,
 )
-from security import check_user_permission, grant_user_permission, has_permission, revoke_user_permission
+from security import (
+    ACCOUNT_PROTECTED,
+    PERMISSION_UNHELD,
+    check_user_permission,
+    grant_user_permission,
+    has_permission,
+    permission_grant_problem,
+    revoke_user_permission,
+)
 
 from routes.user_management.blueprint import user_mgmt_bp
+
+_REFUSED = frozenset((ACCOUNT_PROTECTED, PERMISSION_UNHELD))
+
+
+def _failure(message):
+    return jsonify({'error': message}), 403 if message in _REFUSED else 400
+
 
 @user_mgmt_bp.route('/permissions/<int:user_id>')
 @has_permission('users_change_user')
@@ -23,7 +42,7 @@ def manage_user_permissions(user_id):
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/grant', methods=['POST'])
-@has_permission('users_change_user')
+@has_permission('users_manage_permissions')
 def grant_permission(user_id):
     """Grant a permission to a user"""
     permission_name = request.form.get('permission_name')
@@ -54,12 +73,11 @@ def grant_permission(user_id):
 
     if success:
         return jsonify({'message': message})
-    else:
-        return jsonify({'error': message}), 400
+    return _failure(message)
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/revoke', methods=['POST'])
-@has_permission('users_change_user')
+@has_permission('users_manage_permissions')
 def revoke_permission(user_id):
     """Revoke a permission from a user"""
     permission_name = request.form.get('permission_name')
@@ -79,12 +97,11 @@ def revoke_permission(user_id):
 
     if success:
         return jsonify({'message': message})
-    else:
-        return jsonify({'error': message}), 400
+    return _failure(message)
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/grant_group', methods=['POST'])
-@has_permission('users_change_user')
+@has_permission('users_manage_permissions')
 def grant_permission_group(user_id):
     """Grant a permission group to a user"""
     group_id = request.form.get('group_id')
@@ -96,7 +113,7 @@ def grant_permission_group(user_id):
 
 
 @user_mgmt_bp.route('/permissions/<int:user_id>/revoke_group', methods=['POST'])
-@has_permission('users_change_user')
+@has_permission('users_manage_permissions')
 def revoke_permission_group(user_id):
     """Revoke a permission group from a user"""
     group_id = request.form.get('group_id')
@@ -108,9 +125,9 @@ def revoke_permission_group(user_id):
 
 
 @user_mgmt_bp.route('/permissions/bulk_grant', methods=['POST'])
-@has_permission('users_change_user')
+@has_permission('users_manage_permissions')
 def bulk_grant_permissions():
-    """Grant permissions to multiple users at once"""
+    """Grant permissions to multiple users at once. Refused as a whole when any grant is not allowed."""
     user_ids = request.form.getlist('user_ids[]') or request.form.getlist('user_ids')
     permission_names = request.form.getlist('permission_names[]') or request.form.getlist('permission_names')
     department_id = request.form.get('department_id')
@@ -120,6 +137,11 @@ def bulk_grant_permissions():
 
     department_id = int(department_id) if department_id else None
     granted_by = session.get('user_id')
+
+    for user_id in user_ids:
+        problem = permission_grant_problem(granted_by, int(user_id), permission_names, department_id)
+        if problem:
+            return jsonify({'error': problem}), 403
 
     success_count = 0
     errors = []

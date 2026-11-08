@@ -34,6 +34,7 @@ def test_text_helpers_raise_the_local_error():
     assert course_error.value.code == 'description_invalid'
 
 
+@pytest.mark.live_db
 def test_signed_out_lists_stay_unauthorized(app):
     client = app.test_client()
     expected = {
@@ -46,6 +47,7 @@ def test_signed_out_lists_stay_unauthorized(app):
         assert response.get_json() == expected
 
 
+@pytest.mark.live_db
 def test_permission_failures_keep_status_and_log_text(app, monkeypatch, caplog):
     monkeypatch.setattr('api.web.access.check_user_permission', _deny)
     client = app.test_client()

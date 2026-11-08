@@ -19,7 +19,7 @@ from urllib.parse import quote_plus
 
 import pytest
 
-from core.schema.baseline import BASELINE_SNAPSHOT, MIGRATIONS_DIR, ROOT, SUPPORTED_SERVER
+from core.schema.baseline import BASELINE_SNAPSHOT, MIGRATIONS_DIR, ROOT, SUPPORTED_SERVER, check_repairs
 from core.schema.introspect import (
     compare,
     load_snapshot,
@@ -29,19 +29,17 @@ from core.schema.introspect import (
     write_snapshot,
 )
 from core.schema.sqlfile import read_statements
+from tests.integration.live_helpers import checked_name
 
 pytestmark = pytest.mark.live_db
 
 LIVE_DUMP = ROOT / 'sql' / 'college_timetable_db.sql'
-FORBIDDEN = {'college_timetable_db', 'college_timetable_db_test'}
+CHECKS_DUMP = ROOT / 'sql' / 'college_timetable_db.checks.sql'
 _DEFINER = re.compile(r'\s+DEFINER=(?:`[^`]*`|\S+)@(?:`[^`]*`|\S+)', re.IGNORECASE)
 
 
 def _scratch_name(base, suffix):
-    name = f'{base}_{suffix}_test'
-    if not name.endswith('_test') or name in FORBIDDEN:
-        raise RuntimeError(f'Refusing to use database {name!r}.')
-    return name
+    return checked_name(f'{base}_{suffix}_test')
 
 
 @contextlib.contextmanager
@@ -68,11 +66,9 @@ class Server:
         self.host = os.environ.get('MYSQL_HOST') or 'localhost'
         self.user = os.environ.get('MYSQL_USER')
         self.password = os.environ.get('MYSQL_PASSWORD') or ''
-        configured = os.environ.get('MYSQL_DB') or ''
         if not self.user:
             pytest.skip('Set MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD and MYSQL_DB in .env.test.')
-        if not configured.endswith('_test'):
-            raise RuntimeError(f'MYSQL_DB {configured!r} is not a *_test database.')
+        configured = checked_name(os.environ.get('MYSQL_DB') or '')
         base = configured[: -len('_test')]
         self.a = _scratch_name(base, 'mig_a')
         self.b = _scratch_name(base, 'dump_b')
@@ -120,6 +116,10 @@ class Server:
                 if statement.upper().startswith('INSERT INTO'):
                     continue
                 self.cursor.execute(_DEFINER.sub('', statement, count=1))
+            for table, (_, checks, options) in check_repairs(CHECKS_DUMP.read_text(encoding='utf-8')).items():
+                for check in checks:
+                    self.cursor.execute(f'ALTER TABLE `{table}` ADD {check}')
+                self.cursor.execute(f'ALTER TABLE `{table}` {options}')
         finally:
             self.cursor.execute('USE information_schema')
 
@@ -144,8 +144,8 @@ class Server:
 
 @pytest.fixture(scope='module')
 def server():
-    if not LIVE_DUMP.exists():
-        pytest.skip('The phpMyAdmin dump sql/college_timetable_db.sql is not available.')
+    if not (LIVE_DUMP.exists() and CHECKS_DUMP.exists()):
+        pytest.skip('sql/college_timetable_db.sql and sql/college_timetable_db.checks.sql are needed.')
     srv = Server()
     try:
         srv.recreate(srv.a)

@@ -1,8 +1,7 @@
 """Dropdown lookups for the academic screens. This module does not read the request."""
 
-import mysql.connector
 
-from config import Config
+from models.db import get_db_connection as _shared_connection
 from data_access.academic_lookups import (
     fetch_batches_by_course,
     fetch_courses_by_department,
@@ -14,12 +13,7 @@ from data_access.academic_lookups import (
 
 def _connect():
     """Open the same direct connection the academic screens use."""
-    return mysql.connector.connect(
-        host=Config.MYSQL_HOST,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB,
-    )
+    return _shared_connection()
 
 
 def _read(fetch, record_id):
