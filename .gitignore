@@ -63,7 +63,7 @@ static/js/tailwind.js
 *.db
 *.sqlite
 *.sqlite3
-!sql/college_timetable.sql
+!legacy/college_timetable.sql
 migrations/*
 !migrations/alembic.ini
 !migrations/env.py
@@ -72,6 +72,10 @@ migrations/*
 !migrations/versions/
 migrations/versions/*
 !migrations/versions/*.py
+!migrations/_archive/
+!migrations/sql/
+!migrations/sql/*.sql
+!migrations/sql/*.json
 
 # Old copies and one-off root scripts. The tests/ suite stays tracked.
 _deprecated/

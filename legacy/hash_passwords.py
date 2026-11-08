@@ -1,7 +1,7 @@
 """One-off script to hash plaintext passwords in the users table.
 
 Usage (from repository root):
-    python -m scripts.hash_passwords
+    python -m legacy.hash_passwords
 
 This script will:
  - load the Flask app using the factory

@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from flask import current_app
 
 from alembic import context
+from alembic.util import CommandError
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -13,6 +14,17 @@ config = context.config
 # This line sets up loggers basically.
 fileConfig(config.config_file_name)
 logger = logging.getLogger('alembic.env')
+
+AUTOGENERATE_DISABLED = (
+    'Autogenerate is disabled: hand-written revisions only. '
+    'Create one with: flask db revision -m "short description" --rev-id NNNN_short_description '
+    '(see docs/DATABASE.md).'
+)
+
+
+def refuse_autogenerate():
+    if getattr(config.cmd_opts, 'autogenerate', False):
+        raise CommandError(AUTOGENERATE_DISABLED)
 
 
 def get_engine():
@@ -33,13 +45,12 @@ def get_engine_url():
 
 
 config.set_main_option('sqlalchemy.url', get_engine_url())
-target_db = current_app.extensions['migrate'].db
 
 
-def get_metadata():
-    if hasattr(target_db, 'metadatas'):
-        return target_db.metadatas[None]
-    return target_db.metadata
+def process_revision_directives(context, revision, directives):
+    # Alembic only calls this while generating a revision from the database,
+    # which is autogenerate. Plain `flask db revision` never runs env.py.
+    raise CommandError(AUTOGENERATE_DISABLED)
 
 
 def run_migrations_offline():
@@ -54,9 +65,13 @@ def run_migrations_offline():
     script output.
 
     """
+    refuse_autogenerate()
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url, target_metadata=get_metadata(), literal_binds=True
+        url=url,
+        target_metadata=None,
+        literal_binds=True,
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():
@@ -70,24 +85,16 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
-
-    def process_revision_directives(context, revision, directives):
-        if getattr(config.cmd_opts, 'autogenerate', False):
-            script = directives[0]
-            if script.upgrade_ops.is_empty():
-                directives[:] = []
-                logger.info('No changes in schema detected.')
-
-    conf_args = current_app.extensions['migrate'].configure_args
-    if conf_args.get("process_revision_directives") is None:
-        conf_args["process_revision_directives"] = process_revision_directives
+    refuse_autogenerate()
+    conf_args = dict(current_app.extensions['migrate'].configure_args)
+    conf_args['process_revision_directives'] = process_revision_directives
 
     connectable = get_engine()
 
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=get_metadata(),
+            target_metadata=None,
             **conf_args
         )
 
