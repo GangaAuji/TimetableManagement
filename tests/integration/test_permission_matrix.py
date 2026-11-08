@@ -81,8 +81,12 @@ def context(app, factory):
             'SELECT rp.permission_id AS id FROM role_permissions rp WHERE rp.role_id = %s', (role['id'],)
         )
     ]
+    session_id = factory.insert(
+        'lecture_sessions', timetable_id=setup['timetable_id'], session_date='2026-11-02', status='held',
+        taught_by=setup['teacher']['id'], marked_by=setup['teacher']['faculty_id'], source='teacher',
+    )
     attendance_id = factory.insert(
-        'attendance', student_id=student['student_id'], timetable_id=setup['timetable_id'],
+        'attendance', student_id=student['student_id'], timetable_id=setup['timetable_id'], session_id=session_id,
         attendance_date='2026-11-02', status='Absent', marked_by=setup['teacher']['faculty_id'],
     )
     reports = os.path.join(app.config['UPLOAD_FOLDER'], 'reports')

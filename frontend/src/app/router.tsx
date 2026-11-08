@@ -15,6 +15,7 @@ import { RoleAssignmentsPage, RolePermissionsPage, RolesPage } from '../features
 import { AvailabilityPage, MyAvailabilityPage, MyShiftsPage, ShiftRequestsPage, ShiftsPage } from '../features/shifts/pages/ShiftsPage'
 import { StudentsPage } from '../features/students/pages/StudentsPage'
 import { AttendanceHistoryPage, MarkAttendancePage } from '../features/teacher/pages/FacultyPortal'
+import { AssignmentsPage } from '../features/teacher/pages/AssignmentsPage'
 import { MyClassesPage, MyWeekPage } from '../features/teacher/pages/TeacherHome'
 import { GeneratePage, TimetablePage } from '../features/timetable/pages/TimetablePage'
 import { UsersPage } from '../features/users/pages/UsersPage'
@@ -122,6 +123,7 @@ export const router = createBrowserRouter([
       { path: 'devices', element: <PrefixedRedirect /> },
       { path: 'my-timetable', element: <MyWeekPage /> },
       { path: 'my-classes', element: <MyClassesPage /> },
+      { path: 'my-assignments', element: <AssignmentsPage /> },
       { path: 'my-shifts', element: <MyShiftsPage /> },
       { path: 'my-availability', element: <MyAvailabilityPage /> },
       { path: 'my-proxy', element: <MyProxyPage /> },

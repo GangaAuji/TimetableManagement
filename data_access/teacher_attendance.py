@@ -44,9 +44,27 @@ def count_attendance_for_date(cursor, timetable_id, today):
     return cursor.fetchone()
 
 
-def fetch_owned_lecture_detail(cursor, timetable_id, user_id):
-    """Return one lecture when it belongs to this faculty user. division_id is None for a whole-class lecture."""
-    cursor.execute("""
+_APPROVED_PROXY = """
+    EXISTS (
+        SELECT 1 FROM proxy_log pl
+        WHERE pl.timetable_id = t.id AND pl.absence_date = %s AND pl.proxy_faculty_id = %s
+          AND pl.status = 'ASSIGNED' AND pl.approval_status = 'APPROVED'
+    )
+"""
+
+
+def fetch_owned_lecture_detail(cursor, timetable_id, user_id, on_date=None):
+    """Return one lecture when this faculty user may mark it. division_id is None for a whole-class lecture.
+
+    The slot's teacher always may. With `on_date`, so may the proxy approved
+    for that date in proxy_log. `taught_by` says which of the two is teaching.
+    """
+    owner = ['t.faculty_id = %s']
+    params = [timetable_id, user_id]
+    if on_date is not None:
+        owner.append(_APPROVED_PROXY)
+        params.extend([on_date, user_id])
+    cursor.execute(f"""
             SELECT 
                 t.id as timetable_id,
                 t.day_of_week,
@@ -54,6 +72,8 @@ def fetch_owned_lecture_detail(cursor, timetable_id, user_id):
                 t.end_time,
                 t.semester_id,
                 t.academic_year_id,
+                t.faculty_id as faculty_user_id,
+                (t.faculty_id = %s) as is_owner,
                 s.id as subject_id,
                 s.name as subject_name,
                 (s.is_elective = 1 OR s.course_type IN ('Elective', 'Elective Practical')) as is_elective,
@@ -68,8 +88,8 @@ def fetch_owned_lecture_detail(cursor, timetable_id, user_id):
             JOIN classes c ON t.class_id = c.id
             LEFT JOIN divisions d ON t.division_id = d.id
             JOIN courses co ON t.course_id = co.id
-            WHERE t.id = %s AND t.faculty_id = %s
-        """, (timetable_id, user_id))
+            WHERE t.id = %s AND ({' OR '.join(owner)})
+        """, (user_id, *params))
     return cursor.fetchone()
 
 
@@ -81,7 +101,25 @@ def fetch_lecture_roster(cursor, lecture):
     student_subject_selections row for that subject (not withdrawn, and in
     the lecture's semester and academic year when the lecture names them).
     """
-    clauses = ['s.course_id = %s', 's.class_id = %s']
+    clauses, params = roster_clauses(lecture)
+    cursor.execute(f"""
+            SELECT 
+                s.id,
+                s.user_id,
+                s.name,
+                s.roll_number,
+                s.admission_id,
+                s.email
+            FROM students s
+            WHERE {' AND '.join(clauses)}
+            ORDER BY s.roll_number, s.name
+        """, tuple(params))
+    return cursor.fetchall()
+
+
+def roster_clauses(lecture):
+    """The SQL twin of attendance_calc.roster.in_roster for today, on a `students s` row: clauses and their parameters."""
+    clauses = ['COALESCE(s.is_active, 1) = 1', 's.course_id = %s', 's.class_id = %s']
     params = [lecture['course_id'], lecture['class_id']]
     if lecture.get('division_id') is not None:
         clauses.append('s.division_id = %s')
@@ -98,17 +136,17 @@ def fetch_lecture_roster(cursor, lecture):
             chosen.append('sss.academic_year_id = %s')
             params.append(lecture['academic_year_id'])
         clauses.append(f"EXISTS (SELECT 1 FROM student_subject_selections sss WHERE {' AND '.join(chosen)})")
-    cursor.execute(f"""
-            SELECT 
-                s.id,
-                s.name,
-                s.roll_number,
-                s.email
-            FROM students s
-            WHERE {' AND '.join(clauses)}
-            ORDER BY s.roll_number, s.name
-        """, tuple(params))
-    return cursor.fetchall()
+    return clauses, params
+
+
+def student_in_roster(cursor, lecture, student_id):
+    """Whether one student belongs to the lecture's roster."""
+    clauses, params = roster_clauses(lecture)
+    cursor.execute(
+        f"SELECT 1 AS ok FROM students s WHERE s.id = %s AND {' AND '.join(clauses)} LIMIT 1",
+        (student_id, *params),
+    )
+    return cursor.fetchone() is not None
 
 
 def fetch_existing_attendance(cursor, timetable_id, attendance_date):
@@ -131,97 +169,63 @@ def fetch_owned_timetable_id(cursor, timetable_id, user_id):
     return cursor.fetchone()
 
 
-def upsert_attendance(cursor, student_id, timetable_id, attendance_date, status, faculty_id, remarks):
-    """Insert or update one attendance mark. marked_by is the faculty table id."""
+def upsert_attendance(cursor, student_id, timetable_id, attendance_date, status, faculty_id, remarks, session_id=None):
+    """Insert or update one attendance mark. marked_by is the faculty table id; session_id the lecture_sessions row."""
     cursor.execute("""
-                    INSERT INTO attendance (student_id, timetable_id, attendance_date, status, marked_by, remarks)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO attendance (student_id, timetable_id, session_id, attendance_date, status, marked_by, remarks)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE 
                         status = VALUES(status),
+                        session_id = COALESCE(VALUES(session_id), session_id),
                         marked_by = VALUES(marked_by),
                         remarks = VALUES(remarks),
                         marked_at = NOW()
-                """, (student_id, timetable_id, attendance_date, status, faculty_id, remarks))
-
-
-def fetch_lecture_filters(cursor, user_id):
-    """Return class and subject choices for the attendance report."""
-    cursor.execute("""
-            SELECT DISTINCT 
-                s.id as subject_id,
-                s.name as subject_name,
-                c.id as class_id,
-                c.name as class_name,
-                d.id as division_id,
-                d.name as division_name
-            FROM timetable t
-            JOIN subjects s ON t.subject_id = s.id
-            JOIN classes c ON t.class_id = c.id
-            JOIN divisions d ON t.division_id = d.id
-            WHERE t.faculty_id = %s
-            ORDER BY c.name, d.name, s.name
-        """, (user_id,))
-    return cursor.fetchall()
-
-
-def fetch_attendance_summary(cursor, date_filter, params):
-    """Return the attendance summary. date_filter is a fixed SQL fragment."""
-    cursor.execute(f"""
-                SELECT 
-                    s.id as student_id,
-                    s.name as student_name,
-                    s.roll_number,
-                    COUNT(DISTINCT a.id) as total_marked,
-                    SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present_count,
-                    SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late_count,
-                    SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent_count,
-                    ROUND(
-                        (SUM(CASE WHEN a.status IN ('Present', 'Late') THEN 1 ELSE 0 END) * 100.0) / 
-                        NULLIF(COUNT(DISTINCT a.id), 0), 
-                        2
-                    ) as attendance_percentage
-                FROM students s
-                LEFT JOIN attendance a ON a.student_id = s.id
-                LEFT JOIN timetable t ON t.id = a.timetable_id
-                WHERE s.class_id = %s 
-                  AND s.division_id = %s
-                  AND (t.subject_id = %s OR a.id IS NULL)
-                  AND t.faculty_id = %s
-                  {date_filter}
-                GROUP BY s.id
-                ORDER BY s.roll_number, s.name
-            """, tuple(params))
-    return cursor.fetchall()
+                """, (student_id, timetable_id, session_id, attendance_date, status, faculty_id, remarks))
 
 
 def fetch_history_lecture(cursor, timetable_id, user_id):
-    """Return the lecture heading when this faculty user owns it."""
+    """Return the lecture heading and roster columns when this faculty user owns it or is its approved proxy on some date."""
     cursor.execute("""
             SELECT 
-                t.id, s.name as subject_name, c.name as class_name, d.name as division_name
+                t.id, t.course_id, t.class_id, t.division_id, t.subject_id, t.semester_id, t.academic_year_id,
+                COALESCE(s.is_elective, 0) AS is_elective,
+                s.name as subject_name, c.name as class_name, d.name as division_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
             LEFT JOIN divisions d ON t.division_id = d.id
-            WHERE t.id = %s AND t.faculty_id = %s
-        """, (timetable_id, user_id))
+            WHERE t.id = %s
+              AND (t.faculty_id = %s OR EXISTS (
+                    SELECT 1 FROM proxy_log pl
+                    WHERE pl.timetable_id = t.id AND pl.proxy_faculty_id = %s
+                      AND pl.status = 'ASSIGNED' AND pl.approval_status = 'APPROVED'))
+        """, (timetable_id, user_id, user_id))
     return cursor.fetchone()
 
 
 def fetch_attendance_history(cursor, timetable_id):
-    """Return the last 50 attendance dates for one lecture."""
+    """Return the last 50 recorded lectures of one slot, newest first, with the marks on each.
+
+    Every lecture_sessions row appears, so cancelled and not-marked dates are
+    listed beside the marked ones.
+    """
     cursor.execute("""
             SELECT 
-                a.attendance_date,
+                ls.id AS session_id,
+                ls.session_date AS attendance_date,
+                ls.status AS session_status,
+                ls.cancel_reason,
+                ls.source,
                 COUNT(DISTINCT a.student_id) as total_students,
                 SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late,
                 SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent,
                 MAX(a.marked_at) as marked_at
-            FROM attendance a
-            WHERE a.timetable_id = %s
-            GROUP BY a.attendance_date
-            ORDER BY a.attendance_date DESC
+            FROM lecture_sessions ls
+            LEFT JOIN attendance a ON a.session_id = ls.id
+            WHERE ls.timetable_id = %s
+            GROUP BY ls.id
+            ORDER BY ls.session_date DESC, ls.id DESC
             LIMIT 50
         """, (timetable_id,))
     return cursor.fetchall()

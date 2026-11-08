@@ -127,5 +127,9 @@ class Config:
     SIGN_IN_UNKNOWN_LIMIT_PER_ADDRESS = int(os.environ.get('SIGN_IN_UNKNOWN_LIMIT_PER_ADDRESS', 20))
     # Reverse proxies in front of the app whose X-Forwarded-For and X-Forwarded-Proto are trusted. 0 trusts none.
     TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', 0))
+    # Local hour at which the close-day worker records not_marked for yesterday's unmarked lectures. -1 turns it off.
+    ATTENDANCE_CLOSE_DAY_HOUR = int(os.environ.get('ATTENDANCE_CLOSE_DAY_HOUR', 1))
+    # Minimum attendance percentage. Students below it are defaulters; "classes needed" aims at it.
+    ATTENDANCE_THRESHOLD_PERCENT = os.environ.get('ATTENDANCE_THRESHOLD_PERCENT', '75')
 
 

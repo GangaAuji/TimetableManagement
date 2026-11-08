@@ -361,21 +361,48 @@ export function MarkAttendancePage() {
   const [heading, setHeading] = useState('')
   const [date, setDate] = useState('')
   const [already, setAlready] = useState(false)
+  const [cancelled, setCancelled] = useState(false)
+  const [reason, setReason] = useState('faculty_absent')
+  const [note, setNote] = useState('')
   const [students, setStudents] = useState<{ id: number; name: string; roll_number: string; status: string; remarks: string }[]>([])
+  const [reloads, setReloads] = useState(0)
   useEffect(() => {
     setPageHeader('Mark attendance')
-    void apiRequest<{ date?: string; already_marked?: boolean; lecture?: { subject: string; class_name: string; division_name: string }; students?: typeof students }>(`/api/portal/attendance/mark/${timetableId}`)
+    void apiRequest<{ date?: string; already_marked?: boolean; cancelled?: boolean; lecture?: { subject: string; class_name: string; division_name: string }; students?: typeof students }>(`/api/portal/attendance/mark/${timetableId}`)
       .then((data) => {
         setDate(data.date || '')
         setAlready(data.already_marked === true)
-        setHeading(`${data.lecture?.subject || ''} · ${data.lecture?.class_name || ''} Div ${data.lecture?.division_name || ''}`)
+        setCancelled(data.cancelled === true)
+        setHeading(`${data.lecture?.subject || ''} · ${data.lecture?.class_name || ''}${data.lecture?.division_name ? ` Div ${data.lecture.division_name}` : ''}`)
         setStudents(data.students || [])
       })
       .catch((reason: unknown) => notice.setError(messageFrom(reason)))
-  }, [setPageHeader, timetableId])
+  }, [setPageHeader, timetableId, reloads])
 
   function setStatus(id: number, status: string) {
     setStudents((current) => current.map((student) => (student.id === id ? { ...student, status } : student)))
+  }
+
+  async function cancelLecture() {
+    notice.clear()
+    try {
+      await postJson(`/api/portal/attendance/cancel/${timetableId}`, { date, reason, note })
+      notice.setSaved('The lecture is recorded as cancelled.')
+      setReloads((count) => count + 1)
+    } catch (cause) {
+      notice.setError(messageFrom(cause))
+    }
+  }
+
+  async function undoCancel() {
+    notice.clear()
+    try {
+      await postJson(`/api/portal/attendance/uncancel/${timetableId}`, { date })
+      notice.setSaved('The cancellation has been undone.')
+      setReloads((count) => count + 1)
+    } catch (cause) {
+      notice.setError(messageFrom(cause))
+    }
   }
 
   async function save(event: FormEvent) {
@@ -399,10 +426,29 @@ export function MarkAttendancePage() {
   return (
     <form className="flex flex-col gap-2" onSubmit={(event) => void save(event)}>
       <div className="flex items-center justify-between">
-        <div><h2 className="text-lg font-bold text-gray-800">{heading}</h2><p className="text-xs text-gray-500">{date}{already ? ' · Already marked' : ''}</p></div>
+        <div><h2 className="text-lg font-bold text-gray-800">{heading}</h2><p className="text-xs text-gray-500">{date}{already ? ' · Already marked' : ''}{cancelled ? ' · Cancelled' : ''}</p></div>
         <Link to="/my-attendance" className="text-xs font-bold text-indigo-600">Back</Link>
       </div>
       <Banner notice={notice} />
+      {cancelled ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>This lecture is recorded as cancelled. It is not counted in anyone's attendance.</span>
+          <button type="button" onClick={() => void undoCancel()} className="rounded-lg border border-amber-300 px-3 py-1 text-xs font-bold text-amber-800">Undo cancellation</button>
+        </div>
+      ) : !already ? (
+        <div className={`${card} flex flex-wrap items-end gap-2 px-4 py-3`}>
+          <label className="flex flex-col text-xs text-gray-600">Lecture did not happen?
+            <select value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 rounded-lg border border-gray-200 px-2 py-1 text-sm">
+              <option value="faculty_absent">Faculty absent</option>
+              <option value="institution">Institution closed</option>
+              <option value="exam">Examination</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <input value={note} maxLength={255} onChange={(event) => setNote(event.target.value)} placeholder="Note (optional)" className="min-w-48 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-sm" />
+          <button type="button" onClick={() => void cancelLecture()} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600">Cancel lecture</button>
+        </div>
+      ) : null}
       <div className={`${card} overflow-auto`}>
         <table className="w-full text-left text-sm">
           <thead className="text-[10px] font-bold tracking-wider text-gray-400 uppercase"><tr><th className="px-4 py-3">Roll</th><th className="px-4 py-3">Student</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Remarks</th></tr></thead>
@@ -425,41 +471,108 @@ export function MarkAttendancePage() {
           </tbody>
         </table>
       </div>
-      <button type="submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white">Save attendance</button>
+      <button type="submit" disabled={cancelled} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Save attendance</button>
     </form>
   )
+}
+
+type HistoryRow = { date: string; status: string; cancel_reason: string; total: number; present: number; late: number; absent: number }
+type RosterFigures = {
+  student_id: number; name: string; roll_number: string
+  held: number; countable: number; attended: number; present: number; late: number; absent: number
+  excused: number; not_marked: number; percentage: number | null
+}
+
+const SESSION_LABELS: Record<string, string> = { held: 'Held', cancelled: 'Cancelled', not_marked: 'Not marked' }
+const CANCEL_LABELS: Record<string, string> = { faculty_absent: 'teacher absent', institution: 'institution', exam: 'exam', other: 'other' }
+
+function percentLabel(value: number | null | undefined) {
+  return value === null || value === undefined ? '—' : `${value.toFixed(2)}%`
+}
+
+function sessionLabel(row: HistoryRow) {
+  const label = SESSION_LABELS[row.status] || row.status
+  return row.status === 'cancelled' && row.cancel_reason ? `${label} (${CANCEL_LABELS[row.cancel_reason] || row.cancel_reason})` : label
 }
 
 export function AttendanceHistoryPage() {
   const { timetableId = '' } = useParams()
   const setPageHeader = useSetPageHeader()
   const [heading, setHeading] = useState('')
-  const [rows, setRows] = useState<{ date: string; total: number; present: number; late: number; absent: number }[]>([])
+  const [rows, setRows] = useState<HistoryRow[]>([])
+  const [students, setStudents] = useState<RosterFigures[]>([])
+  const [threshold, setThreshold] = useState<number | null>(null)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [range, setRange] = useState({ from: '', to: '' })
   const [error, setError] = useState('')
   useEffect(() => {
     setPageHeader('Attendance history')
-    void apiRequest<{ subject?: string; class_name?: string; division_name?: string; history?: typeof rows }>(`/api/portal/attendance/history/${timetableId}`)
+    const query = new URLSearchParams()
+    if (range.from) query.set('from', range.from)
+    if (range.to) query.set('to', range.to)
+    const suffix = query.toString() ? `?${query.toString()}` : ''
+    void apiRequest<{ subject?: string; class_name?: string; division_name?: string; history?: HistoryRow[]; students?: RosterFigures[]; threshold?: number | null }>(`/api/portal/attendance/history/${timetableId}${suffix}`)
       .then((data) => {
-        setHeading(`${data.subject || ''} · ${data.class_name || ''} Div ${data.division_name || ''}`)
+        setHeading(`${data.subject || ''} · ${data.class_name || ''}${data.division_name ? ` Div ${data.division_name}` : ''}`)
         setRows(data.history || [])
+        setStudents(data.students || [])
+        setThreshold(data.threshold ?? null)
+        setError('')
       })
       .catch((reason: unknown) => setError(messageFrom(reason)))
-  }, [setPageHeader, timetableId])
+  }, [setPageHeader, timetableId, range])
+  const applyRange = (event: FormEvent) => {
+    event.preventDefault()
+    setRange({ from, to })
+  }
   return (
-    <section className={`${card} overflow-hidden`}>
-      <header className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-        <h2 className="font-bold text-gray-800">{heading}</h2>
-        <Link to="/my-attendance" className="text-xs font-bold text-indigo-600">Back</Link>
-      </header>
-      {error ? <p className="p-4 text-sm text-red-700">{error}</p> : null}
-      <table className="w-full text-left text-sm">
-        <thead className="text-[10px] font-bold tracking-wider text-gray-400 uppercase"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Present</th><th className="px-6 py-3">Late</th><th className="px-6 py-3">Absent</th><th className="px-6 py-3">Total</th></tr></thead>
-        <tbody className="divide-y divide-gray-50">
-          {rows.length === 0 ? <tr><td colSpan={5} className="px-6 py-8 text-gray-500">No attendance has been marked.</td></tr> : rows.map((row) => (
-            <tr key={row.date}><td className="px-6 py-3">{row.date}</td><td className="px-6 py-3">{row.present}</td><td className="px-6 py-3">{row.late}</td><td className="px-6 py-3">{row.absent}</td><td className="px-6 py-3">{row.total}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <div className="space-y-6">
+      <section className={`${card} overflow-hidden`}>
+        <header className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h2 className="font-bold text-gray-800">{heading}</h2>
+          <Link to="/my-attendance" className="text-xs font-bold text-indigo-600">Back</Link>
+        </header>
+        {error ? <p className="p-4 text-sm text-red-700">{error}</p> : null}
+        <table className="w-full text-left text-sm">
+          <thead className="text-[10px] font-bold tracking-wider text-gray-400 uppercase"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Lecture</th><th className="px-6 py-3">Present</th><th className="px-6 py-3">Late</th><th className="px-6 py-3">Absent</th><th className="px-6 py-3">Marked</th></tr></thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.length === 0 ? <tr><td colSpan={6} className="px-6 py-8 text-gray-500">No lecture has been recorded.</td></tr> : rows.map((row) => (
+              <tr key={row.date} className={row.status === 'held' ? '' : 'text-gray-400'}>
+                <td className="px-6 py-3">{row.date}</td><td className="px-6 py-3">{sessionLabel(row)}</td>
+                <td className="px-6 py-3">{row.present}</td><td className="px-6 py-3">{row.late}</td><td className="px-6 py-3">{row.absent}</td><td className="px-6 py-3">{row.total}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+      <section className={`${card} overflow-hidden`}>
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-6 py-4">
+          <div>
+            <h2 className="font-bold text-gray-800">Students</h2>
+            <p className="text-xs text-gray-500">Figures for this subject across every lecture of yours the student is in. A dash means nothing countable yet.</p>
+          </div>
+          <form onSubmit={applyRange} className="flex items-center gap-2 text-xs">
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="rounded-lg border border-gray-200 px-2 py-1" aria-label="From date" />
+            <span className="text-gray-400">to</span>
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="rounded-lg border border-gray-200 px-2 py-1" aria-label="To date" />
+            <button type="submit" className="rounded-lg bg-gray-900 px-3 py-1 font-bold text-white">Apply</button>
+          </form>
+        </header>
+        <table className="w-full text-left text-sm">
+          <thead className="text-[10px] font-bold tracking-wider text-gray-400 uppercase"><tr><th className="px-6 py-3">Roll</th><th className="px-6 py-3">Student</th><th className="px-6 py-3">Held</th><th className="px-6 py-3">Attended</th><th className="px-6 py-3">Absent</th><th className="px-6 py-3">Excused</th><th className="px-6 py-3">Not marked</th><th className="px-6 py-3">Percentage</th></tr></thead>
+          <tbody className="divide-y divide-gray-50">
+            {students.length === 0 ? <tr><td colSpan={8} className="px-6 py-8 text-gray-500">No student is in this lecture's roster.</td></tr> : students.map((student) => (
+              <tr key={student.student_id}>
+                <td className="px-6 py-3">{student.roll_number}</td><td className="px-6 py-3 font-semibold text-gray-800">{student.name}</td>
+                <td className="px-6 py-3">{student.held}</td><td className="px-6 py-3">{student.attended}</td><td className="px-6 py-3">{student.absent}</td>
+                <td className="px-6 py-3">{student.excused}</td><td className="px-6 py-3">{student.not_marked}</td>
+                <td className={`px-6 py-3 font-bold ${student.percentage !== null && threshold !== null && student.percentage < threshold ? 'text-red-600' : 'text-gray-800'}`}>{percentLabel(student.percentage)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
   )
 }

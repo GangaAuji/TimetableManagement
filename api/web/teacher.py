@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from flask import current_app, session
+from flask import current_app, get_flashed_messages, session
 
 from extensions import get_db_connection
 from api.web.access import close
@@ -15,6 +15,29 @@ _MESSAGES = {'teacher_unavailable': 'The page could not be loaded.'}
 def register_teacher_routes(blueprint):
     blueprint.add_url_rule('/portal/teacher', 'teacher_home', _home, methods=['GET'])
     blueprint.add_url_rule('/portal/classes', 'teacher_classes', _classes, methods=['GET'])
+    blueprint.add_url_rule('/portal/assignments', 'teacher_assignments', _assignments, methods=['GET'])
+
+
+def _syllabus(value):
+    text = safe_text(value or '', 300)
+    if text.startswith('https://') and ' ' not in text:
+        return text
+    return ''
+
+
+def assignment_rows(rows):
+    """Shape allocated subjects. Only an https syllabus link is returned."""
+    shaped = []
+    for row in rows or []:
+        shaped.append({
+            'subject': safe_text(row.get('subject'), 100),
+            'department': safe_text(row.get('department') or '', 100),
+            'course': safe_text(row.get('course') or '', 100),
+            'class_name': safe_text(row.get('class') or '', 100),
+            'division': safe_text(row.get('division') or '', 50),
+            'syllabus_url': _syllabus(row.get('syllabus_url')),
+        })
+    return shaped
 
 
 def _teacher_only():
@@ -89,6 +112,23 @@ def _home():
         return json_error(_MESSAGES['teacher_unavailable'], 500, 'teacher_unavailable')
     finally:
         close(cursor, connection)
+
+
+def _assignments():
+    denied = _teacher_only()
+    if denied:
+        return denied
+    try:
+        from services.teacher_portal import load_assignments
+        rows = load_assignments(session.get('faculty_id'))
+        get_flashed_messages()
+        if rows == 'missing':
+            return json_error(_MESSAGES['teacher_unavailable'], 404, 'teacher_unavailable')
+        return json_ok({'assignments': assignment_rows(rows)})
+    except Exception:
+        get_flashed_messages()
+        current_app.logger.exception('Teacher assignments failed')
+        return json_error(_MESSAGES['teacher_unavailable'], 500, 'teacher_unavailable')
 
 
 def _classes():

@@ -1,25 +1,26 @@
-"""Student dashboard, timetable, and attendance. This module does not read the request."""
+"""Student dashboard, timetable, and attendance. This module does not read the request.
+
+Attendance figures come from services.attendance_calc (held lectures, the
+roster rule, the institution's policy). Nothing here reads the two legacy
+views.
+"""
 
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from data_access.student_portal import (
     count_weekly_classes,
-    fetch_attendance_totals,
-    fetch_monthly_attendance,
-    fetch_overall_attendance,
-    fetch_recent_attendance,
     fetch_student_id,
     fetch_student_profile,
     fetch_student_section,
     fetch_student_timetable,
-    fetch_subject_attendance,
-    fetch_subject_records,
-    fetch_subject_stats,
     fetch_today_classes,
 )
 from extensions import get_db_connection
+from services.attendance_calc import figures_dict, monthly_breakdown, outcome_label, percent_value, student_report
 from utils.dates import format_hhmm
+
+RECENT_DAYS = 30
 
 
 def _cursor():
@@ -31,6 +32,15 @@ def _clock(value):
     return format_hhmm(value, keep_string=True)
 
 
+def _overall(report):
+    """The overall figures plus the projection, in the keys the screens use."""
+    stats = figures_dict(report.overall)
+    stats['classes_needed'] = report.summary.classes_needed
+    stats['classes_that_can_be_missed'] = report.summary.classes_that_can_be_missed
+    stats['threshold'] = percent_value(report.summary.policy.threshold)
+    return stats
+
+
 def load_student_dashboard(user_id):
     """Return the dashboard context, or an error string."""
     connection, cursor = _cursor()
@@ -38,31 +48,21 @@ def load_student_dashboard(user_id):
         student_info = fetch_student_profile(cursor, user_id)
         if not student_info:
             return {'error': 'Student profile not found.'}
-        student_id = student_info['id']
-        course_id = student_info['course_id']
-        class_id = student_info['class_id']
-        division_id = student_info['division_id']
         today = datetime.now().strftime('%A')
         today_classes = []
-        if course_id and class_id and division_id:
-            today_classes = fetch_today_classes(cursor, course_id, class_id, division_id, today)
+        weekly_count = 0
+        if student_info['course_id'] and student_info['class_id']:
+            today_classes = fetch_today_classes(cursor, student_info, today)
             for entry in today_classes:
                 entry['start_time'] = _clock(entry['start_time'])
                 entry['end_time'] = _clock(entry['end_time'])
-        weekly_row = count_weekly_classes(cursor, course_id, class_id, division_id)
-        weekly_count = weekly_row['count'] if course_id else 0
-        attendance_stats = fetch_overall_attendance(cursor, student_id)
-        if attendance_stats:
-            attendance_stats['total_lectures'] = int(attendance_stats['total_lectures'] or 0)
-            attendance_stats['total_present'] = int(attendance_stats['total_present'] or 0)
-            attendance_stats['total_late'] = int(attendance_stats['total_late'] or 0)
-            attendance_stats['total_absent'] = int(attendance_stats['total_absent'] or 0)
-            attendance_stats['attendance_percentage'] = float(attendance_stats['attendance_percentage'] or 0)
+            weekly_count = count_weekly_classes(cursor, student_info)['count']
+        report = student_report(cursor, student_info['id'])
         return {
             'student_info': student_info,
             'today_classes': today_classes,
             'weekly_count': weekly_count,
-            'attendance_stats': attendance_stats,
+            'attendance_stats': _overall(report) if report else None,
             'now': datetime.now(),
         }
     except Exception as exc:
@@ -79,14 +79,9 @@ def load_student_timetable(user_id):
     connection, cursor = _cursor()
     try:
         student_info = fetch_student_section(cursor, user_id)
-        if not student_info or not all(student_info.values()):
+        if not student_info or not student_info.get('course_id') or not student_info.get('class_id'):
             return {'error': 'Your profile is not fully set up. Please contact an administrator.'}
-        timetable = fetch_student_timetable(
-            cursor,
-            student_info['course_id'],
-            student_info['class_id'],
-            student_info['division_id'],
-        )
+        timetable = fetch_student_timetable(cursor, student_info)
         for entry in timetable:
             entry['start_time'] = _clock(entry['start_time'])
             entry['end_time'] = _clock(entry['end_time'])
@@ -99,6 +94,33 @@ def load_student_timetable(user_id):
         connection.close()
 
 
+def _subject_rows(report):
+    result = []
+    for subject_id, entry in report.summary.subjects.items():
+        row = figures_dict(entry.figures)
+        row['subject_id'] = subject_id
+        row['subject_name'] = report.subject_name(subject_id)
+        row['components'] = list(entry.components)
+        result.append(row)
+    result.sort(key=lambda row: (row['subject_name'], row['subject_id']))
+    return result
+
+
+def _record(session, slot, outcome, mark):
+    return {
+        'session_id': session['id'],
+        'attendance_date': session['session_date'],
+        'status': outcome_label(outcome),
+        'remarks': (mark or {}).get('remarks') or '',
+        'subject_name': slot.get('subject_name') or '',
+        'start_time': slot.get('start_time'),
+        'end_time': slot.get('end_time'),
+        'day_of_week': slot.get('day_of_week'),
+        'marked_by_name': (mark or {}).get('marked_by_name') or '',
+        'marked_at': (mark or {}).get('marked_at') or session.get('marked_at'),
+    }
+
+
 def load_student_attendance(user_id):
     """Return attendance context, or an error string."""
     connection, cursor = _cursor()
@@ -106,34 +128,24 @@ def load_student_attendance(user_id):
         student = fetch_student_id(cursor, user_id)
         if not student:
             return {'error': 'Student profile not found.'}
-        student_id = student['id']
-        overall_stats = fetch_attendance_totals(cursor, student_id)
-        if overall_stats:
-            overall_stats['total_lectures_scheduled'] = int(overall_stats.get('total_lectures', 0) or 0)
-            overall_stats['total_lectures_attended'] = int(overall_stats.get('total_present', 0) or 0)
-            overall_stats['present_count'] = int(overall_stats.get('total_present', 0) or 0)
-            overall_stats['late_count'] = int(overall_stats.get('total_late', 0) or 0)
-            overall_stats['absent_count'] = int(overall_stats.get('total_absent', 0) or 0)
-            overall_stats['attendance_percentage'] = float(overall_stats.get('overall_percentage', 0) or 0.0)
-        subject_wise = fetch_subject_attendance(cursor, student_id)
-        for record in subject_wise:
-            record['total_lectures'] = int(record.get('total_lectures', 0) or 0)
-            record['attended_lectures'] = int(record.get('attended_lectures', 0) or 0)
-            record['present_count'] = int(record.get('present_count', 0) or 0)
-            record['absent_count'] = int(record.get('absent_count', 0) or 0)
-            record['late_count'] = int(record.get('late_count', 0) or 0)
-            record['attendance_percentage'] = float(record.get('attendance_percentage', 0) or 0.0)
-        recent_records = fetch_recent_attendance(cursor, student_id)
-        for record in recent_records:
-            if hasattr(record.get('attendance_date'), 'strftime'):
-                record['attendance_date'] = record['attendance_date'].strftime('%d %b %Y')
+        report = student_report(cursor, student['id'])
+        if report is None:
+            return {'error': 'Student profile not found.'}
+        since = datetime.now().date() - timedelta(days=RECENT_DAYS)
+        recent = [
+            _record(session, slot, outcome, mark)
+            for session, slot, outcome, mark in reversed(report.outcomes())
+            if session['session_date'] >= since
+        ]
         return {
-            'overall_stats': overall_stats,
-            'subject_wise': subject_wise,
-            'recent_records': recent_records,
+            'overall_stats': _overall(report),
+            'components': {name: figures_dict(figures) for name, figures in report.summary.components.items()},
+            'subject_wise': _subject_rows(report),
+            'recent_records': recent[:50],
         }
     except Exception as exc:
         print(f"Error fetching student attendance: {exc}")
+        traceback.print_exc()
         return {'error': 'An error occurred while fetching attendance data.'}
     finally:
         cursor.close()
@@ -147,41 +159,24 @@ def load_subject_attendance(user_id, subject_id):
         student = fetch_student_id(cursor, user_id)
         if not student:
             return {'error': 'Student profile not found.'}
-        student_id = student['id']
-        subject_stats = fetch_subject_stats(cursor, student_id, subject_id)
-        if subject_stats:
-            subject_stats['total_lectures'] = int(subject_stats.get('total_lectures', 0) or 0)
-            subject_stats['attended_lectures'] = int(subject_stats.get('attended_lectures', 0) or 0)
-            subject_stats['present_count'] = int(subject_stats.get('present_count', 0) or 0)
-            subject_stats['absent_count'] = int(subject_stats.get('absent_count', 0) or 0)
-            subject_stats['late_count'] = int(subject_stats.get('late_count', 0) or 0)
-            subject_stats['attendance_percentage'] = float(subject_stats.get('attendance_percentage', 0) or 0.0)
-        if not subject_stats:
+        report = student_report(cursor, student['id'])
+        if report is None or subject_id not in report.summary.subjects:
             return {'error': 'No attendance records found for this subject.'}
-        attendance_records = fetch_subject_records(cursor, student_id, subject_id)
-        for record in attendance_records:
-            if hasattr(record.get('attendance_date'), 'strftime'):
-                record['attendance_date'] = record['attendance_date'].strftime('%d %b %Y')
-            if hasattr(record.get('start_time'), 'strftime'):
-                record['start_time'] = record['start_time'].strftime('%I:%M %p')
-            if hasattr(record.get('end_time'), 'strftime'):
-                record['end_time'] = record['end_time'].strftime('%I:%M %p')
-            if hasattr(record.get('marked_at'), 'strftime'):
-                record['marked_at'] = record['marked_at'].strftime('%d %b %Y %I:%M %p')
-        monthly_breakdown = fetch_monthly_attendance(cursor, student_id, subject_id)
-        for record in monthly_breakdown:
-            record['total_lectures'] = int(record.get('total_lectures', 0) or 0)
-            record['present'] = int(record.get('present', 0) or 0)
-            record['late'] = int(record.get('late', 0) or 0)
-            record['absent'] = int(record.get('absent', 0) or 0)
-            record['percentage'] = float(record.get('percentage', 0) or 0.0)
+        entry = report.summary.subjects[subject_id]
+        subject_stats = figures_dict(entry.figures)
+        subject_stats['subject_id'] = subject_id
+        subject_stats['subject_name'] = report.subject_name(subject_id)
+        subject_stats['components'] = list(entry.components)
+        subject_stats['threshold'] = percent_value(report.summary.policy.threshold)
+        records = [_record(session, slot, outcome, mark) for session, slot, outcome, mark in reversed(report.outcomes(subject_id))]
         return {
             'subject_stats': subject_stats,
-            'attendance_records': attendance_records,
-            'monthly_breakdown': monthly_breakdown,
+            'attendance_records': records,
+            'monthly_breakdown': monthly_breakdown(report, subject_id),
         }
     except Exception as exc:
         print(f"Error fetching subject attendance: {exc}")
+        traceback.print_exc()
         return {'error': 'An error occurred while fetching attendance data.'}
     finally:
         cursor.close()

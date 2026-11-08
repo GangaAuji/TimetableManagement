@@ -1,71 +1,70 @@
 """Admin report screens. dataset."""
 
+from services.attendance_calc import cohort_reports, percent_value
+
+ATTENDANCE_FIELDS = [
+    'student_id', 'roll_number', 'full_name', 'course_name', 'class_name', 'division_name',
+    'held', 'total_classes', 'present', 'late', 'absent', 'excused', 'not_marked',
+    'attendance_percentage', 'classes_needed',
+]
+
+
+def _optional_id(value):
+    if value in (None, ''):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError('Attendance export filters must be whole numbers.')
+
+
+def _attendance_rows(cursor, payload):
+    """One row per student of the chosen cohort, figures from services.attendance_calc for the chosen dates.
+
+    `total_classes` is the countable figure; `attendance_percentage` is empty
+    when nothing is countable. Students with no lecture in the range are
+    listed with zeros so the export shows the whole cohort.
+    """
+    reports = cohort_reports(
+        cursor,
+        course_id=_optional_id(payload.get('course_id')),
+        class_id=_optional_id(payload.get('class_id')),
+        division_id=_optional_id(payload.get('division_id')),
+        date_from=payload.get('start_date') or None,
+        date_to=payload.get('end_date') or None,
+    )
+    rows = []
+    for report in reports:
+        student = report.student
+        overall = report.overall
+        rows.append({
+            'student_id': student['id'],
+            'roll_number': student.get('roll_number'),
+            'full_name': student.get('name'),
+            'course_name': student.get('course_name'),
+            'class_name': student.get('class_name'),
+            'division_name': student.get('division_name'),
+            'held': overall.held,
+            'total_classes': overall.countable,
+            'present': overall.present,
+            'late': overall.late,
+            'absent': overall.absent,
+            'excused': overall.excused,
+            'not_marked': overall.not_marked,
+            'attendance_percentage': percent_value(overall.percentage),
+            'classes_needed': report.summary.classes_needed,
+        })
+    return rows
+
+
 def _build_report_export_dataset(cursor, report_type, payload):
     """Build export dataset and ordered CSV fields for a report type."""
     rows = []
     fieldnames = []
 
     if report_type == 'attendance':
-        start_date = payload.get('start_date')
-        end_date = payload.get('end_date')
-        course_id = payload.get('course_id')
-        class_id = payload.get('class_id')
-        division_id = payload.get('division_id')
-
-        query = """
-            SELECT
-                s.id as student_id,
-                s.id as roll_number,
-                s.name as full_name,
-                c.name as course_name,
-                cl.name as class_name,
-                d.name as division_name,
-                COUNT(a.id) as total_classes,
-                SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present,
-                SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late,
-                ROUND(
-                    (SUM(CASE WHEN a.status IN ('Present', 'Late') THEN 1 ELSE 0 END) / NULLIF(COUNT(a.id), 0)) * 100,
-                    2
-                ) as attendance_percentage
-            FROM students s
-            JOIN courses c ON s.course_id = c.id
-            JOIN classes cl ON s.class_id = cl.id
-            JOIN divisions d ON s.division_id = d.id
-            LEFT JOIN attendance a ON s.id = a.student_id
-        """
-
-        conditions = []
-        params = []
-        if start_date:
-            conditions.append("a.attendance_date >= %s")
-            params.append(start_date)
-        if end_date:
-            conditions.append("a.attendance_date <= %s")
-            params.append(end_date)
-        if course_id:
-            conditions.append("s.course_id = %s")
-            params.append(course_id)
-        if class_id:
-            conditions.append("s.class_id = %s")
-            params.append(class_id)
-        if division_id:
-            conditions.append("s.division_id = %s")
-            params.append(division_id)
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-
-        query += " GROUP BY s.id, s.name, c.name, cl.name, d.name ORDER BY s.id"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        for row in rows:
-            row['attendance_percentage'] = float(row.get('attendance_percentage') or 0)
-
-        fieldnames = [
-            'student_id', 'roll_number', 'full_name', 'course_name', 'class_name',
-            'division_name', 'total_classes', 'present', 'absent', 'late', 'attendance_percentage'
-        ]
+        rows = _attendance_rows(cursor, payload)
+        fieldnames = list(ATTENDANCE_FIELDS)
 
     elif report_type == 'timetable':
         report_view = payload.get('report_type', 'class')

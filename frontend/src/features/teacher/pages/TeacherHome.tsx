@@ -27,7 +27,8 @@ export function StudentDashboard() {
   const [className, setClassName] = useState('')
   const [division, setDivision] = useState('')
   const [present, setPresent] = useState(0)
-  const [percentage, setPercentage] = useState(0)
+  const [percentage, setPercentage] = useState<number | null>(null)
+  const [threshold, setThreshold] = useState(75)
   const [error, setError] = useState('')
   useEffect(() => {
     setPageHeader('Overview')
@@ -37,7 +38,9 @@ export function StudentDashboard() {
         setDivision(displayValue(data.division_name))
         const attendance = data.attendance as Record<string, unknown> | undefined
         setPresent(Number(attendance?.total_present) || 0)
-        setPercentage(Number(attendance?.percentage) || 0)
+        const figure = attendance?.percentage
+        setPercentage(figure === null || figure === undefined || !Number.isFinite(Number(figure)) ? null : Number(figure))
+        setThreshold(Number(attendance?.threshold) || 75)
         const source = Array.isArray(data.sessions) ? data.sessions : []
         setRows(source.map((item) => {
           const row = item as Record<string, unknown>
@@ -57,7 +60,8 @@ export function StudentDashboard() {
       .catch((reason: unknown) => setError(messageFrom(reason)))
   }, [setPageHeader])
   const todayRows = rows.filter((row) => row.today)
-  const tone = percentage >= 75 ? 'text-green-600' : percentage >= 65 ? 'text-yellow-600' : 'text-red-600'
+  const tone = percentage === null ? 'text-gray-500' : percentage >= threshold ? 'text-green-600' : percentage >= threshold - 10 ? 'text-yellow-600' : 'text-red-600'
+  const percentageLabel = percentage === null ? '—' : `${percentage.toFixed(2)}%`
   return (
     <div className="flex flex-col gap-2">
       <Welcome name={session.username} detail={`You have ${todayRows.length} classes scheduled for today. Keep up the great work!`} badge="Semester Active" asideLabel="Class" asideValue={`${className || '-'} ${division}`.trim()} />
@@ -65,7 +69,7 @@ export function StudentDashboard() {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Stat icon="fa-book-open" iconClass="bg-blue-50 text-blue-600" chip="Today" value={String(todayRows.length)} label="Classes Today" />
         <Stat icon="fa-calendar-alt" iconClass="bg-purple-50 text-purple-600" chip="Weekly" value={String(rows.length)} label="Total Classes" />
-        <Stat icon="fa-chart-pie" iconClass="bg-green-50 text-green-600" chip="Overall" value={`${percentage}%`} label="Attendance" valueClass={tone} />
+        <Stat icon="fa-chart-pie" iconClass="bg-green-50 text-green-600" chip="Overall" value={percentageLabel} label="Attendance" valueClass={tone} />
         <Stat icon="fa-clipboard-check" iconClass="bg-amber-50 text-amber-600" value={String(present)} label="Classes Attended" />
       </div>
       <div className="grid items-start gap-2 xl:grid-cols-3">
@@ -259,7 +263,11 @@ export function WeekSchedule({ title, path }: { title: string; path: string }) {
     void apiRequest<Record<string, unknown>>(path)
       .then((data) => {
         const attendance = data.attendance as Record<string, unknown> | undefined
-        if (attendance) setNote(`Attendance ${displayValue(attendance.percentage)}% · Present ${displayValue(attendance.total_present)} · Absent ${displayValue(attendance.total_absent)}`)
+        if (attendance) {
+          const figure = attendance.percentage
+          const label = figure === null || figure === undefined || !Number.isFinite(Number(figure)) ? '—' : `${Number(figure).toFixed(2)}%`
+          setNote(`Attendance ${label} · Attended ${displayValue(attendance.total_present)} · Absent ${displayValue(attendance.total_absent)}`)
+        }
         else if (data.today) setNote(`Today is ${displayValue(data.today)}`)
         const source = Array.isArray(data.sessions) ? data.sessions : []
         setRows(source.map((item) => {

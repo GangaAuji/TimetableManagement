@@ -21,26 +21,10 @@ def _decimal_to_number(value):
     return value
 
 def _promote_log_to_attendance(cursor, log_row):
-    cursor.execute(
-        """
-        INSERT INTO attendance (student_id, timetable_id, attendance_date, status, marked_by, remarks)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            status = VALUES(status),
-            marked_by = VALUES(marked_by),
-            remarks = VALUES(remarks),
-            marked_at = NOW(),
-            updated_at = NOW()
-        """,
-        (
-            log_row["student_id"],
-            log_row["timetable_id"],
-            log_row["attendance_date"],
-            log_row["status"],
-            log_row["marked_by_faculty_id"],
-            log_row.get("remarks"),
-        ),
-    )
+    """The admin reprocess writes a mark the same way the device upload does: with its session and the roster and marker checks."""
+    from api.mobile.v1.sync_attendance import _promote_log_to_attendance as promote
+
+    promote(cursor, log_row)
 
 def _promote_log_to_faculty_attendance(cursor, log_row):
     cursor.execute(

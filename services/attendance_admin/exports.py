@@ -1,72 +1,55 @@
-"""Admin attendance screens. exports."""
+"""Admin attendance exports and chart data, all from services.attendance_calc."""
 
-from flask import Blueprint, request, jsonify, session, flash, redirect, url_for, make_response
-from ui.pages import render_template
+from flask import request, jsonify, make_response
 from extensions import get_db_connection
-from datetime import datetime, timedelta
+from services.attendance_calc import cohort_figures, cohort_reports, daily_trend, defaulters, parse_threshold
+from datetime import date, datetime, timedelta
 import csv
 import io
 
+CHART_DAYS = 30
+
+
+def _percent_cell(value):
+    return '' if value is None else f"{value:.2f}%"
+
+
 def export_overview():
-    """
-    Export overview statistics to CSV.
-    """
+    """Today's figures per cohort (course, class, division) as CSV. Cohorts with no lecture today are left out."""
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
-    
+
     try:
-        # Get class-wise attendance for today
-        cursor.execute("""
-            SELECT 
-                c.name as course_name,
-                cl.name as class_name,
-                d.name as division_name,
-                COUNT(DISTINCT a.student_id) as total_students,
-                SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present,
-                SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late,
-                ROUND(
-                    (SUM(CASE WHEN a.status IN ('Present', 'Late') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 
-                    2
-                ) as percentage
-            FROM attendance a
-            JOIN students s ON a.student_id = s.id
-            JOIN courses c ON s.course_id = c.id
-            JOIN classes cl ON s.class_id = cl.id
-            JOIN divisions d ON s.division_id = d.id
-            WHERE DATE(a.attendance_date) = CURDATE()
-            GROUP BY c.name, cl.name, d.name
-            ORDER BY c.name, cl.name, d.name
-        """)
-        data = cursor.fetchall()
-        
-        # Create CSV
+        today = date.today()
+        reports = cohort_reports(cursor, date_from=today, date_to=today)
         output = io.StringIO()
         writer = csv.writer(output)
-        
-        # Write headers
-        writer.writerow(['Course', 'Class', 'Division', 'Total Students', 'Present', 'Absent', 'Late', 'Percentage'])
-        
-        # Write data
-        for row in data:
+        writer.writerow(['Course', 'Class', 'Division', 'Students', 'Held', 'Countable', 'Attended',
+                         'Present', 'Late', 'Absent', 'Excused', 'Not Marked', 'Percentage'])
+        for row in cohort_figures(reports):
+            if not row['held']:
+                continue
             writer.writerow([
-                row['course_name'],
-                row['class_name'],
-                row['division_name'],
-                row['total_students'],
+                _cell(row['course_name']),
+                _cell(row['class_name']),
+                _cell(row['division_name']),
+                row['students'],
+                row['held'],
+                row['countable'],
+                row['attended'],
                 row['present'],
-                row['absent'],
                 row['late'],
-                f"{float(row['percentage'] or 0):.2f}%"
+                row['absent'],
+                row['excused'],
+                row['not_marked'],
+                _percent_cell(row['percentage']),
             ])
-        
-        # Create response
+
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv'
         response.headers['Content-Disposition'] = f'attachment; filename=attendance_overview_{datetime.now().strftime("%Y%m%d")}.csv'
-        
         return response
-    
+
     finally:
         cursor.close()
         connection.close()
@@ -76,144 +59,96 @@ def export_defaulters():
     """
     Export defaulters list to CSV.
     """
+    threshold = request.args.get('threshold')
+    if threshold is not None and parse_threshold(threshold) is None:
+        return make_response('Enter a threshold between 1 and 100.', 400)
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
-    
+
     try:
-        threshold = request.args.get('threshold', 75, type=float)
-        
-        cursor.execute("""
-            SELECT 
-                st.id as student_id,
-                st.roll_number,
-                st.full_name,
-                st.email,
-                st.phone,
-                c.name as course_name,
-                cl.name as class_name,
-                d.name as division_name,
-                soa.total_classes,
-                soa.present_count,
-                soa.absent_count,
-                soa.late_count,
-                ROUND(soa.attendance_percentage, 2) as attendance_percentage
-            FROM student_overall_attendance soa
-            JOIN students st ON soa.student_id = st.id
-            JOIN courses c ON st.course_id = c.id
-            JOIN classes cl ON st.class_id = cl.id
-            JOIN divisions d ON st.division_id = d.id
-            WHERE soa.attendance_percentage < %s
-            ORDER BY soa.attendance_percentage ASC, st.roll_number
-        """, [threshold])
-        data = cursor.fetchall()
-        
-        # Create CSV
+        below, chosen = defaulters(cursor, threshold=threshold)
         output = io.StringIO()
         writer = csv.writer(output)
-        
-        # Write headers
-        writer.writerow(['Roll Number', 'Name', 'Course', 'Class', 'Division', 
-                        'Total Classes', 'Present', 'Absent', 'Late', 'Percentage', 
-                        'Email', 'Phone'])
-        
-        # Write data
-        for row in data:
+        writer.writerow(['Roll Number', 'Name', 'Course', 'Class', 'Division',
+                         'Held', 'Countable', 'Attended', 'Present', 'Late', 'Absent', 'Excused', 'Not Marked',
+                         'Percentage', 'Classes Needed', 'Email', 'Phone'])
+        for report in below:
+            student = report.student
+            overall = report.overall
+            needed = report.summary.classes_needed
             writer.writerow([
-                row['roll_number'],
-                row['full_name'],
-                row['course_name'],
-                row['class_name'],
-                row['division_name'],
-                int(row['total_classes'] or 0),
-                int(row['present_count'] or 0),
-                int(row['absent_count'] or 0),
-                int(row['late_count'] or 0),
-                f"{float(row['attendance_percentage'] or 0):.2f}%",
-                row['email'],
-                row['phone']
+                _cell(student.get('roll_number')),
+                _cell(student.get('name')),
+                _cell(student.get('course_name')),
+                _cell(student.get('class_name')),
+                _cell(student.get('division_name')),
+                overall.held,
+                overall.countable,
+                overall.attended,
+                overall.present,
+                overall.late,
+                overall.absent,
+                overall.excused,
+                overall.not_marked,
+                f"{overall.percentage:.2f}%",
+                '' if needed is None else needed,
+                _cell(student.get('email')),
+                _cell(student.get('phone')),
             ])
-        
-        # Create response
+
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = f'attachment; filename=attendance_defaulters_{datetime.now().strftime("%Y%m%d")}.csv'
-        
+        response.headers['Content-Disposition'] = (
+            f'attachment; filename=attendance_defaulters_{int(chosen.threshold)}pct_{datetime.now().strftime("%Y%m%d")}.csv'
+        )
         return response
-    
+
     finally:
         cursor.close()
         connection.close()
 
 
+def _cell(value):
+    """A CSV cell that a spreadsheet will not run as a formula."""
+    text = '' if value is None else str(value)
+    if text[:1] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + text
+    return text
+
+
 def charts_data():
-    """
-    Provide JSON data for chart visualizations.
-    """
+    """Chart data for the last 30 days: `trend` (counts per lecture date) or `distribution` (percentage per class)."""
+    chart_type = request.args.get('type', 'trend')
+    if chart_type not in ('trend', 'distribution'):
+        return jsonify({'error': 'Invalid chart type'}), 400
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
-    
+
     try:
-        chart_type = request.args.get('type', 'trend')
-        
+        today = date.today()
+        reports = cohort_reports(cursor, date_from=today - timedelta(days=CHART_DAYS), date_to=today)
+
         if chart_type == 'trend':
-            # Last 30 days attendance trend
-            cursor.execute("""
-                SELECT 
-                    DATE_FORMAT(attendance_date, '%Y-%m-%d') as date,
-                    SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,
-                    SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                    SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) as late
-                FROM attendance
-                WHERE attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-                GROUP BY DATE_FORMAT(attendance_date, '%Y-%m-%d')
-                ORDER BY DATE_FORMAT(attendance_date, '%Y-%m-%d')
-            """)
-            data = cursor.fetchall()
-            
-            # Convert to chart format
-            labels = [row['date'] for row in data]
-            present = [int(row['present']) for row in data]
-            absent = [int(row['absent']) for row in data]
-            late = [int(row['late']) for row in data]
-            
+            points = daily_trend(reports)
             return jsonify({
-                'labels': labels,
+                'labels': [point['date'] for point in points],
                 'datasets': [
-                    {'label': 'Present', 'data': present, 'color': '#10b981'},
-                    {'label': 'Absent', 'data': absent, 'color': '#ef4444'},
-                    {'label': 'Late', 'data': late, 'color': '#f59e0b'}
-                ]
+                    {'label': 'Present', 'data': [point['present'] for point in points], 'color': '#10b981'},
+                    {'label': 'Absent', 'data': [point['absent'] for point in points], 'color': '#ef4444'},
+                    {'label': 'Late', 'data': [point['late'] for point in points], 'color': '#f59e0b'},
+                    {'label': 'Excused', 'data': [point['excused'] for point in points], 'color': '#6366f1'},
+                    {'label': 'Not marked', 'data': [point['not_marked'] for point in points], 'color': '#9ca3af'},
+                ],
             })
-        
-        elif chart_type == 'distribution':
-            # Class-wise attendance distribution
-            cursor.execute("""
-                SELECT 
-                    CONCAT(c.name, ' ', cl.name) as class_name,
-                    ROUND(AVG(
-                        CASE WHEN a.status IN ('Present', 'Late') THEN 100 ELSE 0 END
-                    ), 2) as attendance_percentage
-                FROM attendance a
-                JOIN students s ON a.student_id = s.id
-                JOIN courses c ON s.course_id = c.id
-                JOIN classes cl ON s.class_id = cl.id
-                WHERE a.attendance_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-                GROUP BY c.id, cl.id, c.name, cl.name
-                ORDER BY attendance_percentage DESC
-                LIMIT 10
-            """)
-            data = cursor.fetchall()
-            
-            labels = [row['class_name'] for row in data]
-            values = [float(row['attendance_percentage']) for row in data]
-            
-            return jsonify({
-                'labels': labels,
-                'data': values
-            })
-        
-        return jsonify({'error': 'Invalid chart type'}), 400
-    
+
+        classes = [row for row in cohort_figures(reports, keys=('course_name', 'class_name')) if row['percentage'] is not None]
+        classes.sort(key=lambda row: -row['percentage'])
+        classes = classes[:10]
+        return jsonify({
+            'labels': [f"{row['course_name']} {row['class_name']}" for row in classes],
+            'data': [row['percentage'] for row in classes],
+        })
+
     finally:
         cursor.close()
         connection.close()

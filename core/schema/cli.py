@@ -140,7 +140,9 @@ def seed_run(apply_role_defaults):
 
 def register_commands(app):
     from core.admin_cli import admin
+    from core.attendance_cli import attendance
 
     app.cli.add_command(db_adopt)
     app.cli.add_command(seed)
     app.cli.add_command(admin)
+    app.cli.add_command(attendance)

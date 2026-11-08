@@ -6,6 +6,7 @@ from flask import current_app, flash
 
 from academic_rules.availability import manual_add_availability_block
 from academic_rules.holidays import recurring_holiday_blocks_day
+from data_access.lecture_sessions import count_slot_sessions
 from data_access.admin_timetable import (
     assign_timetable_room,
     deactivate_timetable_session,
@@ -202,8 +203,13 @@ def manage_timetable(method, form, values):
                 else:
                     flash('Session removed.', 'success')
             except Exception:
-                delete_timetable_session(cursor, tid)
-                flash('Session removed.', 'success')
+                # A slot with recorded lectures is retired, never deleted: deleting would erase its attendance history.
+                if count_slot_sessions(cursor, tid):
+                    cursor.execute('UPDATE timetable SET is_active = 0 WHERE id = %s', (tid,))
+                    flash('Session retired. It has recorded lectures, so it was kept for attendance history.', 'warning')
+                else:
+                    delete_timetable_session(cursor, tid)
+                    flash('Session removed.', 'success')
             connection.commit()
         except Exception as exc:
             connection.rollback()

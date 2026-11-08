@@ -18,8 +18,10 @@ Alembic, through Flask-Migrate, owns the schema. The application still reads and
 | `0004_rate_limit_collation` | Converts `rate_limit_counters` to `utf8mb4_unicode_ci`. 0003 created it without a collation, so it got the server default, `utf8mb4_general_ci`. |
 | `0005_seed_history` | Creates `seed_history` (`seeder`, `item`, `version`, `applied_at`), which records the one-time defaults `flask seed run` has handled. Downgrade drops it. |
 | `0006_sign_in_lock` | Adds `users.failed_window_start` and `users.locked_until` (both `DATETIME NULL`, after `failed_attempts`) for the time-based sign-in lock. Adds only missing columns; downgrade drops only the ones that exist. |
+| `0007_lecture_sessions` | Creates `lecture_sessions` (one row per `(timetable_id, session_date)`: `status` held/cancelled/not_marked, `taught_by`, `marked_by`, `cancelled_by`, `cancel_reason`, `source`) and `attendance_excuses` (student, optional subject, date range), and adds nullable `attendance.session_id` with its index and `RESTRICT` foreign key. Creates only what is missing; downgrade drops only what exists. After upgrading a database that already has attendance rows, run `flask attendance backfill-sessions --dry-run`, then without `--dry-run` (see below). See `docs/DESIGN_ATTENDANCE_CALCULATION.md`. |
+| `0008_attendance_views` | Makes `attendance.session_id NOT NULL` and drops the `attendance_summary` and `student_overall_attendance` views, which no code reads. Refuses to run while any attendance row has no `session_id` (the message names the backfill command); changes only what still needs it. Downgrade makes the column nullable again and recreates the views from the baseline text. |
 
-`college_timetable_db` was adopted and upgraded on 8 Nov 2026.
+`college_timetable_db` was adopted and upgraded to `0007_lecture_sessions` on 8 Nov 2026; `0008` has not been applied to it yet.
 
 `migrations/_archive/` keeps the first baseline attempt. It is not part of the revision chain, but it used the same revision id, `0001_baseline`. A database stamped by that old attempt would look adopted when it is not. Before adopting a database on another machine, run `SELECT version_num FROM alembic_version` there. If the table exists, stop and rename the new baseline id instead of adopting. On 8 Nov 2026 no database on the development server had an `alembic_version` table.
 
@@ -44,6 +46,16 @@ flask seed run
 ```
 
 Then start the app. The app never changes the schema itself.
+
+When the upgrade crosses `0007_lecture_sessions` on a database that already has attendance rows, `flask db upgrade` stops at `0008_attendance_views` with "N attendance row(s) have no session_id" (the database is then at 0007). Run, once:
+
+```text
+flask attendance backfill-sessions --dry-run
+flask attendance backfill-sessions
+flask db upgrade
+```
+
+The dry run prints what the apply run would do and changes nothing. The apply run creates one `held` session (`source = 'backfill'`) for every `(timetable, date)` that has attendance rows but no session, and links those rows to it. It never invents unmarked lectures, and it only reports anomalies (marks on a weekday the slot does not meet on, on a retired slot, by someone other than the slot's teacher, on a holiday, outside the roster, or on a cancelled session) without changing them. Running it again changes nothing. Marks on a cancelled session are left unlinked for review (`SELECT id FROM attendance WHERE session_id IS NULL`); 0008 refuses until they are deleted or the session is restored and the backfill run again. `backfill-sessions` is the one command that runs on a database at 0007 or later rather than only at head; every other command needs head.
 
 ## `flask seed run`
 
@@ -117,9 +129,32 @@ The address is `request.remote_addr`. Behind a reverse proxy that is the proxy's
 
 ## Flask CLI commands
 
-When the app is loaded for a `flask` command other than `flask run`, such as `flask db upgrade`, `flask db-adopt`, `flask seed run`, `flask admin create-superadmin`, `flask routes`, or `flask shell`, it starts no background work: no quality-model retrainer, no export queue, no timetable queue, and no startup schema check. `flask run`, `python app.py`, and WSGI servers start them as usual.
+When the app is loaded for a `flask` command other than `flask run`, such as `flask db upgrade`, `flask db-adopt`, `flask seed run`, `flask admin create-superadmin`, `flask attendance close-day`, `flask routes`, or `flask shell`, it starts no background work: no quality-model retrainer, no export queue, no timetable queue, no close-day worker, and no startup schema check. `flask run`, `python app.py`, and WSGI servers start them as usual.
 
 `QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES=0` (or a negative value) turns the retrainer off.
+
+### `flask attendance`
+
+Lectures are recorded in `lecture_sessions` as they happen: marking attendance (teacher portal or mobile upload) creates or reuses the `held` row for that slot and date, and the marks carry its id in `attendance.session_id`. The teacher of the slot, or the approved proxy for that date, can cancel a lecture (`faculty_absent`, `institution`, `exam`, `other`) before it is marked; an admin with `attendance_manage` can cancel any lecture, including a marked one with `clear_marks`, and can undo a cancellation (`/attendance/sessions`). A lecture that ends the day without marks is recorded as `not_marked` by close-day:
+
+```text
+flask attendance close-day                     # yesterday
+flask attendance close-day --date 2026-03-04
+flask attendance close-day --from 2026-03-01 --to 2026-03-07
+flask attendance close-day --dry-run ...
+```
+
+For each active slot that meets on that weekday, close-day inserts a `not_marked` session unless a session already exists, the date is a holiday for the slot's program, or the date is outside the slot's semester. `taught_by` is the approved proxy for that date if there is one, otherwise the slot's teacher. It also completes the roster of every `held` session the face-attendance device recorded that day (`source = 'mobile'`): each roster student without a mark gets an `Absent` row linked to the session, `marked_by` the session's first marker, remark "Not detected by the attendance device" (`absent_filled` in the counts). Teacher-marked sessions are left alone; an unmarked student there stays `unrecorded`. It refuses today and future dates, and ranges longer than 366 days. The same code runs daily in the `attendance-close-day` worker thread at `ATTENDANCE_CLOSE_DAY_HOUR` (default 1, local time), closing the last 7 days so a day missed while the app was down is still closed; a negative value turns the worker off. Both write one `attendance_close_day` audit row per run.
+
+Deleting a timetable slot that has sessions is refused by the foreign key; the admin delete retires the slot (`is_active = 0`) instead, so the history stays.
+
+### Attendance figures
+
+Every percentage a screen or export shows comes from `services/attendance_calc.py`, which loads students, slots, `lecture_sessions`, marks and `attendance_excuses` (`data_access/attendance_calc.py`) and hands them to the pure `attendance_calc/` package. The denominator is held lectures the student was in the roster for (same course and class; their division or a whole-class slot; a chosen elective; between `DATE(students.created_at)` and, once inactive, `DATE(students.updated_at)`); a mark the teacher saved always counts even outside that roster. Cancelled lectures, holidays (no session row) and `not_marked` lectures are not counted; `Late` counts as present; an excused absence leaves the denominator. A slot with a `semester_id` counts only sessions inside that semester's dates. A student with nothing countable has no percentage (`null`, shown as "—"), not 0. Overall and Theory/Practical figures are pooled (sum over sum). `ATTENDANCE_THRESHOLD_PERCENT` (default 75) is the minimum; `/api/attendance/overview?threshold=` and `/admin/attendance/export/defaulters?threshold=` override it for one call.
+
+Consumers: `/api/portal/student/attendance` and `/<subject_id>`, `/api/portal/student`, `/api/portal/attendance`, `/api/attendance/overview` (last-30-day pooled statistics, defaulters, `not_marked_count`), `/api/portal/attendance/history/<timetable_id>` (the teacher's per-lecture report: every recorded lecture of the slot with its status, and every roster student's figures for the slot's subject, optional `?from=&to=`), `/admin/attendance/charts/data`, the overview and defaulters CSVs, and the `attendance` report dataset of the Reports Center (`held, total_classes` = countable, `present, late, absent, excused, not_marked, attendance_percentage, classes_needed`, one row per student of the chosen cohort). `attendance.session_id` is `NOT NULL` from `0008`, which also drops the legacy `attendance_summary` and `student_overall_attendance` views; every mark belongs to a lecture session, and the admin "reprocess mobile logs" action writes marks through the same session-recording, roster-checked path as the device upload.
+
+Mobile uploads (`/mobile-sync/v1/attendance/sync`, and `/attendance/reprocess`) are promoted to `attendance` only when the student is in the slot's roster (`data_access.teacher_attendance.roster_clauses`, the SQL twin of `in_roster`: same course and class, the slot's division or a whole-class slot, active, and for an elective a selection for that subject) and the marker is the slot's teacher or its approved proxy for the date; otherwise the `attendance_logs` row is marked failed with the reason. The device's `/timetable` roster uses the same clauses, so whole-class and elective lectures are offered correctly.
 
 ## Existing database: adopt it, do not upgrade it
 
@@ -202,7 +237,7 @@ Never add `users`, `students`, `faculty`, or any other table with personal data 
 
 `tests/unit/test_permission_canon.py` needs no database. It scans the code for every permission check (`has_permission`, `check_user_permission`, `permission_denied`, `allowed`, template helpers, the local wrappers that pass a name through, and `frontend/src/app/page-access.ts`). It fails if the code checks a name that is not in the canon, if a permission marked `enforced=True` is not checked anywhere, or if a permission marked `enforced=False` is not in its explicit allowlist of 24.
 
-`test_live_schema_revisions.py` loads `sql/college_timetable_db.live-schema.sql`, a structure-only mysqldump of `college_timetable_db` taken at `0003_security_schema`, into a scratch database, then runs upgrade to head, downgrade to `0005` and back, downgrade to `0002`, upgrade again, and downgrade to `0003`, and checks that the schema comes back each time.
+`test_live_schema_revisions.py` loads `sql/college_timetable_db.live-schema.sql`, a structure-only mysqldump of `college_timetable_db` taken at `0003_security_schema`, into a scratch database, then runs upgrade to head, downgrade to `0007`, `0006` and `0005` and back each time, downgrade to `0002`, upgrade again, and downgrade to `0003`, and checks that the schema comes back each time (including that the views `0008` recreates are identical to the live ones).
 
 `test_fresh_database.py` builds its own scratch database, upgrades it to head, runs `flask seed run`, boots the real app with the export and timetable workers on, and uses the report, timetable, and branding endpoints. It also downgrades to `0003` to check that `/health` returns 503 and that startup logs the error, then upgrades again, and drops the database at the end.
 
@@ -227,7 +262,7 @@ pytest --live-db       # everything, about 5 minutes
 - `POST /admin/attendance/manage/update` redirects instead of answering 403 without `attendance_manage`.
 - A practical cannot be limited to a lab batch: there are no lab sub-batch tables (`test_teacher_attendance.py`; see `docs/DESIGN_LAB_BATCHES.md`).
 
-`log_activity(..., cursor=cursor)` writes the audit rows in the caller's transaction, so a change and its audit row commit or roll back together (`test_split_connection_locks.py`). Failed sign-ins are always written on their own connection. `test_sign_in_lock.py` covers the lock and rate limits, `test_account_authority.py` the hierarchy and permission grants, and `test_teacher_attendance.py` the rosters for division, whole-class, and elective lectures.
+`log_activity(..., cursor=cursor)` writes the audit rows in the caller's transaction, so a change and its audit row commit or roll back together (`test_split_connection_locks.py`). Failed sign-ins are always written on their own connection. `test_sign_in_lock.py` covers the lock and rate limits, `test_account_authority.py` the hierarchy and permission grants, and `test_teacher_attendance.py` the rosters for division, whole-class, and elective lectures. `test_lecture_sessions.py` covers session recording from the portal and mobile upload, the mobile roster and marker refusals, teacher and admin cancel and undo, proxy marking, close-day (once, idempotent, dry run, holidays, refuses today, the absent fill for device-marked sessions), and the slot-delete guard; `test_attendance_backfill.py` covers the backfill command on the test database stepped down to `0007` for that module (and back to head afterwards), including that `0008` refuses while marks are unlinked and runs once they are linked. `tests/unit/test_attendance_calc.py` holds the golden figures for the pure `attendance_calc` module and needs no database; `test_attendance_calc_live.py` builds the same cohort through the factory (sessions and marks inserted directly, `students.created_at` set to the enrolment date) and asserts the same numbers through the JSON API, the defaulter list and the CSV export, and checks that `fetch_lecture_roster` agrees with `in_roster`.
 
 `test_migration_baseline.py` builds one scratch database with the migrations and one from `sql/college_timetable_db.sql` (structure only; rows are skipped), and checks that their `information_schema` matches, that every foreign key target exists, that `db-adopt` refuses a changed schema without writing anything, and that `0002` is idempotent and both downgrades clean up. It drops both scratch databases at the end. It never connects to `MYSQL_DB` itself or to `college_timetable_db`.
 

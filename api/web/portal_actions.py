@@ -2,14 +2,22 @@
 
 import re
 
-from flask import current_app, session
+from flask import current_app, request, session
 
 from extensions import get_db_connection
 from api.web.access import InputError, body, close, iso_date, optional_id, optional_text, reject_input, whole_number
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_clock, safe_count, safe_stamp, safe_text
 from services.student_portal import load_student_attendance, load_subject_attendance
-from services.teacher_attendance import load_attendance_history, load_attendance_index, load_mark_page, save_teacher_attendance
+from services.lecture_sessions import CANCEL_REASONS
+from services.teacher_attendance import (
+    cancel_teacher_lecture,
+    load_attendance_history,
+    load_attendance_index,
+    load_mark_page,
+    restore_teacher_lecture,
+    save_teacher_attendance,
+)
 from services.teacher_portal import (
     load_availability,
     load_my_classes,
@@ -36,6 +44,9 @@ _MESSAGES = {
     'portal_invalid': 'Check the form and try again.',
     'portal_denied': 'You do not have permission to do that.',
     'portal_date': 'Enter a valid date.',
+    'portal_cancelled': 'This lecture is cancelled. Undo the cancellation before marking attendance.',
+    'portal_marked': 'Attendance has already been marked for this lecture. Ask an administrator to cancel it.',
+    'portal_no_session': 'There is nothing to undo for this lecture and date.',
 }
 
 
@@ -47,6 +58,8 @@ def register_portal_action_routes(blueprint):
     blueprint.add_url_rule('/portal/attendance/lectures', 'portal_lectures', _lectures, methods=['GET'])
     blueprint.add_url_rule('/portal/attendance/mark/<int:timetable_id>', 'portal_mark', _mark, methods=['GET', 'POST'])
     blueprint.add_url_rule('/portal/attendance/history/<int:timetable_id>', 'portal_history', _history, methods=['GET'])
+    blueprint.add_url_rule('/portal/attendance/cancel/<int:timetable_id>', 'portal_cancel', _cancel, methods=['POST'])
+    blueprint.add_url_rule('/portal/attendance/uncancel/<int:timetable_id>', 'portal_uncancel', _uncancel, methods=['POST'])
     blueprint.add_url_rule('/portal/student/attendance', 'portal_student_attendance', _student_attendance, methods=['GET'])
     blueprint.add_url_rule('/portal/student/attendance/<int:subject_id>', 'portal_subject_attendance', _subject_attendance, methods=['GET'])
 
@@ -68,13 +81,49 @@ def _student():
 
 
 def _percent(value):
+    """A percentage with two places, or None when there is nothing to measure (shown as a dash)."""
+    if value is None or isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):
-        return 0
+        return None
     if number < 0:
-        return 0
-    return round(min(number, 100), 1)
+        return 0.0
+    return round(min(number, 100), 2)
+
+
+def _optional_count(value):
+    return None if value is None else safe_count(value)
+
+
+def _figures(source):
+    """The counts of one Figures dict, sanitised."""
+    return {
+        'held': safe_count(source.get('held')),
+        'countable': safe_count(source.get('countable')),
+        'attended': safe_count(source.get('attended')),
+        'present': safe_count(source.get('present')),
+        'late': safe_count(source.get('late')),
+        'absent': safe_count(source.get('absent')),
+        'excused': safe_count(source.get('excused')),
+        'not_marked': safe_count(source.get('not_marked')),
+        'unrecorded': safe_count(source.get('unrecorded')),
+        'percentage': _percent(source.get('percentage')),
+    }
+
+
+def _attendance_record(row):
+    return {
+        'date': safe_stamp(row.get('attendance_date'))[:10],
+        'subject': safe_text(row.get('subject_name') or '', 100),
+        'status': safe_text(row.get('status') or '', 20),
+        'start_time': safe_clock(row.get('start_time')),
+        'end_time': safe_clock(row.get('end_time')),
+        'remarks': safe_text(row.get('remarks') or '', 200),
+        'marked_by': safe_text(row.get('marked_by_name') or '', 100),
+        'marked_at': safe_stamp(row.get('marked_at')),
+    }
 
 
 def _service_error(result):
@@ -88,6 +137,10 @@ def _service_error(result):
         return json_error(_MESSAGES['portal_date'], 400, 'portal_date')
     if result == 'student':
         return json_error('That student is not in this class.', 400, 'portal_invalid')
+    if result == 'cancelled':
+        return json_error(_MESSAGES['portal_cancelled'], 409, 'portal_cancelled')
+    if result == 'marked':
+        return json_error(_MESSAGES['portal_marked'], 409, 'portal_marked')
     return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
 
 
@@ -417,6 +470,9 @@ def _mark(timetable_id):
     return json_ok({
         'date': safe_text(page.get('attendance_date'), 10),
         'already_marked': bool(page.get('attendance_already_marked')),
+        'cancelled': bool(page.get('cancelled')),
+        'session_status': safe_text(page.get('session_status') or '', 12),
+        'is_owner': bool(page.get('is_owner', True)),
         'lecture': {
             'subject': safe_text(lecture.get('subject_name'), 100),
             'class_name': safe_text(lecture.get('class_name'), 100),
@@ -458,12 +514,61 @@ def _save_marks(timetable_id):
     return json_ok({'saved': safe_count(result)})
 
 
+def _cancel(timetable_id):
+    """Cancel one lecture of a slot the teacher owns, or is the approved proxy for that day."""
+    denied = _teacher()
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('date', 'reason', 'note')))
+        when = iso_date(payload.get('date'), 'portal_date')
+        reason = payload.get('reason')
+        if reason not in CANCEL_REASONS:
+            raise InputError('portal_invalid')
+        note = optional_text(payload.get('note'), 255, 'portal_invalid')
+        result = cancel_teacher_lecture(session.get('user_id'), timetable_id, when, reason, note)
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Lecture cancel failed')
+        return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
+    if not isinstance(result, int):
+        return _service_error(result)
+    return json_ok({'session_id': safe_count(result), 'status': 'cancelled'})
+
+
+def _uncancel(timetable_id):
+    denied = _teacher()
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('date',)))
+        when = iso_date(payload.get('date'), 'portal_date')
+        result = restore_teacher_lecture(session.get('user_id'), timetable_id, when)
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Lecture restore failed')
+        return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
+    if result == 'missing':
+        return json_error(_MESSAGES['portal_no_session'], 404, 'portal_no_session')
+    if result in ('denied', 'date'):
+        return _service_error(result)
+    return json_ok({'status': safe_text(result, 12)})
+
+
 def _history(timetable_id):
     denied = _teacher()
     if denied:
         return denied
     try:
-        page = load_attendance_history(session.get('user_id'), timetable_id)
+        date_from = iso_date(request.args.get('from'), 'portal_date', required=False)
+        date_to = iso_date(request.args.get('to'), 'portal_date', required=False)
+        if date_from and date_to and date_from > date_to:
+            raise InputError('portal_date')
+        page = load_attendance_history(session.get('user_id'), timetable_id, date_from, date_to)
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
     except Exception:
         current_app.logger.exception('Attendance history failed')
         return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
@@ -474,17 +579,29 @@ def _history(timetable_id):
     for row in page.get('history') or []:
         rows.append({
             'date': safe_stamp(row.get('attendance_date'))[:10],
+            'status': safe_text(row.get('session_status') or '', 12),
+            'cancel_reason': safe_text(row.get('cancel_reason') or '', 20),
             'total': safe_count(row.get('total_students')),
             'present': safe_count(row.get('present')),
             'late': safe_count(row.get('late')),
             'absent': safe_count(row.get('absent')),
             'marked_at': safe_stamp(row.get('marked_at')),
         })
+    students = []
+    for row in page.get('students') or []:
+        students.append({
+            'student_id': safe_count(row.get('student_id')),
+            'name': safe_text(row.get('student_name') or '', 100),
+            'roll_number': safe_text(row.get('roll_number') or '', 50),
+            **_figures(row),
+        })
     return json_ok({
         'subject': safe_text(lecture.get('subject_name'), 100),
         'class_name': safe_text(lecture.get('class_name'), 100),
         'division_name': safe_text(lecture.get('division_name'), 50),
         'history': rows,
+        'students': students,
+        'threshold': _percent(page.get('threshold')),
     })
 
 
@@ -512,30 +629,21 @@ def _student_attendance():
         subjects.append({
             'id': safe_count(row.get('subject_id')),
             'subject': safe_text(row.get('subject_name'), 100),
-            'scheduled': safe_count(row.get('total_lectures')),
-            'attended': safe_count(row.get('attended_lectures')),
-            'present': safe_count(row.get('present_count')),
-            'late': safe_count(row.get('late_count')),
-            'absent': safe_count(row.get('absent_count')),
-            'percentage': _percent(row.get('attendance_percentage')),
+            'components': [safe_text(name, 12) for name in row.get('components') or []],
+            **_figures(row),
         })
-    recent = []
-    for row in page.get('recent_records') or []:
-        recent.append({
-            'date': safe_text(row.get('attendance_date'), 20),
-            'subject': safe_text(row.get('subject_name'), 100),
-            'class_info': safe_text(row.get('class_info') or '', 120),
-            'status': safe_text(row.get('status') or '', 20),
-            'remarks': safe_text(row.get('remarks') or '', 200),
-            'marked_by': safe_text(row.get('marked_by_name') or '', 100),
-        })
+    recent = [_attendance_record(row) for row in page.get('recent_records') or []]
+    components = {
+        safe_text(name, 12): _figures(figures)
+        for name, figures in (page.get('components') or {}).items()
+    }
     return json_ok({
-        'percentage': _percent(stats.get('attendance_percentage')),
-        'scheduled': safe_count(stats.get('total_lectures_scheduled')),
-        'attended': safe_count(stats.get('total_lectures_attended')),
-        'present': safe_count(stats.get('present_count')),
-        'late': safe_count(stats.get('late_count')),
-        'absent': safe_count(stats.get('absent_count')),
+        **_figures(stats),
+        'scheduled': safe_count(stats.get('countable')),
+        'classes_needed': _optional_count(stats.get('classes_needed')),
+        'classes_that_can_be_missed': _optional_count(stats.get('classes_that_can_be_missed')),
+        'threshold': _percent(stats.get('threshold')),
+        'components': components,
         'subjects': subjects,
         'recent': recent,
     })
@@ -553,34 +661,27 @@ def _subject_attendance(subject_id):
     if not isinstance(page, dict) or page.get('error'):
         return _student_error(page)
     stats = page.get('subject_stats') or {}
-    records = []
-    for row in page.get('attendance_records') or []:
-        records.append({
-            'date': safe_text(row.get('attendance_date'), 20),
-            'status': safe_text(row.get('status') or '', 20),
-            'start_time': safe_text(row.get('start_time'), 12),
-            'end_time': safe_text(row.get('end_time'), 12),
-            'remarks': safe_text(row.get('remarks') or '', 200),
-            'marked_at': safe_text(row.get('marked_at'), 24),
-        })
+    records = [_attendance_record(row) for row in page.get('attendance_records') or []]
     months = []
     for row in page.get('monthly_breakdown') or []:
         months.append({
-            'month': safe_text(row.get('month') or row.get('month_name') or '', 20),
-            'total': safe_count(row.get('total_lectures')),
+            'month': safe_text(row.get('month') or '', 7),
+            'total': safe_count(row.get('countable')),
+            'countable': safe_count(row.get('countable')),
+            'attended': safe_count(row.get('attended')),
             'present': safe_count(row.get('present')),
             'late': safe_count(row.get('late')),
             'absent': safe_count(row.get('absent')),
+            'excused': safe_count(row.get('excused')),
+            'not_marked': safe_count(row.get('not_marked')),
             'percentage': _percent(row.get('percentage')),
         })
     return json_ok({
         'subject': safe_text(stats.get('subject_name'), 100),
-        'percentage': _percent(stats.get('attendance_percentage')),
-        'scheduled': safe_count(stats.get('total_lectures')),
-        'attended': safe_count(stats.get('attended_lectures')),
-        'present': safe_count(stats.get('present_count')),
-        'late': safe_count(stats.get('late_count')),
-        'absent': safe_count(stats.get('absent_count')),
+        'components': [safe_text(name, 12) for name in stats.get('components') or []],
+        **_figures(stats),
+        'scheduled': safe_count(stats.get('countable')),
+        'threshold': _percent(stats.get('threshold')),
         'records': records,
         'months': months,
     })

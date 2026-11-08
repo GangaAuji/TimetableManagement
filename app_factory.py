@@ -458,6 +458,9 @@ def create_app(config=None):
     should_start_worker = (not app.config.get('DEBUG', False)) or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
     if should_start_worker:
         _start_quality_model_retrainer(app)
+        from services.attendance_jobs import ensure_worker as ensure_close_day_worker
+
+        ensure_close_day_worker(app)
     
     # app.logger.info("College Timetable Management System application created.")
     return app

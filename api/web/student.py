@@ -8,6 +8,8 @@ from extensions import get_db_connection
 from api.web.access import close
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_clock, safe_count, safe_text
+from data_access.student_portal import fetch_student_timetable
+from services.attendance_calc import percent_value, student_report
 
 _MESSAGES = {'student_unavailable': 'The page could not be loaded.'}
 
@@ -42,20 +44,7 @@ def _home():
             return json_error(_MESSAGES['student_unavailable'], 404, 'student_unavailable')
         today = datetime.now().strftime('%A')
         sessions = []
-        if student.get('course_id') and student.get('class_id') and student.get('division_id'):
-            cursor.execute(
-                """
-                SELECT t.day_of_week, t.start_time, t.end_time, s.name AS subject_name, f.name AS faculty_name, r.room_number
-                FROM timetable t
-                JOIN subjects s ON s.id = t.subject_id
-                LEFT JOIN faculty f ON f.user_id = t.faculty_id
-                LEFT JOIN rooms r ON r.id = t.room_id
-                WHERE t.course_id = %s AND t.class_id = %s AND t.division_id = %s
-                  AND COALESCE(t.is_active, 1) = 1
-                ORDER BY FIELD(t.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), t.start_time
-                """,
-                (student['course_id'], student['class_id'], student['division_id']),
-            )
+        if student.get('course_id') and student.get('class_id'):
             sessions = [
                 {
                     'day': safe_text(row.get('day_of_week'), 12),
@@ -66,25 +55,23 @@ def _home():
                     'room': safe_text(row.get('room_number') or '', 20),
                     'today': row.get('day_of_week') == today,
                 }
-                for row in cursor.fetchall()
+                for row in fetch_student_timetable(cursor, student)
             ]
-        attendance = {'total_lectures': 0, 'total_present': 0, 'total_absent': 0, 'percentage': 0}
+        attendance = {'total_lectures': 0, 'total_present': 0, 'total_absent': 0, 'percentage': None, 'classes_needed': None}
         try:
-            cursor.execute(
-                """
-                SELECT total_lectures, total_present, total_absent, overall_percentage
-                FROM student_overall_attendance
-                WHERE student_id = %s
-                """,
-                (student['id'],),
-            )
-            stats = cursor.fetchone() or {}
-            attendance = {
-                'total_lectures': safe_count(stats.get('total_lectures')),
-                'total_present': safe_count(stats.get('total_present')),
-                'total_absent': safe_count(stats.get('total_absent')),
-                'percentage': safe_count(stats.get('overall_percentage')),
-            }
+            report = student_report(cursor, student['id'])
+            if report is not None:
+                overall = report.overall
+                attendance = {
+                    'total_lectures': safe_count(overall.countable),
+                    'total_present': safe_count(overall.attended),
+                    'total_absent': safe_count(overall.absent),
+                    'excused': safe_count(overall.excused),
+                    'not_marked': safe_count(overall.not_marked),
+                    'percentage': percent_value(overall.percentage),
+                    'classes_needed': None if report.summary.classes_needed is None else safe_count(report.summary.classes_needed),
+                    'threshold': percent_value(report.summary.policy.threshold),
+                }
         except Exception:
             current_app.logger.exception('Student attendance summary unavailable')
         return json_ok({

@@ -5,8 +5,8 @@ from data_access.proxy_log import PROXY_LOG_QUERY, fetch_proxy_summary
 from extensions import get_db_connection
 
 
-def load_proxy_log(page, status_filter, approval_filter, date_from, date_to):
-    """Return the page rows, unfiltered totals, and pagination. The connection stays open."""
+def load_proxy_log(page, status_filter, approval_filter, date_from, date_to, close_connection=False):
+    """Return the page rows, unfiltered totals, and pagination. The connection stays open unless asked."""
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     per_page = 20
@@ -76,4 +76,6 @@ def load_proxy_log(page, status_filter, approval_filter, date_from, date_to):
         'prev_num': page - 1 if has_prev else None,
         'next_num': page + 1 if has_next else None,
     }
+    if close_connection:
+        connection.close()
     return proxy_logs, summary_stats, pagination

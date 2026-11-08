@@ -70,9 +70,11 @@ def add_shift_pattern(shift_name, shift_code, start_time, end_time, shift_order,
         ))
         connection.commit()
         flash(f'Shift pattern "{shift_name}" added successfully!', 'success')
+        return 'ok'
     except Exception as exc:
         connection.rollback()
         flash(f'Error adding shift pattern: {str(exc)}', 'danger')
+        return 'error'
     finally:
         cursor.close()
         connection.close()
@@ -88,9 +90,11 @@ def edit_shift_pattern(shift_id, shift_name, shift_code, start_time, end_time, s
         ))
         connection.commit()
         flash(f'Shift pattern "{shift_name}" updated successfully!', 'success')
+        return 'ok'
     except Exception as exc:
         connection.rollback()
         flash(f'Error updating shift pattern: {str(exc)}', 'danger')
+        return 'error'
     finally:
         cursor.close()
         connection.close()
@@ -224,9 +228,11 @@ def bulk_set_day_availability(faculty_user_ids, shift_pattern_id, days, is_avail
                 updated_count += 1
         connection.commit()
         flash(f'Bulk availability updated successfully! ({updated_count} assignments)', 'success')
+        return 'ok'
     except Exception as exc:
         connection.rollback()
         flash(f'Error updating bulk availability: {str(exc)}', 'danger')
+        return 'error'
     finally:
         cursor.close()
         connection.close()

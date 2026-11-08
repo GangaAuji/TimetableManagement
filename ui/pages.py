@@ -22,7 +22,7 @@ _EXACT = {
     '/teacher/my-shifts': '/my-shifts',
     '/teacher/availability': '/my-availability',
     '/teacher/proxy-requests': '/my-proxy',
-    '/teacher/assignments': '/',
+    '/teacher/assignments': '/my-assignments',
     '/teacher/attendance': '/my-attendance',
     '/teacher/attendance/report': '/my-attendance',
     '/student': '/',

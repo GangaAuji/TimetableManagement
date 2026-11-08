@@ -9,6 +9,7 @@ from datetime import datetime
 
 from flask import current_app, g, jsonify, request
 
+from data_access.teacher_attendance import fetch_lecture_roster
 from extensions import get_db_connection
 from .sync_attendance import (
     ALLOWED_STATUSES,
@@ -32,6 +33,20 @@ from .sync_attendance import (
     _server_time_context,
     mobile_sync_bp,
 )
+
+
+def _roster_payload(cursor, lecture):
+    """The active students the lecture covers, in the shape the device expects (the same roster the teacher's form shows)."""
+    return [
+        {
+            "id": student["id"],
+            "user_id": student["user_id"],
+            "name": student["name"],
+            "roll_number": student["roll_number"],
+            "admission_id": student["admission_id"],
+        }
+        for student in fetch_lecture_roster(cursor, lecture)
+    ]
 
 
 @mobile_sync_bp.route("/timetable", methods=["GET"])
@@ -84,13 +99,16 @@ def sync_timetable():
                 t.class_id,
                 d.name AS division_name,
                 t.division_id,
+                t.semester_id,
+                t.academic_year_id,
+                COALESCE(s.is_elective, 0) AS is_elective,
                 t.start_time,
                 t.end_time,
                 t.day_of_week
             FROM timetable t
             JOIN subjects s ON s.id = t.subject_id
             JOIN classes c ON c.id = t.class_id
-            JOIN divisions d ON d.id = t.division_id
+            LEFT JOIN divisions d ON d.id = t.division_id
             WHERE {" AND ".join(where_parts)}
             ORDER BY t.start_time
             """,
@@ -101,19 +119,7 @@ def sync_timetable():
         response_rows = []
         active_rows = []
         for lecture in lectures:
-            cursor.execute(
-                """
-                SELECT id, user_id, name, roll_number, admission_id
-                FROM students
-                WHERE course_id = %s
-                  AND class_id = %s
-                  AND division_id = %s
-                  AND COALESCE(is_active, 1) = 1
-                ORDER BY roll_number, name
-                """,
-                (lecture["course_id"], lecture["class_id"], lecture["division_id"]),
-            )
-            students = cursor.fetchall()
+            students = _roster_payload(cursor, lecture)
 
             start_time_str = str(lecture["start_time"])
             end_time_str = str(lecture["end_time"])
@@ -257,7 +263,7 @@ def resolve_timetable_session():
             where_parts.append("t.class_id = %s")
             params.append(class_id)
         if division_id:
-            where_parts.append("t.division_id = %s")
+            where_parts.append("(t.division_id = %s OR t.division_id IS NULL)")
             params.append(division_id)
         if at_time_norm:
             where_parts.append("%s BETWEEN t.start_time AND t.end_time")
@@ -281,7 +287,7 @@ def resolve_timetable_session():
             FROM timetable t
             JOIN subjects s ON s.id = t.subject_id
             JOIN classes c ON c.id = t.class_id
-            JOIN divisions d ON d.id = t.division_id
+            LEFT JOIN divisions d ON d.id = t.division_id
             WHERE {" AND ".join(where_parts)}
             ORDER BY t.start_time
             LIMIT 5
@@ -403,7 +409,8 @@ def upload_attendance_logs():
             return False
         if student_class_id and timetable_row.get("class_id") != student_class_id:
             return False
-        if student_division_id and timetable_row.get("division_id") != student_division_id:
+        slot_division_id = timetable_row.get("division_id")
+        if student_division_id and slot_division_id is not None and slot_division_id != student_division_id:
             return False
         if subject_id and timetable_row.get("subject_id") != subject_id:
             return False

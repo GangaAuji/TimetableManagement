@@ -29,6 +29,8 @@ class _Cursor:
     def __init__(self, rows):
         self.rows = list(rows)
         self.calls = []
+        self.lastrowid = 1
+        self.rowcount = 1
 
     def execute(self, sql, params=None):
         self.calls.append((' '.join(sql.split()), params))

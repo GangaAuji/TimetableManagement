@@ -13,7 +13,6 @@ import logging
 from services.teacher_attendance import (
     load_attendance_history,
     load_attendance_index,
-    load_attendance_report,
     load_mark_page,
     save_teacher_attendance,
 )
@@ -98,29 +97,8 @@ def attendance_report():
 @attendance_bp.route('/report/attendance-report')
 @teacher_required
 def attendance_summary_report():
-    """View attendance summary reports for classes taught by teacher"""
-    try:
-        user_id = session.get('user_id')  # timetable.faculty_id stores user_id
-        page = load_attendance_report(
-            user_id,
-            request.args.get('subject_id', type=int),
-            request.args.get('class_id', type=int),
-            request.args.get('division_id', type=int),
-            request.args.get('date_from'),
-            request.args.get('date_to'),
-        )
-        return render_template('teacher/attendance/attendance_report.html',
-                             filter_options=page['filter_options'],
-                             attendance_data=page['attendance_data'],
-                             selected_subject=request.args.get('subject_id', type=int),
-                             selected_class=request.args.get('class_id', type=int),
-                             selected_division=request.args.get('division_id', type=int),
-                             date_from=request.args.get('date_from'),
-                             date_to=request.args.get('date_to'))
-    except Exception as e:
-        logger.error(f"Error loading attendance report: {str(e)}")
-        flash(f"Error: {str(e)}", "danger")
-        return redirect(url_for('attendance.index'))
+    """The React shell; the per-lecture report lives at /portal/attendance/history/<id>."""
+    return render_template('teacher/attendance/attendance_report.html')
 
 
 @attendance_bp.route('/history/<int:timetable_id>')

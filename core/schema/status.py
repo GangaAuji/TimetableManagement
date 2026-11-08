@@ -12,7 +12,7 @@ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'alembic_version'
 
 @lru_cache(maxsize=1)
 def _revisions():
-    """Return (head, every known revision id) from the migrations folder."""
+    """Return (head, every known revision id in order from the baseline to the head) from the migrations folder."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -22,16 +22,24 @@ def _revisions():
     heads = scripts.get_heads()
     if len(heads) != 1:
         raise RuntimeError(f'The migrations have {len(heads)} heads; expected one.')
-    known = frozenset(script.revision for script in scripts.walk_revisions('base', 'heads'))
-    return heads[0], known
+    ordered = tuple(reversed([script.revision for script in scripts.walk_revisions('base', 'heads')]))
+    return heads[0], ordered
 
 
 def head_revision():
     return _revisions()[0]
 
 
-def reason_for(stamped):
-    """Return None when `stamped` (the alembic_version rows) is the head, otherwise why not."""
+def revisions_from(revision):
+    """The known revision ids from `revision` up to the head, in order."""
+    _, ordered = _revisions()
+    if revision not in ordered:
+        raise ValueError(f'Unknown revision {revision}.')
+    return ordered[ordered.index(revision):]
+
+
+def reason_for(stamped, accepted=()):
+    """Return None when `stamped` (the alembic_version rows) is the head or one of `accepted`, otherwise why not."""
     head, known = _revisions()
     if not stamped:
         return (
@@ -41,15 +49,15 @@ def reason_for(stamped):
     if len(stamped) > 1:
         return f'The database has several migration stamps ({", ".join(stamped)}); expected {head}.'
     current = stamped[0]
-    if current == head:
+    if current == head or current in accepted:
         return None
     if current in known:
         return f'The database is at {current}; the code expects {head}. Run `flask db upgrade`.'
     return f'The database is at {current}, which this code does not know; the code expects {head}.'
 
 
-def database_reason(connect):
-    """Open a connection with `connect`, read alembic_version, and return None or the reason it is not at head."""
+def database_reason(connect, accepted=()):
+    """Open a connection with `connect`, read alembic_version, and return None or the reason it is not at head (or in `accepted`)."""
     try:
         connection = connect()
     except Exception as exc:
@@ -69,4 +77,4 @@ def database_reason(connect):
         return f'The migration stamp could not be read: {exc.__class__.__name__}.'
     finally:
         connection.close()
-    return reason_for(stamped)
+    return reason_for(stamped, accepted)

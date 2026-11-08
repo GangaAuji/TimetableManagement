@@ -11,11 +11,11 @@ from flask.cli import FlaskGroup
 import app_factory
 from config import Config
 from core.runtime import loaded_for_cli_command
-from core.schema.status import database_reason, head_revision, reason_for
+from core.schema.status import database_reason, head_revision, reason_for, revisions_from
 from data_access.branding import DEFAULT_SETTINGS
 from services.branding import seed_branding_defaults
 
-_WORKER_THREADS = {'quality-model-retrainer', 'export-queue', 'timetable-queue'}
+_WORKER_THREADS = {'quality-model-retrainer', 'export-queue', 'timetable-queue', 'attendance-close-day'}
 
 
 def _worker_threads():
@@ -30,6 +30,17 @@ def test_reason_names_the_revision_and_the_fix():
     assert 'no migration stamp' in reason_for([])
     assert 'does not know' in reason_for(['9999_from_elsewhere'])
     assert 'several' in reason_for(['0002_catch_up', head])
+
+
+def test_accepted_revisions_let_a_command_run_before_head():
+    accepted = revisions_from('0007_lecture_sessions')
+    assert accepted[0] == '0007_lecture_sessions' and accepted[-1] == head_revision()
+    assert '0008_attendance_views' in accepted
+    assert reason_for(['0007_lecture_sessions'], accepted) is None
+    assert '0006_sign_in_lock' in reason_for(['0006_sign_in_lock'], accepted)
+    assert 'several' in reason_for(['0007_lecture_sessions', head_revision()], accepted)
+    with pytest.raises(ValueError):
+        revisions_from('9999_from_elsewhere')
 
 
 class _Cursor:
@@ -94,7 +105,7 @@ def test_cli_detection_counts_run_as_serving():
             assert loaded_for_cli_command() is False
 
 
-@pytest.mark.parametrize('args', [['routes'], ['db-adopt', '--help'], ['seed', '--help'], ['admin', '--help']])
+@pytest.mark.parametrize('args', [['routes'], ['db-adopt', '--help'], ['seed', '--help'], ['admin', '--help'], ['attendance', '--help']])
 def test_flask_cli_commands_start_no_background_threads(monkeypatch, args):
     monkeypatch.setattr(Config, 'DEBUG', False)
     monkeypatch.setattr(Config, 'QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 5)
@@ -110,11 +121,12 @@ def test_flask_cli_commands_start_no_background_threads(monkeypatch, args):
     result = CliRunner().invoke(cli, args, catch_exceptions=False)
     assert result.exit_code == 0, result.output
     assert created and all(app.config['CLI_COMMAND'] for app in created)
-    from services import export_jobs, timetable_jobs
+    from services import attendance_jobs, export_jobs, timetable_jobs
 
     for app in created:
         export_jobs.ensure_worker(app)
         timetable_jobs.ensure_worker(app)
+        attendance_jobs.ensure_worker(app)
     assert _worker_threads() == before
 
 

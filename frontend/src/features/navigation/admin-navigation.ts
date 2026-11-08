@@ -128,6 +128,7 @@ export function portalNavigation(role: string, pathname: string): NavGroup[] {
         title: 'My classes',
         links: [
           { label: 'Classes', icon: 'fa-user-graduate', href: '/my-classes', active: active('/my-classes') },
+          { label: 'Assigned subjects', icon: 'fa-book-open', href: '/my-assignments', active: active('/my-assignments') },
           { label: 'Availability', icon: 'fa-clipboard-check', href: '/my-availability', active: active('/my-availability') },
           { label: 'Proxy requests', icon: 'fa-user-clock', href: '/my-proxy', active: active('/my-proxy') },
           { label: 'Shifts', icon: 'fa-clock', href: '/my-shifts', active: active('/my-shifts') },

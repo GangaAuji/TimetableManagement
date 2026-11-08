@@ -10,6 +10,8 @@ class _Cursor:
         self.rows = list(rows or [])
         self.calls = []
         self.closed = False
+        self.lastrowid = 1
+        self.rowcount = 1
 
     def execute(self, sql, params=None):
         self.calls.append((' '.join(sql.split()), params))
@@ -79,9 +81,10 @@ def test_proxy_request_is_stored_as_pending(monkeypatch):
     assert connection.actions == ['commit', 'close']
 
 
-def _attendance_today(monkeypatch, module):
-    from datetime import date as real_date
+from datetime import date as real_date
 
+
+def _attendance_today(monkeypatch, module):
     class _Today(real_date):
         @classmethod
         def today(cls):
@@ -101,8 +104,13 @@ def test_attendance_save_marks_with_the_faculty_table_id(monkeypatch):
     sql, params = connection.cursor_obj.calls[-1]
     assert 'marked_by' in sql
     assert 'ON DUPLICATE KEY UPDATE' in sql
-    assert params[4] == 15
+    assert params[5] == 15
     assert params[0] == 4
+    # The lecture is recorded as held in the same transaction, before the marks.
+    session_sql, session_params = connection.cursor_obj.calls[-2]
+    assert session_sql.startswith('INSERT INTO lecture_sessions') and "'held'" in session_sql
+    assert session_params[:2] == (8, real_date(2026, 10, 26)) and session_params[3] == 15
+    assert params[2] == connection.cursor_obj.lastrowid
     assert connection.actions == ['commit', 'close']
     assert flashes == []
 

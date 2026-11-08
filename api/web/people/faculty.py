@@ -3,7 +3,7 @@
 import re
 from datetime import datetime
 
-from flask import current_app, request, session
+from flask import current_app, get_flashed_messages, request, session
 from mysql.connector import IntegrityError
 from werkzeug.security import generate_password_hash
 
@@ -15,6 +15,7 @@ from api.web.access import (
     body,
     close,
     flag,
+    iso_date,
     optional_text,
     permission_denied,
     reject_input,
@@ -50,6 +51,10 @@ _MESSAGES = {
     'faculty_ids_invalid': 'Choose at least one faculty member.',
     'faculty_not_found': 'That faculty member was not found.',
     'faculty_unavailable': 'The faculty list could not be loaded.',
+    'faculty_absence_invalid': 'Enter a date and a reason up to 200 characters.',
+    'faculty_absence_missing': 'That absence was not found.',
+    'faculty_absence_processed': 'A processed absence cannot be deleted.',
+    'faculty_proxy_missing': 'That proxy record was not found.',
 }
 
 
@@ -60,6 +65,14 @@ def register_faculty_routes(blueprint):
     blueprint.add_url_rule('/faculty/<int:faculty_id>', 'faculty_detail', _detail, methods=['GET'])
     blueprint.add_url_rule('/faculty/<int:faculty_id>', 'faculty_update', _update, methods=['PUT'])
     blueprint.add_url_rule('/faculty/<int:faculty_id>/sessions', 'faculty_sessions', _sessions, methods=['GET'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/absences', 'faculty_absences', _absences, methods=['GET'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/absences', 'faculty_absence_add', _add_absence, methods=['POST'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/absences/<int:absence_id>/approve', 'faculty_absence_approve', _approve_absence, methods=['POST'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/absences/<int:absence_id>/reject', 'faculty_absence_reject', _reject_absence, methods=['POST'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/absences/<int:absence_id>/delete', 'faculty_absence_delete', _delete_absence, methods=['POST'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/proxy', 'faculty_proxy', _proxy, methods=['GET'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/proxy/<int:proxy_id>/approve', 'faculty_proxy_approve', _approve_proxy, methods=['POST'])
+    blueprint.add_url_rule('/faculty/<int:faculty_id>/proxy/<int:proxy_id>/reject', 'faculty_proxy_reject', _reject_proxy, methods=['POST'])
 
 
 def _denied(permission_name):
@@ -534,3 +547,175 @@ def _sessions(faculty_id):
         return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
     finally:
         close(cursor, connection)
+
+
+def absence_row(row):
+    return {
+        'id': safe_count(row.get('id')),
+        'date': safe_text(row.get('absence_date'), 10),
+        'reason': safe_text(row.get('reason') or '', 200),
+        'status': safe_text(row.get('status') or '', 20),
+    }
+
+
+def proxy_row(row):
+    return {
+        'id': safe_count(row.get('id')),
+        'date': safe_text(row.get('absence_date'), 10),
+        'day': safe_text(row.get('day') or '', 12),
+        'start_time': safe_text(row.get('start_time') or '', 8),
+        'end_time': safe_text(row.get('end_time') or '', 8),
+        'subject': safe_text(row.get('subject') or '', 100),
+        'original_faculty': safe_text(row.get('original_faculty') or '', 100),
+        'proxy_faculty': safe_text(row.get('proxy_faculty') or '', 100),
+        'status': safe_text(row.get('status') or '', 20),
+        'approval': safe_text(row.get('approval_status') or '', 20),
+    }
+
+
+def _absences(faculty_id):
+    denied = _denied('faculty_view_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import load_faculty_absences
+        return json_ok({
+            'absences': [absence_row(row) for row in load_faculty_absences(faculty_id)],
+            'can_change': allowed('faculty_change_faculty'),
+            'can_delete': allowed('faculty_delete_faculty'),
+        })
+    except Exception:
+        current_app.logger.exception('Faculty absences failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _add_absence(faculty_id):
+    denied = _denied('faculty_change_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import add_faculty_absence
+        payload = body(frozenset(('date', 'reason')))
+        absence_date = iso_date(payload.get('date'), 'faculty_absence_invalid')
+        reason = optional_text(payload.get('reason'), 200, 'faculty_absence_invalid')
+        if add_faculty_absence(faculty_id, absence_date, reason) == 'date':
+            return json_error(_MESSAGES['faculty_absence_invalid'], 400, 'faculty_absence_invalid')
+        return json_ok({'saved': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Faculty absence save failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _approve_absence(faculty_id, absence_id):
+    denied = _denied('faculty_change_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import approve_faculty_absence
+        body(frozenset())
+        result = approve_faculty_absence(faculty_id, absence_id)
+        get_flashed_messages()
+        if result == 'missing':
+            return json_error(_MESSAGES['faculty_absence_missing'], 404, 'faculty_absence_missing')
+        return json_ok({'saved': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        get_flashed_messages()
+        current_app.logger.exception('Faculty absence approval failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _reject_absence(faculty_id, absence_id):
+    denied = _denied('faculty_change_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import reject_faculty_absence
+        body(frozenset())
+        reject_faculty_absence(faculty_id, absence_id)
+        get_flashed_messages()
+        return json_ok({'saved': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        get_flashed_messages()
+        current_app.logger.exception('Faculty absence rejection failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _delete_absence(faculty_id, absence_id):
+    denied = _denied('faculty_delete_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import remove_faculty_absence
+        body(frozenset())
+        result = remove_faculty_absence(faculty_id, absence_id)
+        if result == 'missing':
+            return json_error(_MESSAGES['faculty_absence_missing'], 404, 'faculty_absence_missing')
+        if result == 'processed':
+            return json_error(_MESSAGES['faculty_absence_processed'], 400, 'faculty_absence_processed')
+        return json_ok({'deleted': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Faculty absence delete failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _proxy(faculty_id):
+    denied = _denied('faculty_view_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import load_faculty_proxy_log
+        return json_ok({
+            'entries': [proxy_row(row) for row in load_faculty_proxy_log(faculty_id)],
+            'can_change': allowed('faculty_change_faculty'),
+        })
+    except Exception:
+        current_app.logger.exception('Faculty proxy log failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _approve_proxy(faculty_id, proxy_id):
+    denied = _denied('faculty_change_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import approve_faculty_proxy
+        body(frozenset())
+        result, _chosen = approve_faculty_proxy(faculty_id, proxy_id, None, session.get('user_id'))
+        get_flashed_messages()
+        if result in ('missing', 'not_found'):
+            return json_error(_MESSAGES['faculty_proxy_missing'], 404, 'faculty_proxy_missing')
+        return json_ok({'saved': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        get_flashed_messages()
+        current_app.logger.exception('Faculty proxy approval failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
+
+
+def _reject_proxy(faculty_id, proxy_id):
+    denied = _denied('faculty_change_faculty')
+    if denied:
+        return denied
+    try:
+        from services.faculty_admin import reject_faculty_proxy
+        body(frozenset())
+        result = reject_faculty_proxy(faculty_id, proxy_id, session.get('user_id'))
+        get_flashed_messages()
+        if result == 'missing':
+            return json_error(_MESSAGES['faculty_proxy_missing'], 404, 'faculty_proxy_missing')
+        return json_ok({'saved': True})
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        get_flashed_messages()
+        current_app.logger.exception('Faculty proxy rejection failed')
+        return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')

@@ -10,6 +10,7 @@ const exact: Record<string, string> = {
   '/teacher/dashboard': '/',
   '/teacher/timetable': '/my-timetable',
   '/teacher/my-classes': '/my-classes',
+  '/teacher/assignments': '/my-assignments',
   '/teacher/my-shifts': '/my-shifts',
   '/teacher/availability': '/my-availability',
   '/teacher/proxy-requests': '/my-proxy',

@@ -78,7 +78,7 @@ const staffRules: { pattern: RegExp; permission?: PagePermission; roles?: readon
   { pattern: /^\/$/, open: true },
 ]
 
-const teacherPaths = /^\/(my-timetable|my-classes|my-shifts|my-availability|my-proxy|my-attendance(?:\/(?:mark|history)\/\d+)?|account|profile)$/
+const teacherPaths = /^\/(my-timetable|my-classes|my-assignments|my-shifts|my-availability|my-proxy|my-attendance(?:\/(?:mark|history)\/\d+)?|account|profile)$/
 const studentPaths = /^\/(my-timetable|my-attendance(?:\/\d+)?|account|profile)$/
 const legacyPaths = /^\/(login|teacher|student|profile)(\/|$)/
 const formerStaffPaths = /^\/(rooms|departments|courses|academics|academic-years|semesters|subjects|batches|allocations|holidays|students|faculty|users|permissions|roles|invitations|settings|audit|timetable|attendance|reports|shifts|proxy|devices)(\/|$)/

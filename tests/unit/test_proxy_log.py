@@ -93,3 +93,11 @@ def test_proxy_log_counts_before_the_page_and_then_loads_unfiltered_totals(monke
     }
     assert connection.cursor_obj.closed is True
     assert connection.closed is False
+
+
+def test_proxy_log_closes_the_connection_when_the_page_asks(monkeypatch):
+    connection = _Connection()
+    monkeypatch.setattr(proxy_service, 'get_db_connection', lambda: connection)
+    proxy_service.load_proxy_log(1, '', '', '', '', close_connection=True)
+    assert connection.cursor_obj.closed is True
+    assert connection.closed is True

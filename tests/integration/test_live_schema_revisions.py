@@ -27,15 +27,21 @@ pytestmark = pytest.mark.live_db
 
 LIVE_SCHEMA = Path(__file__).resolve().parents[2] / 'sql' / 'college_timetable_db.live-schema.sql'
 LIVE_REVISION = '0003_security_schema'
-_HEAD_CHANGES = ('rate_limit_counters', 'seed_history', 'failed_window_start', 'locked_until')
+_HEAD_CHANGES = (
+    'rate_limit_counters', 'seed_history', 'failed_window_start', 'locked_until',
+    'lecture_sessions', 'attendance_excuses', 'session_id', 'idx_attendance_session', 'fk_attendance_session',
+    'attendance_summary', 'student_overall_attendance',
+)
+_SESSION_OBJECTS = {'lecture_sessions', 'attendance_excuses'}
+_DROPPED_VIEWS = {'attendance_summary', 'student_overall_attendance'}
 
 
 def _unexplained(differences):
-    """Lines not caused by revisions 0004 to 0006. 0006 adds columns mid-table, which moves later users columns."""
+    """Lines not caused by revisions 0004 to 0008. 0006 and 0007 add columns mid-table, which moves later columns."""
     return [
         line for line in differences
         if not any(part in line for part in _HEAD_CHANGES)
-        and not (line.startswith('column `users.') and ' position: ' in line)
+        and not (line.startswith(('column `users.', 'column `attendance.')) and ' position: ' in line)
     ]
 
 
@@ -74,15 +80,41 @@ def test_upgrade_downgrade_upgrade_on_the_live_schema(copy):
     upgraded = read_schema(cursor, name)
     assert _rate_limit_collation(upgraded) == 'utf8mb4_unicode_ci'
     assert 'seed_history' in upgraded['tables']
-    assert {'users.failed_window_start', 'users.locked_until'} <= set(upgraded['columns'])
+    assert {'users.failed_window_start', 'users.locked_until', 'attendance.session_id'} <= set(upgraded['columns'])
+    assert _SESSION_OBJECTS <= set(upgraded['tables'])
+    assert not _DROPPED_VIEWS & set(upgraded['views'])
+    assert upgraded['columns']['attendance.session_id']['nullable'] == 'NO'
     differences = compare(live, upgraded)
     assert differences and _unexplained(differences) == []
+
+    migrate(name, 'downgrade', '0007_lecture_sessions')
+    with_views = read_schema(cursor, name)
+    assert _DROPPED_VIEWS <= set(with_views['views'])
+    assert with_views['columns']['attendance.session_id']['nullable'] == 'YES'
+    for view in _DROPPED_VIEWS:
+        assert with_views['views'][view] == live['views'][view]
+    assert all(
+        any(part in line for part in _HEAD_CHANGES[6:]) for line in compare(with_views, upgraded)
+    )
+    migrate(name, 'upgrade', 'head')
+    assert compare(upgraded, read_schema(cursor, name)) == []
+
+    migrate(name, 'downgrade', '0006_sign_in_lock')
+    without_sessions = read_schema(cursor, name)
+    assert not _SESSION_OBJECTS & set(without_sessions['tables'])
+    assert 'attendance.session_id' not in without_sessions['columns']
+    assert all(
+        any(part in line for part in _HEAD_CHANGES[4:]) or ' position: ' in line
+        for line in compare(without_sessions, upgraded)
+    )
+    migrate(name, 'upgrade', 'head')
+    assert compare(upgraded, read_schema(cursor, name)) == []
 
     migrate(name, 'downgrade', '0005_seed_history')
     without_lock = read_schema(cursor, name)
     assert not {'users.failed_window_start', 'users.locked_until'} & set(without_lock['columns'])
     assert all(
-        'locked_until' in line or 'failed_window_start' in line or ' position: ' in line
+        any(part in line for part in _HEAD_CHANGES[2:]) or ' position: ' in line
         for line in compare(without_lock, upgraded)
     )
     migrate(name, 'upgrade', 'head')

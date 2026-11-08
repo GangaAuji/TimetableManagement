@@ -743,13 +743,48 @@ def _promote_log_to_faculty_attendance(cursor, log_row):
     )
 
 
+class MarkRefused(ValueError):
+    """The log row names a student outside the lecture's roster or a marker who may not mark it."""
+
+
 def _promote_log_to_attendance(cursor, log_row):
+    """Write the mark and record the lecture as held in the same transaction.
+
+    Refused (MarkRefused) when the student is not in the lecture's roster or
+    the marker is neither the slot's teacher nor its approved proxy for the
+    date; a cancelled lecture raises SessionCancelled. The log row keeps the
+    event either way.
+    """
+    from data_access.lecture_sessions import fetch_slot
+    from data_access.teacher_attendance import student_in_roster
+    from services.lecture_sessions import may_mark, record_held_session
+
+    slot = fetch_slot(cursor, log_row["timetable_id"])
+    if not slot:
+        raise MarkRefused(f"timetable_id={log_row['timetable_id']} does not exist")
+    if not student_in_roster(cursor, slot, log_row["student_id"]):
+        raise MarkRefused(
+            f"student_id={log_row['student_id']} is not in the roster of timetable_id={log_row['timetable_id']}"
+        )
+    marker_user_id = log_row.get("marked_by_user_id")
+    if marker_user_id is None:
+        cursor.execute("SELECT user_id FROM faculty WHERE id = %s", (log_row["marked_by_faculty_id"],))
+        found = cursor.fetchone()
+        marker_user_id = found["user_id"] if found else None
+    if not may_mark(cursor, log_row["timetable_id"], log_row["attendance_date"], marker_user_id, slot["faculty_id"]):
+        raise MarkRefused(
+            f"user_id={marker_user_id} may not mark timetable_id={log_row['timetable_id']} on {log_row['attendance_date']}"
+        )
+    session_id = record_held_session(
+        cursor, log_row["timetable_id"], log_row["attendance_date"], log_row["marked_by_faculty_id"], "mobile",
+    )
     cursor.execute(
         """
-        INSERT INTO attendance (student_id, timetable_id, attendance_date, status, marked_by, remarks)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO attendance (student_id, timetable_id, session_id, attendance_date, status, marked_by, remarks)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             status = VALUES(status),
+            session_id = COALESCE(VALUES(session_id), session_id),
             marked_by = VALUES(marked_by),
             remarks = VALUES(remarks),
             marked_at = NOW(),
@@ -758,6 +793,7 @@ def _promote_log_to_attendance(cursor, log_row):
         (
             log_row["student_id"],
             log_row["timetable_id"],
+            session_id,
             log_row["attendance_date"],
             log_row["status"],
             log_row["marked_by_faculty_id"],
