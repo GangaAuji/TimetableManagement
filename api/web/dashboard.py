@@ -1,13 +1,116 @@
 """Read-only admin dashboard counts. Same queries as the existing admin home."""
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from flask import current_app, session
 
+from data_access.admin_dashboard import fetch_department_students, fetch_faculty_workload, fetch_open_work, fetch_upcoming_holidays
+from data_access.attendance_calc import count_not_marked_sessions
+from data_access.invitations import fetch_invitation_stats
 from extensions import get_db_connection
 from routes.admin_utils import format_time
+from services.attendance_calc import cohort_reports, daily_trend, figures_dict, pooled_figures, policy
 from api.web.responses import json_error, json_ok
-from api.web.security import ADMIN_ROLES, safe_count, safe_text
+from api.web.security import ADMIN_ROLES, safe_count, safe_stamp, safe_text
+
+_REPORT_DAYS = 30
+_TREND_DAYS = 14
+
+
+def _total(value):
+    if value is None or isinstance(value, bool):
+        return 0
+    try:
+        return safe_count(int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _percent(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0 or number > 100:
+        return None
+    return round(number, 2)
+
+
+def _hours(value):
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if number < 0 or number > 1000:
+        return 0.0
+    return round(number, 1)
+
+
+def clip_trend(rows):
+    """Keep the latest two weeks of the attendance trend."""
+    shaped = []
+    for row in list(rows or [])[-_TREND_DAYS:]:
+        shaped.append({
+            'date': safe_text(row.get('date'), 10),
+            'present': safe_count(row.get('present')),
+            'late': safe_count(row.get('late')),
+            'absent': safe_count(row.get('absent')),
+            'percentage': _percent(row.get('percentage')),
+        })
+    return shaped
+
+
+def _report(cursor):
+    """30-day attendance figures, the overall defaulter count, and a short trend."""
+    today = date.today()
+    period = cohort_reports(cursor, date_from=today - timedelta(days=_REPORT_DAYS), date_to=today)
+    figures = figures_dict(pooled_figures(period))
+    lectures = set()
+    for report in period:
+        for session, _slot, _outcome, _mark in report.outcomes():
+            lectures.add(session.get('id'))
+    chosen = policy()
+    overall = cohort_reports(cursor)
+    below = 0
+    for report in overall:
+        value = report.overall.percentage
+        if value is not None and float(value) < chosen.threshold:
+            below += 1
+    return {
+        'present': safe_count(figures.get('present')),
+        'late': safe_count(figures.get('late')),
+        'absent': safe_count(figures.get('absent')),
+        'excused': safe_count(figures.get('excused')),
+        'not_marked': safe_count(figures.get('not_marked')),
+        'countable': safe_count(figures.get('countable')),
+        'lectures': safe_count(len(lectures)),
+        'students': safe_count(sum(1 for report in period if report.overall.countable)),
+        'percentage': _percent(figures.get('percentage')),
+        'threshold': _percent(chosen.threshold) or 75.0,
+        'defaulters': safe_count(below),
+        'unmarked_lectures': safe_count(count_not_marked_sessions(cursor)),
+        'trend': clip_trend(daily_trend(period)),
+    }
+
+
+def _empty_report():
+    return {
+        'present': 0,
+        'late': 0,
+        'absent': 0,
+        'excused': 0,
+        'not_marked': 0,
+        'countable': 0,
+        'lectures': 0,
+        'students': 0,
+        'percentage': None,
+        'threshold': 75.0,
+        'defaulters': 0,
+        'unmarked_lectures': 0,
+        'trend': [],
+    }
 
 
 def register_dashboard_routes(blueprint):
@@ -102,6 +205,30 @@ def register_dashboard_routes(blueprint):
                     'session_type': safe_text(row.get('theory_practical'), 40),
                 })
 
+            shifts, proxy = fetch_open_work(cursor)
+            invitations = fetch_invitation_stats(cursor) or {}
+            departments = [
+                {'name': safe_text(row.get('name'), 80), 'students': _total(row.get('student_count'))}
+                for row in fetch_department_students(cursor)
+            ]
+            workload = [
+                {
+                    'name': safe_text(row.get('name'), 80),
+                    'classes': _total(row.get('class_count')),
+                    'hours': _hours(row.get('hours')),
+                }
+                for row in fetch_faculty_workload(cursor)
+            ]
+            holidays = [
+                {'name': safe_text(row.get('name'), 80), 'date': safe_stamp(row.get('holiday_date'))[:10]}
+                for row in fetch_upcoming_holidays(cursor)
+            ]
+            try:
+                attendance = _report(cursor)
+            except Exception:
+                current_app.logger.exception('Dashboard attendance summary failed')
+                attendance = _empty_report()
+
             return json_ok({
                 'today_day': datetime.now().strftime('%A, %B %d, %Y'),
                 'total_students': total_students,
@@ -115,6 +242,14 @@ def register_dashboard_routes(blueprint):
                 'weekly_load': weekly_load,
                 'session_types': session_types,
                 'today_classes': today_classes,
+                'attendance': attendance,
+                'pending_shifts': _total((shifts or {}).get('count')),
+                'unassigned_proxy': _total((proxy or {}).get('unassigned')),
+                'pending_proxy': _total((proxy or {}).get('pending')),
+                'pending_invitations': _total(invitations.get('pending')),
+                'departments': departments,
+                'workload': workload,
+                'holidays': holidays,
             })
         except Exception as exc:
             current_app.logger.exception('Dashboard summary failed: %s', exc)

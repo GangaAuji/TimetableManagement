@@ -101,6 +101,39 @@ def fetch_upcoming_holidays(cursor):
     return cursor.fetchall()
 
 
+def fetch_department_students(cursor):
+    """Return active students for each active department."""
+    cursor.execute(
+        """
+        SELECT d.name AS name, COUNT(s.id) AS student_count
+        FROM departments d
+        LEFT JOIN courses c ON c.department_id = d.id
+        LEFT JOIN students s ON s.course_id = c.id AND s.is_active = 1
+        WHERE d.is_active = 1
+        GROUP BY d.id, d.name
+        ORDER BY student_count DESC, d.name
+        LIMIT 8
+        """
+    )
+    return cursor.fetchall()
+
+
+def fetch_open_work(cursor):
+    """Return pending shift requests and proxy totals."""
+    cursor.execute("SELECT COUNT(*) AS count FROM shift_change_requests WHERE status = 'pending'")
+    shifts = cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT
+            SUM(CASE WHEN status = 'UNASSIGNED' THEN 1 ELSE 0 END) AS unassigned,
+            SUM(CASE WHEN approval_status = 'PENDING' THEN 1 ELSE 0 END) AS pending
+        FROM proxy_log
+        """
+    )
+    proxy = cursor.fetchone() or {}
+    return shifts, proxy
+
+
 def fetch_faculty_workload(cursor):
     """Return the five busiest active faculty members."""
     cursor.execute("""

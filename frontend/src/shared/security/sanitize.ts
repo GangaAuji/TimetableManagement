@@ -138,6 +138,14 @@ export function sanitizeDashboard(input: Partial<DashboardSummary> | null | unde
   }
 
   const classes = Array.isArray(source.today_classes) ? source.today_classes.slice(0, 50).map((row) => sanitizeClass(row)) : []
+  const attendance = source.attendance
+  const trend = Array.isArray(attendance?.trend) ? attendance.trend.slice(-14).map((row) => ({
+    date: safeText(row?.date, 10),
+    present: safeCount(row?.present),
+    late: safeCount(row?.late),
+    absent: safeCount(row?.absent),
+    percentage: percentOrNull(row?.percentage),
+  })) : []
 
   return {
     today_day: safeText(source.today_day, 40) || 'Today',
@@ -152,7 +160,42 @@ export function sanitizeDashboard(input: Partial<DashboardSummary> | null | unde
     weekly_load: weeklyLoad,
     session_types: sessionTypes,
     today_classes: classes,
+    attendance: {
+      present: safeCount(attendance?.present),
+      late: safeCount(attendance?.late),
+      absent: safeCount(attendance?.absent),
+      excused: safeCount(attendance?.excused),
+      not_marked: safeCount(attendance?.not_marked),
+      countable: safeCount(attendance?.countable),
+      lectures: safeCount(attendance?.lectures),
+      students: safeCount(attendance?.students),
+      percentage: percentOrNull(attendance?.percentage),
+      threshold: percentOrNull(attendance?.threshold) ?? 75,
+      defaulters: safeCount(attendance?.defaulters),
+      unmarked_lectures: safeCount(attendance?.unmarked_lectures),
+      trend,
+    },
+    pending_shifts: safeCount(source.pending_shifts),
+    unassigned_proxy: safeCount(source.unassigned_proxy),
+    pending_proxy: safeCount(source.pending_proxy),
+    pending_invitations: safeCount(source.pending_invitations),
+    departments: Array.isArray(source.departments) ? source.departments.slice(0, 8).map((row) => ({ name: safeText(row?.name, 80), students: safeCount(row?.students) })).filter((row) => row.name) : [],
+    workload: Array.isArray(source.workload) ? source.workload.slice(0, 5).map((row) => ({ name: safeText(row?.name, 80), classes: safeCount(row?.classes), hours: hourOrZero(row?.hours) })).filter((row) => row.name) : [],
+    holidays: Array.isArray(source.holidays) ? source.holidays.slice(0, 5).map((row) => ({ name: safeText(row?.name, 80), date: safeText(row?.date, 10) })).filter((row) => row.name) : [],
   }
+}
+
+function percentOrNull(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  if (!Number.isFinite(number)) return null
+  return Math.min(Math.max(number, 0), 100)
+}
+
+function hourOrZero(value: unknown) {
+  const number = Number(value)
+  if (!Number.isFinite(number) || number < 0) return 0
+  return Math.min(Math.round(number * 10) / 10, 1000)
 }
 
 const allowedPathPrefixes = ['/admin', '/admin/', '/teacher/', '/student/', '/profile', '/logout', '/login', '/register', '/rooms', '/departments', '/courses', '/academics', '/academic-years', '/semesters', '/subjects', '/batches', '/allocations', '/holidays', '/students', '/faculty', '/users', '/roles', '/invitations', '/settings', '/audit', '/timetable', '/attendance', '/reports', '/shifts', '/proxy', '/devices', '/account', '/my-timetable', '/my-classes', '/my-shifts', '/my-availability', '/my-proxy', '/my-attendance']

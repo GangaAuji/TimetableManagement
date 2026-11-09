@@ -56,6 +56,14 @@ export type TodayClass = {
   session_type: string
 }
 
+export type AttendanceTrend = {
+  date: string
+  present: number
+  late: number
+  absent: number
+  percentage: number | null
+}
+
 export type DashboardSummary = {
   today_day: string
   total_students: number
@@ -69,6 +77,28 @@ export type DashboardSummary = {
   weekly_load: Record<string, number>
   session_types: Record<string, number>
   today_classes: TodayClass[]
+  attendance: {
+    present: number
+    late: number
+    absent: number
+    excused: number
+    not_marked: number
+    countable: number
+    lectures: number
+    students: number
+    percentage: number | null
+    threshold: number
+    defaulters: number
+    unmarked_lectures: number
+    trend: AttendanceTrend[]
+  }
+  pending_shifts: number
+  unassigned_proxy: number
+  pending_proxy: number
+  pending_invitations: number
+  departments: { name: string; students: number }[]
+  workload: { name: string; classes: number; hours: number }[]
+  holidays: { name: string; date: string }[]
 }
 
 export function getDashboardSummary() {
