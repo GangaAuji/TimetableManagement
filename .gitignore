@@ -129,3 +129,7 @@ deploy/docker.env
 deploy/license/*
 !deploy/license/.gitkeep
 license.json
+
+.github/workflows/ci.yml
+
+graphify-out/
