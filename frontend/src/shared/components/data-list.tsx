@@ -5,6 +5,7 @@ import { ApiError, apiRequest } from '../api/client'
 import { getCsrfToken, type SessionInfo } from '../api/endpoints'
 import { pageFill } from '../layout/page-frame'
 import { safeCount, safeText } from '../security/sanitize'
+import { FailureNotice, SuccessNotice } from './success-notice'
 import { DataTableHead, TablePager, TableToolbar, useDataTable } from './table-page'
 
 export type DataRow = Record<string, string | number | boolean>
@@ -34,9 +35,17 @@ export async function postJson<T>(path: string, payload: object) {
   })
 }
 
+export function useSessionInfo() {
+  return useOutletContext<Extract<SessionInfo, { authenticated: true }>>()
+}
+
 export function useSessionRole() {
-  const session = useOutletContext<Extract<SessionInfo, { authenticated: true }>>()
-  return session.role
+  return useSessionInfo().role
+}
+
+/** True when the optional feature is on for this tenant (see docs/DESIGN_CAPABILITIES.md). */
+export function useCapability(name: string) {
+  return useSessionInfo().capabilities[name] === true
 }
 
 export function ListScreen({ title, path, rowsKey, columns }: { title: string; path: string; rowsKey: string; columns: DataColumn[] }) {
@@ -75,7 +84,7 @@ export function ListScreen({ title, path, rowsKey, columns }: { title: string; p
       <header className="shrink-0 border-b border-gray-100 px-5 py-4">
         <h2 className="text-sm font-bold text-gray-800">{title}</h2>
       </header>
-      {error && <p className="shrink-0 px-5 py-3 text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error || ''} />
       <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left text-xs">
@@ -163,8 +172,8 @@ export function DirectoryFrame({
         </div>
         {toolbar ? <div className="flex flex-wrap items-center gap-2.5">{toolbar}</div> : null}
       </div>
-      {error ? <p className="border-x border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p> : null}
-      {notice ? <p className="border-x border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p> : null}
+      <FailureNotice message={error || ''} />
+      <SuccessNotice message={notice || ''} />
       <div className="flex flex-1 flex-col overflow-hidden rounded-b-2xl border-x border-b border-gray-200 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.02)]">
         <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />
         <div className="flex-1 overflow-hidden">

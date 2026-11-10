@@ -1,0 +1,26 @@
+[Unit]
+Description=Timetable Management background workers (flask workers run)
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=timetable
+Group=timetable
+WorkingDirectory=/opt/timetable/app
+EnvironmentFile=/opt/timetable/app/.env
+Environment=FLASK_APP=wsgi:app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/timetable/venv/bin/flask workers run
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/timetable/app/logs /opt/timetable/app/uploads /opt/timetable/app/static/uploads /opt/timetable/app/ml_models/models
+
+[Install]
+WantedBy=multi-user.target

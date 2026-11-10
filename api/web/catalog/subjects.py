@@ -5,6 +5,7 @@ from mysql.connector import IntegrityError
 
 from extensions import get_db_connection
 from core.db import transaction
+from core.scope import current_scope
 from api.web.access import (
     InputError,
     allowed,
@@ -130,9 +131,14 @@ def _save(payload, subject_id):
         syllabus_url = _url(payload.get('syllabus_url', ''))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT name, program, total_semesters FROM courses WHERE id = %s', (course_id,))
+        scope = current_scope(cursor)
+        cursor.execute(
+            'SELECT c.name, c.program, c.total_semesters, d.institution_id FROM courses c '
+            'JOIN departments d ON d.id = c.department_id WHERE c.id = %s',
+            (course_id,),
+        )
         course_row = cursor.fetchone()
-        if course_row is None:
+        if course_row is None or not scope.allows(course_row.get('institution_id')):
             raise InputError('subject_course_invalid')
         if class_id is not None:
             cursor.execute('SELECT 1 FROM classes WHERE id = %s', (class_id,))
@@ -151,10 +157,8 @@ def _save(payload, subject_id):
                     max_semesters = max(max_semesters, 8)
             if int(semester_row['semester_number']) > max_semesters:
                 raise InputError('subject_semester_invalid')
-        if subject_id is not None:
-            cursor.execute('SELECT 1 FROM subjects WHERE id = %s', (subject_id,))
-            if cursor.fetchone() is None:
-                return reject_input(MESSAGES, 'subject_not_found')
+        if subject_id is not None and not _visible(cursor, subject_id, scope):
+            return reject_input(MESSAGES, 'subject_not_found')
         values = (
             name, course_code, course_id, class_id, semester_id, course_type, mode,
             credits, theory_credits, practical_credits, marks, theory_marks, practical_marks,
@@ -212,17 +216,29 @@ _LIST_SQL = """
            s.class_id, cl.name AS class_name, s.semester_id, sem.semester_name,
            s.course_type, s.theory_practical, s.credits, s.theory_credits, s.practical_credits,
            s.marks, s.theory_marks, s.practical_marks, s.lectures_per_week, s.practical_hours_per_week,
-           s.is_elective, s.description, s.syllabus_url,
+           s.is_elective, s.description, s.syllabus_url, d.institution_id,
            GROUP_CONCAT(DISTINCT CONCAT(f.name, ' (',
                CASE WHEN fa.is_primary THEN 'Primary' ELSE 'Secondary' END, ')')
                SEPARATOR ', ') AS faculty_names
     FROM subjects s
     JOIN courses c ON s.course_id = c.id
+    JOIN departments d ON d.id = c.department_id
     LEFT JOIN classes cl ON s.class_id = cl.id
     LEFT JOIN semesters sem ON s.semester_id = sem.id
     LEFT JOIN faculty_allocations fa ON s.id = fa.subject_id
     LEFT JOIN faculty f ON fa.faculty_id = f.user_id
 """
+
+
+def _visible(cursor, subject_id, scope):
+    """True when the subject exists and its course belongs to an institution the scope sees."""
+    cursor.execute(
+        'SELECT d.institution_id FROM subjects s JOIN courses c ON c.id = s.course_id '
+        'JOIN departments d ON d.id = c.department_id WHERE s.id = %s',
+        (subject_id,),
+    )
+    row = cursor.fetchone()
+    return row is not None and scope.allows(row.get('institution_id'))
 
 
 def _read(subject_id):
@@ -233,7 +249,7 @@ def _read(subject_id):
         cursor = connection.cursor(dictionary=True)
         cursor.execute(_LIST_SQL + ' WHERE s.id = %s GROUP BY s.id', (subject_id,))
         row = cursor.fetchone()
-        if row is None:
+        if row is None or not current_scope(cursor).allows(row.get('institution_id')):
             return reject_input(MESSAGES, 'subject_not_found')
         return json_ok(_public(row))
     finally:
@@ -251,7 +267,12 @@ def register_subject_routes(blueprint):
         try:
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
-            cursor.execute('SELECT id, name, program FROM courses WHERE is_active = TRUE ORDER BY name')
+            scope = current_scope(cursor)
+            course_clause, course_params = scope.course_clause('c')
+            cursor.execute(
+                f'SELECT c.id, c.name, c.program FROM courses c WHERE c.is_active = TRUE AND {course_clause} ORDER BY c.name',
+                course_params,
+            )
             courses = [
                 {'id': safe_count(row.get('id')), 'name': safe_text(row.get('name'), 100), 'program': safe_text(row.get('program'), 20)}
                 for row in cursor.fetchall()
@@ -263,7 +284,8 @@ def register_subject_routes(blueprint):
                 {'id': safe_count(row.get('id')), 'name': safe_text(row.get('semester_name'), 100), 'semester_number': safe_count(row.get('semester_number'))}
                 for row in cursor.fetchall()
             ]
-            cursor.execute(_LIST_SQL + ' GROUP BY s.id ORDER BY cl.display_order, c.name, s.name')
+            list_clause, list_params = scope.clause('d.institution_id')
+            cursor.execute(_LIST_SQL + f' WHERE {list_clause} GROUP BY s.id ORDER BY cl.display_order, c.name, s.name', list_params)
             return json_ok({
                 'subjects': [_public(row) for row in cursor.fetchall() if safe_count(row.get('id'))],
                 'courses': [row for row in courses if row['id'] and row['name']],
@@ -312,7 +334,9 @@ def register_subject_routes(blueprint):
         cursor = None
         try:
             connection = get_db_connection()
-            cursor = connection.cursor()
+            cursor = connection.cursor(dictionary=True)
+            if not _visible(cursor, subject_id, current_scope(cursor)):
+                return reject_input(MESSAGES, 'subject_not_found')
             cursor.execute('DELETE FROM subjects WHERE id = %s', (subject_id,))
             if cursor.rowcount == 0:
                 return reject_input(MESSAGES, 'subject_not_found')

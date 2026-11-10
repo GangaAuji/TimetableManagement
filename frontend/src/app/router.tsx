@@ -1,5 +1,9 @@
+import { useEffect, useState } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { RegisterPage } from '../features/auth/pages/RegisterPage'
+import { MaintenancePage } from '../features/errors/MaintenancePage'
+import { getBranding, getSession, type Branding } from '../shared/api/endpoints'
+import { fallbackBranding } from '../shared/security/sanitize'
 import { PortalProfilePage } from '../features/account/pages/PortalProfilePage'
 import { AttendancePage, AttendanceRecordsPage, FacultyAttendancePage, MobileLogsPage, MyAttendancePage, SubjectAttendancePage } from '../features/attendance/pages/AttendancePage'
 import { AuditFailedPage, AuditLogsPage, AuditPage, AuditSessionsPage } from '../features/audit/pages/AuditPage'
@@ -18,23 +22,57 @@ import { AttendanceHistoryPage, MarkAttendancePage } from '../features/teacher/p
 import { AssignmentsPage } from '../features/teacher/pages/AssignmentsPage'
 import { MyClassesPage, MyWeekPage } from '../features/teacher/pages/TeacherHome'
 import { GeneratePage, TimetablePage } from '../features/timetable/pages/TimetablePage'
+import { TimetableRulesPage } from '../features/timetable/pages/TimetableRulesPage'
+import { TimetableVersionsPage } from '../features/timetable/pages/TimetableVersionsPage'
+import { WorkloadNormsPage } from '../features/timetable/pages/WorkloadNormsPage'
 import { UsersPage } from '../features/users/pages/UsersPage'
 import { UserPermissionsPage } from '../features/users/pages/UserPermissionsPage'
 import { AllocationsPage } from '../features/academics/pages/AllocationsPage'
 import { BatchesPage } from '../features/academics/pages/BatchesPage'
 import { HolidaysPage } from '../features/academics/pages/HolidaysPage'
+import { LabBatchesPage } from '../features/academics/pages/LabBatchesPage'
 import { SemestersPage } from '../features/academics/pages/SemestersPage'
 import { SubjectsPage } from '../features/academics/pages/SubjectsPage'
+import { TermsPage } from '../features/academics/pages/TermsPage'
+import { SyllabusPage } from '../features/academics/pages/SyllabusPage'
+import { AssessmentPage } from '../features/academics/pages/AssessmentPage'
+import { ExamDutiesPage } from '../features/academics/pages/ExamDutiesPage'
+import { ExamsPage } from '../features/academics/pages/ExamsPage'
+import { InternalsRoute } from '../features/academics/pages/PortalAssessmentPage'
 import { YearsPage } from '../features/academics/pages/YearsPage'
 import { CoursesPage } from '../features/courses/pages/CoursesPage'
 import { DepartmentsPage } from '../features/departments/pages/DepartmentsPage'
+import { BookingsPage } from '../features/rooms/pages/BookingsPage'
 import { RoomsPage } from '../features/rooms/pages/RoomsPage'
+import { CapabilitiesPage } from '../features/settings/pages/CapabilitiesPage'
+import { InstitutionsPage } from '../features/settings/pages/InstitutionsPage'
+import { IntegrationsPage } from '../features/settings/pages/IntegrationsPage'
+import { NotificationSettingsPage } from '../features/settings/pages/NotificationSettingsPage'
+import { SecurityPolicyPage } from '../features/settings/pages/SecurityPolicyPage'
 import { SettingsPage } from '../features/settings/pages/SettingsPage'
 import { LegacyRedirect, LegacyStaffAlias, PrefixedRedirect } from './LegacyRedirect'
+import { ErrorPage } from '../features/errors/ErrorPage'
 import { RootGate } from './SessionGate'
 
+function RegisterGate() {
+  const [maintenance, setMaintenance] = useState<boolean | null>(null)
+  const [branding, setBranding] = useState<Branding>(fallbackBranding)
+  useEffect(() => {
+    const institutionCode = new URLSearchParams(window.location.search).get('i') || ''
+    void Promise.all([getSession(), getBranding(institutionCode).catch(() => fallbackBranding)])
+      .then(([session, nextBranding]) => {
+        setBranding(nextBranding)
+        setMaintenance(session.maintenance)
+      })
+      .catch(() => setMaintenance(false))
+  }, [])
+  if (maintenance === null) return <div className="min-h-screen bg-gray-100" />
+  if (maintenance) return <MaintenancePage branding={branding} />
+  return <RegisterPage />
+}
+
 export const router = createBrowserRouter([
-  { path: '/register/:token', element: <RegisterPage /> },
+  { path: '/register/:token', element: <RegisterGate /> },
   {
     path: '/',
     element: <RootGate />,
@@ -48,13 +86,19 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <RoleHome /> },
           { path: 'rooms', element: <RoomsPage /> },
+          { path: 'rooms/bookings', element: <BookingsPage /> },
           { path: 'departments', element: <DepartmentsPage /> },
           { path: 'courses', element: <CoursesPage /> },
           { path: 'academics', element: <Navigate to="/admin/academic-years" replace /> },
           { path: 'academic-years', element: <YearsPage /> },
+          { path: 'academic-terms', element: <TermsPage /> },
+          { path: 'academic-syllabus', element: <SyllabusPage /> },
+          { path: 'academic-assessments', element: <AssessmentPage /> },
+          { path: 'academic-exams', element: <ExamsPage /> },
           { path: 'semesters', element: <SemestersPage /> },
           { path: 'subjects', element: <SubjectsPage /> },
           { path: 'batches', element: <BatchesPage /> },
+          { path: 'lab-batches', element: <LabBatchesPage /> },
           { path: 'allocations', element: <AllocationsPage /> },
           { path: 'holidays', element: <HolidaysPage /> },
           { path: 'students', element: <StudentsPage /> },
@@ -68,12 +112,20 @@ export const router = createBrowserRouter([
           { path: 'roles/:roleId', element: <RolePermissionsPage /> },
           { path: 'invitations', element: <InvitationsPage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings/notifications', element: <NotificationSettingsPage /> },
+          { path: 'settings/integrations', element: <IntegrationsPage /> },
+          { path: 'settings/institutions', element: <InstitutionsPage /> },
+          { path: 'settings/capabilities', element: <CapabilitiesPage /> },
+          { path: 'settings/security', element: <SecurityPolicyPage /> },
           { path: 'audit', element: <AuditPage /> },
           { path: 'audit/logs', element: <AuditLogsPage /> },
           { path: 'audit/sessions', element: <AuditSessionsPage /> },
           { path: 'audit/failed-logins', element: <AuditFailedPage /> },
           { path: 'timetable', element: <TimetablePage /> },
           { path: 'timetable/generate', element: <GeneratePage /> },
+          { path: 'timetable/rules', element: <TimetableRulesPage /> },
+          { path: 'timetable/versions', element: <TimetableVersionsPage /> },
+          { path: 'timetable/workload', element: <WorkloadNormsPage /> },
           { path: 'attendance', element: <AttendancePage /> },
           { path: 'attendance/manage', element: <AttendanceRecordsPage /> },
           { path: 'attendance/faculty', element: <FacultyAttendancePage /> },
@@ -85,7 +137,7 @@ export const router = createBrowserRouter([
           { path: 'shifts/availability', element: <AvailabilityPage /> },
           { path: 'proxy', element: <ProxyPage /> },
           { path: 'devices', element: <DevicesPage /> },
-          { path: '*', element: <LegacyStaffAlias /> },
+          { path: '*', element: <LegacyStaffAlias />, handle: { errorPage: true } },
         ],
       },
       { path: 'rooms', element: <PrefixedRedirect /> },
@@ -96,6 +148,7 @@ export const router = createBrowserRouter([
       { path: 'semesters', element: <PrefixedRedirect /> },
       { path: 'subjects', element: <PrefixedRedirect /> },
       { path: 'batches', element: <PrefixedRedirect /> },
+      { path: 'lab-batches', element: <PrefixedRedirect /> },
       { path: 'allocations', element: <PrefixedRedirect /> },
       { path: 'holidays', element: <PrefixedRedirect /> },
       { path: 'students', element: <PrefixedRedirect /> },
@@ -127,6 +180,8 @@ export const router = createBrowserRouter([
       { path: 'my-shifts', element: <MyShiftsPage /> },
       { path: 'my-availability', element: <MyAvailabilityPage /> },
       { path: 'my-proxy', element: <MyProxyPage /> },
+      { path: 'my-internals', element: <InternalsRoute /> },
+      { path: 'my-duties', element: <ExamDutiesPage /> },
       { path: 'my-attendance', element: <MyAttendancePage /> },
       { path: 'my-attendance/mark/:timetableId', element: <MarkAttendancePage /> },
       { path: 'my-attendance/history/:timetableId', element: <AttendanceHistoryPage /> },
@@ -137,6 +192,7 @@ export const router = createBrowserRouter([
       { path: 'student', element: <LegacyRedirect /> },
       { path: 'student/*', element: <LegacyRedirect /> },
       { path: 'profile/*', element: <LegacyRedirect /> },
+      { path: '*', element: <ErrorPage status={404} />, handle: { errorPage: true } },
     ],
   },
 ])

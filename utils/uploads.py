@@ -5,6 +5,8 @@ import os
 from flask import current_app
 from werkzeug.utils import secure_filename
 
+from core.tenancy import scoped_relative_dir
+
 
 def save_uploaded_file(file_storage, relative_dir: str, *, allowed_extensions: set[str], name_prefix: str, timestamp: str) -> str:
     """Save an allowed upload and return its path relative to static/."""
@@ -13,7 +15,13 @@ def save_uploaded_file(file_storage, relative_dir: str, *, allowed_extensions: s
         raise ValueError('unsupported upload')
     filename = secure_filename(original)
     stored_name = f'{name_prefix}_{timestamp}_{filename}'
-    directory = os.path.join(current_app.root_path, 'static', *relative_dir.strip('/\\').split('/'))
+    relative_dir = scoped_relative_dir(relative_dir)
+    directory = static_directory(relative_dir)
     os.makedirs(directory, exist_ok=True)
     file_storage.save(os.path.join(directory, stored_name))
-    return f"{relative_dir.strip('/\\')}/{stored_name}"
+    return f'{relative_dir}/{stored_name}'
+
+
+def static_directory(relative_dir: str) -> str:
+    """Absolute folder under static/ for a (possibly tenant-scoped) relative dir."""
+    return os.path.join(current_app.root_path, 'static', *relative_dir.strip('/\\').split('/'))

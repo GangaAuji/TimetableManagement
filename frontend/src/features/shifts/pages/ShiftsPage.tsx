@@ -4,6 +4,7 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { Dialog } from '../../../shared/components/dialog'
 import { messageFrom, postJson, Stat } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Shift = {
@@ -137,8 +138,8 @@ export function ShiftsPage() {
           {canAdd ? <button type="button" className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" onClick={() => { setEditing(null); setDraft(emptyDraft) }}>Add shift</button> : null}
         </div>
       </div>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-3 text-sm text-green-700">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Stat label="Active shifts" value={activeCount} />
         <Stat label="Faculty with shifts" value={facultyCount} />

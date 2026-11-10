@@ -6,7 +6,8 @@ module only reads the student's profile and the slots they attend.
 
 # The student's slots, matching attendance_calc.roster.in_roster: same course
 # and class; the student's division or a whole-class slot; an elective only
-# when the student chose it for the slot's semester and year. Active slots only.
+# when the student chose it for the slot's semester and year; a lab batch
+# slot only when the student is in that batch today. Active slots only.
 STUDENT_SLOT_FILTER = """
     t.course_id = %(course_id)s AND t.class_id = %(class_id)s
     AND (t.division_id IS NULL OR t.division_id = %(division_id)s)
@@ -19,6 +20,14 @@ STUDENT_SLOT_FILTER = """
               AND (sss.status IS NULL OR sss.status <> 'Withdrawn')
               AND (t.semester_id IS NULL OR sss.semester_id = t.semester_id)
               AND (t.academic_year_id IS NULL OR sss.academic_year_id = t.academic_year_id)
+        )
+    )
+    AND (
+        t.lab_batch_group_id IS NULL
+        OR EXISTS (
+            SELECT 1 FROM lab_batch_members lbm
+            WHERE lbm.student_id = %(student_id)s AND lbm.lab_batch_group_id = t.lab_batch_group_id
+              AND lbm.added_at <= CURDATE() AND (lbm.ended_at IS NULL OR lbm.ended_at >= CURDATE())
         )
     )
 """

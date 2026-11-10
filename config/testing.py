@@ -32,9 +32,17 @@ class TestingConfig(Config):
 
     TESTING = True
     MYSQL_DB = os.environ.get('MYSQL_DB')
+    # Tests that exercise tenancy set this on a subclass to a college_timetable_ci_*_test name.
+    TENANT_REGISTRY_DB = None
     QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES = 0
     BACKGROUND_WORKERS = False
     CONFIGURE_LOGGING = False
+    # A fixed, non-secret key so face templates written by tests are encrypted the way production ones are.
+    FACE_TEMPLATE_KEY = 'dGVzdC1vbmx5LWtleS1ub3QtZm9yLXByb2QtdXNlISE='
+    FACE_CONSENT_REQUIRED = True
+    # The outbox is exercised with a fake sender; no SMTP server is ever contacted from tests.
+    SMTP_HOST = None
+    NOTIFICATION_RETRY_SECONDS = 5
     # A lock conflict fails in 2 s instead of the server default (50 s), so a
     # test that hits one fails quickly. test_audit_regressions.py also signs in
     # with the default wait.

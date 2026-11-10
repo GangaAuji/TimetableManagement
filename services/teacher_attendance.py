@@ -86,6 +86,11 @@ def load_mark_page(user_id, timetable_id):
     attendance_already_marked = len(existing_attendance) > 0
     session_row = fetch_session_for(cursor, timetable_id, attendance_date)
     session_status = session_row['status'] if session_row else None
+    syllabus_block = None
+    from services import syllabus
+
+    if syllabus.active(cursor) and syllabus.tables_ready(cursor):
+        syllabus_block = syllabus.mark_context(cursor, lecture['subject_id'], session_row['id'] if session_row else None)
     for student in students:
         if student['id'] in existing_attendance:
             student['attendance_status'] = existing_attendance[student['id']]['status']
@@ -103,6 +108,7 @@ def load_mark_page(user_id, timetable_id):
         'session_status': session_status,
         'cancelled': session_status == 'cancelled',
         'is_owner': bool(lecture.get('is_owner', True)),
+        'syllabus': syllabus_block,
     }
 
 
@@ -175,7 +181,7 @@ def save_teacher_attendance(user_id, timetable_id, form):
             _close(cursor, connection)
             return 'date'
         marks = _marks(form)
-        enrolled = {row['id'] for row in fetch_lecture_roster(cursor, lecture)}
+        enrolled = {row['id'] for row in fetch_lecture_roster(cursor, lecture, chosen)}
         if marks is None or not set(marks) <= enrolled:
             flash("A student in this request is not in this class.", "danger")
             _close(cursor, connection)
@@ -193,6 +199,23 @@ def save_teacher_attendance(user_id, timetable_id, form):
                 cursor, student_id, timetable_id, attendance_date, status, faculty_id, remarks, session_id,
             )
             saved_count += 1
+        if saved_count:
+            from services.webhooks import on_attendance_marked
+
+            on_attendance_marked(
+                cursor, session_id=session_id, timetable_id=timetable_id, session_date=chosen, marked_by_user_id=user_id, source='teacher',
+            )
+        if 'lesson' in form:
+            from services.syllabus import LessonRejected, accept_lesson, write_lesson
+
+            try:
+                lesson = accept_lesson(cursor, lecture['subject_id'], form.get('lesson'))
+                if lesson:
+                    write_lesson(cursor, session_id, lesson, recorded_by=user_id)
+            except LessonRejected as exc:
+                connection.rollback()
+                _close(cursor, connection)
+                return exc.code
         connection.commit()
         _close(cursor, connection)
         return saved_count
@@ -234,6 +257,71 @@ def cancel_teacher_lecture(user_id, timetable_id, session_date, reason, notes=''
         connection.commit()
         _close(cursor, connection)
         return session_id
+    except Exception:
+        if connection:
+            connection.rollback()
+        raise
+
+
+def open_teacher_lecture(user_id, timetable_id, session_date):
+    """Open one lecture for the face-attendance device: record it as held and give it a fresh session code.
+
+    Returns 'denied', 'date', 'cancelled', or {'session_id', 'session_code', 'expires_at'}.
+    """
+    from services.face.safeguards import open_session_code
+
+    chosen = _parse_date(session_date)
+    if chosen is None:
+        return 'date'
+    connection = None
+    try:
+        connection, cursor = _cursor()
+        lecture = fetch_owned_lecture_detail(cursor, timetable_id, user_id, on_date=chosen)
+        if not lecture:
+            _close(cursor, connection)
+            return 'denied'
+        if weekday_name(chosen) != weekday_name(lecture.get('day_of_week')):
+            _close(cursor, connection)
+            return 'date'
+        faculty = fetch_faculty_table_id(cursor, user_id)
+        try:
+            session_id = record_held_session(cursor, timetable_id, chosen, faculty['id'] if faculty else None, 'teacher')
+        except SessionCancelled:
+            connection.rollback()
+            _close(cursor, connection)
+            return 'cancelled'
+        code, expires_at = open_session_code(cursor, session_id)
+        connection.commit()
+        _close(cursor, connection)
+        return {'session_id': session_id, 'session_code': code, 'expires_at': expires_at}
+    except Exception:
+        if connection:
+            connection.rollback()
+        raise
+
+
+def close_teacher_lecture(user_id, timetable_id, session_date):
+    """Expire the lecture's session code so the device can no longer mark it. Returns 'denied', 'date', 'missing' or 'closed'."""
+    from services.face.safeguards import close_session_code
+
+    chosen = _parse_date(session_date)
+    if chosen is None:
+        return 'date'
+    connection = None
+    try:
+        connection, cursor = _cursor()
+        lecture = fetch_owned_lecture_detail(cursor, timetable_id, user_id, on_date=chosen)
+        if not lecture:
+            _close(cursor, connection)
+            return 'denied'
+        session_row = fetch_session_for(cursor, timetable_id, chosen)
+        if not session_row:
+            _close(cursor, connection)
+            return 'missing'
+        close_session_code(cursor, session_row['id'])
+        connection.commit()
+        _close(cursor, connection)
+        return 'closed'
     except Exception:
         if connection:
             connection.rollback()

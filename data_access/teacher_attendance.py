@@ -21,12 +21,15 @@ def fetch_teacher_lectures(cursor, user_id):
                 c.name as class_name,
                 t.division_id as division_id,
                 d.name as division_name,
+                t.lab_batch_group_id,
+                lbg.name as lab_batch_name,
                 co.id as course_id,
                 co.name as course_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
             LEFT JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
             JOIN courses co ON t.course_id = co.id
             WHERE t.faculty_id = %s
             ORDER BY t.day_of_week, t.start_time
@@ -81,27 +84,32 @@ def fetch_owned_lecture_detail(cursor, timetable_id, user_id, on_date=None):
                 c.name as class_name,
                 t.division_id as division_id,
                 d.name as division_name,
+                t.lab_batch_group_id,
+                lbg.name as lab_batch_name,
                 co.id as course_id,
                 co.name as course_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
             LEFT JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
             JOIN courses co ON t.course_id = co.id
             WHERE t.id = %s AND ({' OR '.join(owner)})
         """, (user_id, *params))
     return cursor.fetchone()
 
 
-def fetch_lecture_roster(cursor, lecture):
+def fetch_lecture_roster(cursor, lecture, on_date=None):
     """Return the students who may be marked for this lecture.
 
     Everyone in the lecture's course and class, narrowed to its division when
     it has one. For an elective subject, only students with a
     student_subject_selections row for that subject (not withdrawn, and in
     the lecture's semester and academic year when the lecture names them).
+    For a lab batch slot (lab_batch_group_id), only that batch's members on
+    `on_date` (default today).
     """
-    clauses, params = roster_clauses(lecture)
+    clauses, params = roster_clauses(lecture, on_date)
     cursor.execute(f"""
             SELECT 
                 s.id,
@@ -117,8 +125,12 @@ def fetch_lecture_roster(cursor, lecture):
     return cursor.fetchall()
 
 
-def roster_clauses(lecture):
-    """The SQL twin of attendance_calc.roster.in_roster for today, on a `students s` row: clauses and their parameters."""
+def roster_clauses(lecture, on_date=None):
+    """The SQL twin of attendance_calc.roster.in_roster, on a `students s` row: clauses and their parameters.
+
+    `on_date` (default: today) decides a lab batch slot's membership: a
+    lab_batch_members row whose added_at..ended_at covers the date.
+    """
     clauses = ['COALESCE(s.is_active, 1) = 1', 's.course_id = %s', 's.class_id = %s']
     params = [lecture['course_id'], lecture['class_id']]
     if lecture.get('division_id') is not None:
@@ -136,12 +148,21 @@ def roster_clauses(lecture):
             chosen.append('sss.academic_year_id = %s')
             params.append(lecture['academic_year_id'])
         clauses.append(f"EXISTS (SELECT 1 FROM student_subject_selections sss WHERE {' AND '.join(chosen)})")
+    if lecture.get('lab_batch_group_id') is not None:
+        day = 'CURDATE()' if on_date is None else '%s'
+        clauses.append(
+            'EXISTS (SELECT 1 FROM lab_batch_members lbm WHERE lbm.student_id = s.id AND lbm.lab_batch_group_id = %s '
+            f'AND lbm.added_at <= {day} AND (lbm.ended_at IS NULL OR lbm.ended_at >= {day}))'
+        )
+        params.append(lecture['lab_batch_group_id'])
+        if on_date is not None:
+            params.extend((on_date, on_date))
     return clauses, params
 
 
-def student_in_roster(cursor, lecture, student_id):
-    """Whether one student belongs to the lecture's roster."""
-    clauses, params = roster_clauses(lecture)
+def student_in_roster(cursor, lecture, student_id, on_date=None):
+    """Whether one student belongs to the lecture's roster (on `on_date`, default today)."""
+    clauses, params = roster_clauses(lecture, on_date)
     cursor.execute(
         f"SELECT 1 AS ok FROM students s WHERE s.id = %s AND {' AND '.join(clauses)} LIMIT 1",
         (student_id, *params),
@@ -188,12 +209,14 @@ def fetch_history_lecture(cursor, timetable_id, user_id):
     cursor.execute("""
             SELECT 
                 t.id, t.course_id, t.class_id, t.division_id, t.subject_id, t.semester_id, t.academic_year_id,
+                t.lab_batch_group_id, lbg.name AS lab_batch_name,
                 COALESCE(s.is_elective, 0) AS is_elective,
                 s.name as subject_name, c.name as class_name, d.name as division_name
             FROM timetable t
             JOIN subjects s ON t.subject_id = s.id
             JOIN classes c ON t.class_id = c.id
             LEFT JOIN divisions d ON t.division_id = d.id
+            LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
             WHERE t.id = %s
               AND (t.faculty_id = %s OR EXISTS (
                     SELECT 1 FROM proxy_log pl

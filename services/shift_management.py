@@ -1,8 +1,10 @@
 """Faculty shift management."""
 
+import logging
+
 from flask import flash
 
-from models.db import get_db_connection as _shared_connection
+from extensions import get_db_connection as _shared_connection
 from data_access.admin_shifts import (
     count_active_shifts,
     count_faculty_with_shifts,
@@ -30,7 +32,7 @@ from data_access.admin_shifts import (
 
 
 def get_db_connection():
-    """Get database connection"""
+    """A private connection for this module; tests replace this name."""
     return _shared_connection()
 
 
@@ -273,6 +275,16 @@ def load_change_requests():
         connection.close()
 
 
+def _notify_decision(cursor, request_id):
+    """Queue the faculty member's notice with the decision; a notification problem never blocks it."""
+    from services import notifications
+
+    try:
+        notifications.on_shift_decision(cursor, request_id)
+    except Exception:
+        logging.getLogger(__name__).exception('Shift decision %s notice was not queued', request_id)
+
+
 def respond_change_request(request_id, action, admin_response, user_id):
     """Review a shift change request. A missing request still closes both."""
     status = 'approved' if action == 'approve' else 'rejected'
@@ -288,6 +300,7 @@ def respond_change_request(request_id, action, admin_response, user_id):
             shift = fetch_shift_by_name(cursor, req['requested_shift_name'])
             shift_id = shift['id'] if shift else None
             upsert_approved_availability(cursor, req['faculty_id'], req['day_of_week'], shift_id)
+        _notify_decision(cursor, request_id)
         connection.commit()
         flash(f'Request {status} successfully!', 'success')
         return 'ok'

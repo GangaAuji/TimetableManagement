@@ -1,15 +1,12 @@
 """Shared pieces for live_db tests: a server connection, *_test database names, and Alembic runs."""
 
-import contextlib
-import logging
 import os
 import re
-from urllib.parse import quote_plus
 
 import pytest
 
 from config.testing import test_database_problem
-from core.schema.baseline import MIGRATIONS_DIR
+from core.schema.runner import keep_logging, run_alembic  # noqa: F401  (keep_logging is used by tests)
 
 _DEFINER = re.compile(r'\s+DEFINER=(?:`[^`]*`|\S+)@(?:`[^`]*`|\S+)', re.IGNORECASE)
 
@@ -69,41 +66,10 @@ def drop(cursor, name):
     cursor.execute(f'DROP DATABASE IF EXISTS `{name}`')
 
 
-@contextlib.contextmanager
-def keep_logging():
-    """Alembic's env.py runs fileConfig, which disables existing loggers."""
-    manager = logging.Logger.manager
-    disabled = {name: logger.disabled for name, logger in manager.loggerDict.items() if isinstance(logger, logging.Logger)}
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    try:
-        yield
-    finally:
-        for name, logger in manager.loggerDict.items():
-            if isinstance(logger, logging.Logger):
-                logger.disabled = disabled.get(name, False)
-        root.handlers[:] = handlers
-        root.setLevel(level)
-
-
 def migrate(name, action, revision):
-    """Run flask_migrate.<action> on database `name` through a bare Flask app."""
-    import flask_migrate
-    from flask import Flask
-    from flask_migrate import Migrate
-    from flask_sqlalchemy import SQLAlchemy
-
+    """Run flask_migrate.<action> on database `name` through core.schema.runner."""
     host, user, password = credentials()
-    app = Flask(f'migrations_{checked_name(name)}')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+mysqldb://{quote_plus(user)}:{quote_plus(password)}@{host}/{name}'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db = SQLAlchemy(app)
-    Migrate(app, db, directory=str(MIGRATIONS_DIR))
-    with keep_logging(), app.app_context():
-        try:
-            getattr(flask_migrate, action)(directory=str(MIGRATIONS_DIR), revision=revision)
-        finally:
-            db.get_engine().dispose()
+    run_alembic({'host': host, 'user': user, 'password': password, 'database': checked_name(name)}, action, revision)
 
 
 def stamped(cursor, name):

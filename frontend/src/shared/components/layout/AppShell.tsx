@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Footer } from './Footer'
 import { Header } from './Header'
+import { InstitutionSwitcher } from './InstitutionSwitcher'
 import { Sidebar } from './Sidebar'
 import type { Branding, SessionInfo } from '../../api/endpoints'
 import { useThemeMode } from '../ThemeModeButton'
@@ -36,11 +37,14 @@ export function AppShell({ branding, session, header, children }: AppShellProps)
         username={session.username}
         role={session.role}
         photo={session.profile_photo}
-        access={{ role: session.role, unrestricted: session.unrestricted, permissions: session.permissions }}
+        access={{ role: session.role, unrestricted: session.unrestricted, permissions: session.permissions, capabilities: session.capabilities }}
         onNavigate={() => setMenuOpen(false)}
       />
       <div className="flex h-screen min-h-0 flex-col overflow-hidden md:ml-64">
-        <Header title={header} onMenuToggle={() => setMenuOpen(true)} />
+        <Header title={header} onMenuToggle={() => setMenuOpen(true)} tools={<InstitutionSwitcher session={session} />} />
+        {session.license_problem ? (
+          <p role="status" className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">{session.license_problem}</p>
+        ) : null}
         <main className={`flex min-h-0 w-full flex-1 flex-col overflow-y-auto ${pagePad}`}>{children}</main>
         <Footer branding={branding} />
       </div>

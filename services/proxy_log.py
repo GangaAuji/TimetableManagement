@@ -1,7 +1,19 @@
 """Proxy log page. This module does not read the request."""
 
+from flask import current_app
+
+from academic_rules.clashes import faculty_timetable_free
 from core.pagination import page_bounds
-from data_access.proxy_log import PROXY_LOG_QUERY, fetch_proxy_summary
+from data_access.proxy_log import (
+    PROXY_LOG_QUERY,
+    approve_mapped_proxy,
+    fetch_cover_faculty,
+    fetch_named_faculty,
+    fetch_proxy_clash,
+    fetch_proxy_request,
+    fetch_proxy_summary,
+    reject_pending_proxy,
+)
 from extensions import get_db_connection
 
 
@@ -79,3 +91,104 @@ def load_proxy_log(page, status_filter, approval_filter, date_from, date_to, clo
     if close_connection:
         connection.close()
     return proxy_logs, summary_stats, pagination
+
+
+def _notify(cursor, proxy_id):
+    """Queue substitute notices in the approval transaction. A notice problem never blocks the decision."""
+    from services import notifications
+
+    try:
+        notifications.on_proxy_assigned(cursor, proxy_id)
+    except Exception:
+        current_app.logger.exception('Proxy notices for proxy_log %s were not queued', proxy_id)
+
+
+def _covers(cursor, row, chosen):
+    people = fetch_cover_faculty(cursor, row['subject_id'], row['original_faculty_id'])
+    if any(person.get('user_id') == chosen for person in people):
+        return True
+    if chosen != row.get('proxy_faculty_id'):
+        return False
+    return fetch_named_faculty(cursor, chosen) is not None
+
+
+def _free(cursor, row, chosen, proxy_id):
+    if not faculty_timetable_free(
+        cursor, chosen, row['day_of_week'], row['start_time'], row['end_time'], active_only=False,
+    ):
+        return False
+    return fetch_proxy_clash(
+        cursor, chosen, row['absence_date'], row['start_time'], row['end_time'], proxy_id,
+    ) is None
+
+
+def load_proxy_choices(proxy_id):
+    """Return faculty who can cover one request. The connection is closed."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        row = fetch_proxy_request(cursor, proxy_id)
+        if not row:
+            return 'missing'
+        people = list(fetch_cover_faculty(cursor, row['subject_id'], row['original_faculty_id']))
+        known = {person.get('user_id') for person in people}
+        named = row.get('proxy_faculty_id')
+        if named and named not in known:
+            extra = fetch_named_faculty(cursor, named)
+            if extra:
+                people.append(extra)
+                known.add(named)
+        choices = []
+        for person in people:
+            user_id = person.get('user_id')
+            if not user_id or user_id in {item['id'] for item in choices}:
+                continue
+            choices.append({
+                'id': user_id,
+                'name': person.get('name') or '',
+                'employee_id': person.get('employee_id') or '',
+                'free': _free(cursor, row, user_id, proxy_id),
+            })
+        return {
+            'pending': (row.get('approval_status') or 'PENDING') == 'PENDING',
+            'suggested_id': named if named in known else None,
+            'choices': choices,
+        }
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def decide_proxy_request(proxy_id, decision, proxy_user_id, note, approved_by):
+    """Approve a request onto one faculty member, or reject it. The connection is closed."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        row = fetch_proxy_request(cursor, proxy_id)
+        if not row:
+            return 'missing'
+        if (row.get('approval_status') or '') != 'PENDING':
+            return 'closed'
+        if decision == 'reject':
+            if not reject_pending_proxy(cursor, note, approved_by, proxy_id):
+                return 'closed'
+            connection.commit()
+            return 'ok'
+        chosen = proxy_user_id or row.get('proxy_faculty_id')
+        if not chosen or chosen == row.get('original_faculty_id'):
+            return 'choice'
+        if not _covers(cursor, row, chosen):
+            return 'choice'
+        if not _free(cursor, row, chosen, proxy_id):
+            return 'busy'
+        if not approve_mapped_proxy(cursor, chosen, note, approved_by, proxy_id):
+            return 'closed'
+        _notify(cursor, proxy_id)
+        connection.commit()
+        return 'ok'
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()

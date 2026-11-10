@@ -12,6 +12,8 @@ from services.student_portal import load_student_attendance, load_subject_attend
 from services.lecture_sessions import CANCEL_REASONS
 from services.teacher_attendance import (
     cancel_teacher_lecture,
+    close_teacher_lecture,
+    open_teacher_lecture,
     load_attendance_history,
     load_attendance_index,
     load_mark_page,
@@ -42,6 +44,9 @@ _MESSAGES = {
     'portal_unavailable': 'The page could not be loaded.',
     'portal_missing': 'Faculty profile not found.',
     'portal_invalid': 'Check the form and try again.',
+    'lesson_invalid': 'Choose a unit and a topic, and hours between 0.5 and 3.',
+    'lesson_unit': 'That unit is not part of this subject.',
+    'syllabus_unavailable': 'The syllabus tables are missing; apply the database migrations first.',
     'portal_denied': 'You do not have permission to do that.',
     'portal_date': 'Enter a valid date.',
     'portal_cancelled': 'This lecture is cancelled. Undo the cancellation before marking attendance.',
@@ -60,6 +65,8 @@ def register_portal_action_routes(blueprint):
     blueprint.add_url_rule('/portal/attendance/history/<int:timetable_id>', 'portal_history', _history, methods=['GET'])
     blueprint.add_url_rule('/portal/attendance/cancel/<int:timetable_id>', 'portal_cancel', _cancel, methods=['POST'])
     blueprint.add_url_rule('/portal/attendance/uncancel/<int:timetable_id>', 'portal_uncancel', _uncancel, methods=['POST'])
+    blueprint.add_url_rule('/portal/attendance/open/<int:timetable_id>', 'portal_open', _open, methods=['POST'])
+    blueprint.add_url_rule('/portal/attendance/close/<int:timetable_id>', 'portal_close', _close_lecture, methods=['POST'])
     blueprint.add_url_rule('/portal/student/attendance', 'portal_student_attendance', _student_attendance, methods=['GET'])
     blueprint.add_url_rule('/portal/student/attendance/<int:subject_id>', 'portal_subject_attendance', _subject_attendance, methods=['GET'])
 
@@ -139,6 +146,10 @@ def _service_error(result):
         return json_error('That student is not in this class.', 400, 'portal_invalid')
     if result == 'cancelled':
         return json_error(_MESSAGES['portal_cancelled'], 409, 'portal_cancelled')
+    if result in ('lesson_invalid', 'lesson_unit'):
+        return json_error(_MESSAGES[result], 400, result)
+    if result == 'syllabus_unavailable':
+        return json_error(_MESSAGES['syllabus_unavailable'], 409, 'syllabus_unavailable')
     if result == 'marked':
         return json_error(_MESSAGES['portal_marked'], 409, 'portal_marked')
     return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
@@ -444,6 +455,30 @@ def _lectures():
     })
 
 
+def _syllabus_payload(block):
+    """The topic field, present only while capability `syllabus` is on and the tables exist."""
+    if not block:
+        return {}
+    units = []
+    for row in block.get('units') or []:
+        units.append({
+            'id': safe_count(row.get('id')),
+            'unit_no': safe_count(row.get('unit_no')),
+            'title': safe_text(row.get('title'), 120),
+            'planned_hours': float(row.get('planned_hours') or 0),
+        })
+    lesson = block.get('lesson')
+    return {'syllabus': {
+        'units': units,
+        'lesson': None if not lesson else {
+            'unit_id': safe_count(lesson.get('unit_id')),
+            'topic': safe_text(lesson.get('topic'), 200),
+            'hours': float(lesson.get('hours') or 0),
+            'notes': safe_text(lesson.get('notes') or '', 500),
+        },
+    }}
+
+
 def _mark(timetable_id):
     denied = _teacher()
     if denied:
@@ -482,12 +517,13 @@ def _mark(timetable_id):
             'end_time': safe_clock(lecture.get('end_time')),
         },
         'students': students[:300],
+        **_syllabus_payload(page.get('syllabus')),
     })
 
 
 def _save_marks(timetable_id):
     try:
-        payload = body(frozenset(('attendance_date', 'marks')))
+        payload = body(frozenset(('attendance_date', 'marks', 'lesson')))
         attendance_date = iso_date(payload.get('attendance_date'), 'portal_date')
         marks = payload.get('marks')
         if not isinstance(marks, list) or len(marks) > 300:
@@ -503,6 +539,11 @@ def _save_marks(timetable_id):
             remarks = optional_text(item.get('remarks'), 200, 'portal_invalid')
             form[f'status_{student_id}'] = status
             form[f'remarks_{student_id}'] = remarks
+        if 'lesson' in payload:
+            lesson = payload.get('lesson')
+            if lesson is not None and not isinstance(lesson, dict):
+                raise InputError('portal_invalid')
+            form['lesson'] = lesson
         result = save_teacher_attendance(session.get('user_id'), timetable_id, form)
     except InputError as exc:
         return reject_input(_MESSAGES, exc.code)
@@ -535,6 +576,49 @@ def _cancel(timetable_id):
     if not isinstance(result, int):
         return _service_error(result)
     return json_ok({'session_id': safe_count(result), 'status': 'cancelled'})
+
+
+def _open(timetable_id):
+    """Open a lecture for the attendance device: the session code it must send with every mark."""
+    denied = _teacher()
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('date',)))
+        when = iso_date(payload.get('date'), 'portal_date')
+        result = open_teacher_lecture(session.get('user_id'), timetable_id, when)
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Lecture open failed')
+        return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
+    if not isinstance(result, dict):
+        return _service_error(result)
+    return json_ok({
+        'session_id': safe_count(result['session_id']),
+        'session_code': safe_text(result['session_code'], 16),
+        'expires_at': safe_stamp(result['expires_at']),
+    })
+
+
+def _close_lecture(timetable_id):
+    denied = _teacher()
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('date',)))
+        when = iso_date(payload.get('date'), 'portal_date')
+        result = close_teacher_lecture(session.get('user_id'), timetable_id, when)
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Lecture close failed')
+        return json_error(_MESSAGES['portal_unavailable'], 500, 'portal_unavailable')
+    if result == 'missing':
+        return json_error(_MESSAGES['portal_no_session'], 404, 'portal_no_session')
+    if result != 'closed':
+        return _service_error(result)
+    return json_ok({'status': 'closed'})
 
 
 def _uncancel(timetable_id):

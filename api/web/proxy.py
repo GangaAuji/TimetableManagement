@@ -5,14 +5,20 @@ from datetime import date, timedelta
 from flask import current_app, request, session
 
 from extensions import get_db_connection
-from api.web.access import InputError, close, iso_date, permission_denied, reject_input
+from api.web.access import InputError, allowed, body, close, iso_date, optional_id, optional_text, permission_denied, reject_input
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_count, safe_stamp, safe_text
-from services.proxy_log import load_proxy_log
+from services.proxy_log import decide_proxy_request, load_proxy_choices, load_proxy_log
 
 _MESSAGES = {
     'proxy_unavailable': 'The page could not be loaded.',
     'proxy_filters_invalid': 'Enter a valid date range.',
+    'proxy_missing': 'That proxy request was not found.',
+    'proxy_closed': 'This request has already been decided.',
+    'proxy_choice_required': 'Choose the faculty who will take this class.',
+    'proxy_choice_invalid': 'Choose a faculty member who can take this subject.',
+    'proxy_busy': 'That faculty already has a class at this time.',
+    'proxy_note_invalid': 'The note must be 200 characters or less.',
     'invalid_body': 'The request could not be accepted.',
 }
 _PROXY_STATUS = frozenset(('ASSIGNED', 'UNASSIGNED', 'PENDING', 'REJECTED'))
@@ -21,6 +27,9 @@ _APPROVAL_STATUS = frozenset(('PENDING', 'APPROVED', 'REJECTED'))
 
 def register_proxy_routes(blueprint):
     blueprint.add_url_rule('/proxy', 'proxy_list', _list, methods=['GET'])
+    blueprint.add_url_rule('/proxy/<int:proxy_id>/choices', 'proxy_choices', _choices, methods=['GET'])
+    blueprint.add_url_rule('/proxy/<int:proxy_id>/approve', 'proxy_approve', _approve, methods=['POST'])
+    blueprint.add_url_rule('/proxy/<int:proxy_id>/reject', 'proxy_reject', _reject, methods=['POST'])
     blueprint.add_url_rule('/portal/proxy', 'teacher_proxy', _teacher, methods=['GET'])
 
 
@@ -136,12 +145,96 @@ def _list():
             'has_prev': bool(pagination.get('has_prev')),
             'has_next': bool(pagination.get('has_next')),
             'date_to': date_to,
+            'can_change': allowed('faculty_approve_proxy'),
         })
     except InputError as exc:
         return reject_input(_MESSAGES, exc.code)
     except Exception:
         current_app.logger.exception('Proxy list failed')
         return json_error(_MESSAGES['proxy_unavailable'], 500, 'proxy_unavailable')
+
+
+def _choice_row(row):
+    return {
+        'id': safe_count(row.get('id')),
+        'name': safe_text(row.get('name') or '', 100),
+        'employee_id': safe_text(row.get('employee_id') or '', 40),
+        'free': row.get('free') is True,
+    }
+
+
+def _decision_error(result, sent_proxy):
+    if result == 'missing':
+        return json_error(_MESSAGES['proxy_missing'], 404, 'proxy_missing')
+    if result == 'closed':
+        return json_error(_MESSAGES['proxy_closed'], 409, 'proxy_closed')
+    if result == 'busy':
+        return json_error(_MESSAGES['proxy_busy'], 409, 'proxy_busy')
+    if result == 'choice':
+        code = 'proxy_choice_required' if not sent_proxy else 'proxy_choice_invalid'
+        return json_error(_MESSAGES[code], 400, code)
+    return json_error(_MESSAGES['proxy_unavailable'], 500, 'proxy_unavailable')
+
+
+def _note(payload):
+    text = optional_text(payload.get('note'), 200, 'proxy_note_invalid')
+    return text or None
+
+
+def _choices(proxy_id):
+    denied = permission_denied('faculty_approve_proxy', 'proxy_unavailable', _MESSAGES['proxy_unavailable'])
+    if denied:
+        return denied
+    try:
+        page = load_proxy_choices(proxy_id)
+    except Exception:
+        current_app.logger.exception('Proxy choices failed')
+        return json_error(_MESSAGES['proxy_unavailable'], 500, 'proxy_unavailable')
+    if page == 'missing':
+        return json_error(_MESSAGES['proxy_missing'], 404, 'proxy_missing')
+    suggested = page.get('suggested_id')
+    return json_ok({
+        'pending': page.get('pending') is True,
+        'suggested_id': safe_count(suggested) if suggested else None,
+        'choices': [_choice_row(row) for row in page.get('choices') or []],
+    })
+
+
+def _approve(proxy_id):
+    denied = permission_denied('faculty_approve_proxy', 'proxy_unavailable', _MESSAGES['proxy_unavailable'])
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('proxy_faculty_id', 'note')))
+        chosen = optional_id(payload.get('proxy_faculty_id'), 'proxy_choice_invalid')
+        note = _note(payload)
+        result = decide_proxy_request(proxy_id, 'approve', chosen, note, session.get('user_id'))
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Proxy approval failed')
+        return json_error(_MESSAGES['proxy_unavailable'], 500, 'proxy_unavailable')
+    if result != 'ok':
+        return _decision_error(result, chosen)
+    return json_ok({'saved': True})
+
+
+def _reject(proxy_id):
+    denied = permission_denied('faculty_approve_proxy', 'proxy_unavailable', _MESSAGES['proxy_unavailable'])
+    if denied:
+        return denied
+    try:
+        payload = body(frozenset(('note',)))
+        note = _note(payload)
+        result = decide_proxy_request(proxy_id, 'reject', None, note, session.get('user_id'))
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        current_app.logger.exception('Proxy rejection failed')
+        return json_error(_MESSAGES['proxy_unavailable'], 500, 'proxy_unavailable')
+    if result != 'ok':
+        return _decision_error(result, None)
+    return json_ok({'saved': True})
 
 
 def _teacher():

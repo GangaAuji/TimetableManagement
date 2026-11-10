@@ -148,6 +148,53 @@ def as_number(value):
     return round(number, 1)
 
 
+def institution_input(cursor, scope, value, *, existing=None):
+    """Owning institution for a row being saved.
+
+    An explicit value must be an active institution the scope allows. Absent,
+    the row keeps its current owner, else the scope's chosen institution,
+    else the tenant's first institution (single-institution tenants never
+    send the field).
+    """
+    from data_access import institutions as store
+    if value not in (None, '', 0):
+        institution_id = whole_number(value, 1000000, 'institution_invalid', lower=1)
+        row = store.fetch_institution(cursor, institution_id)
+        if row is None or not row.get('is_active') or not scope.allows(institution_id):
+            raise InputError('institution_invalid')
+        return institution_id
+    if existing is not None:
+        return int(existing)
+    if scope.institution_id is not None:
+        return scope.institution_id
+    first = store.first_institution_id(cursor)
+    if first is None:
+        raise InputError('institution_invalid')
+    return first
+
+
+def sharing_input(value):
+    from data_access.institutions import SHARING
+    if value in (None, ''):
+        return 'private'
+    if value not in SHARING:
+        raise InputError('sharing_invalid')
+    return value
+
+
+def id_list(value, code, limit=200):
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > limit:
+        raise InputError(code)
+    ids = []
+    for item in value:
+        number = whole_number(item, 1000000, code, lower=1)
+        if number not in ids:
+            ids.append(number)
+    return ids
+
+
 def close(cursor, connection):
     if cursor is not None:
         cursor.close()

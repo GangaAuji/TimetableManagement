@@ -5,6 +5,8 @@ from mysql.connector import IntegrityError
 
 from extensions import get_db_connection
 from core.db import transaction
+from core.scope import current_scope
+from data_access import institutions as institutions_store
 from api.web.access import (
     InputError,
     allowed,
@@ -108,20 +110,33 @@ def _save(payload, allocation_id):
         notes = optional_text(payload.get('notes', ''), 500, 'invalid_body')
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT user_id FROM faculty WHERE id = %s', (faculty_id,))
+        scope = current_scope(cursor)
+        # The subject's institution owns the allocation; the faculty must be its own or shared to it.
+        cursor.execute(
+            'SELECT d.institution_id FROM subjects s JOIN courses c ON c.id = s.course_id '
+            'JOIN departments d ON d.id = c.department_id WHERE s.id = %s',
+            (subject_id,),
+        )
+        subject_row = cursor.fetchone()
+        if subject_row is None or not scope.allows(subject_row.get('institution_id')):
+            raise InputError('allocation_subject_invalid')
+        institution_id = subject_row['institution_id'] if scope.multiple else None
+        faculty_clause, faculty_params = institutions_store.candidate_faculty_clause(institution_id, 'f', 'fd')
+        cursor.execute(
+            f'SELECT f.user_id FROM faculty f LEFT JOIN departments fd ON fd.id = f.department_id '
+            f'WHERE f.id = %s AND {faculty_clause}',
+            (faculty_id, *faculty_params),
+        )
         faculty_row = cursor.fetchone()
         if faculty_row is None or not faculty_row.get('user_id'):
             raise InputError('allocation_faculty_invalid')
         faculty_user_id = faculty_row['user_id']
-        _exists(cursor, 'subjects', subject_id, 'allocation_subject_invalid')
         _exists(cursor, 'classes', class_id, 'allocation_class_invalid')
         _exists(cursor, 'divisions', division_id, 'allocation_division_invalid')
         _exists(cursor, 'semesters', semester_id, 'allocation_semester_invalid')
         _exists(cursor, 'course_batches', batch_id, 'allocation_batch_invalid')
-        if allocation_id is not None:
-            cursor.execute('SELECT 1 FROM faculty_allocations WHERE id = %s', (allocation_id,))
-            if cursor.fetchone() is None:
-                return reject_input(MESSAGES, 'allocation_not_found')
+        if allocation_id is not None and not _visible(cursor, allocation_id, scope):
+            return reject_input(MESSAGES, 'allocation_not_found')
         values = (
             faculty_user_id, subject_id, class_id, division_id, semester_id, batch_id,
             hours, workload, 1 if is_primary else 0, allocation_type, start_date, end_date, notes,
@@ -178,16 +193,27 @@ _LIST_SQL = """
            fa.class_id, cl.name AS class_name, fa.division_id, d.name AS division_name,
            fa.semester_id, sem.semester_name, fa.course_batch_id, cb.batch_name,
            fa.allocated_hours, fa.workload_percentage, fa.is_primary, fa.allocation_type,
-           fa.start_date, fa.end_date, fa.notes
+           fa.start_date, fa.end_date, fa.notes, cd.institution_id
     FROM faculty_allocations fa
     JOIN faculty f ON fa.faculty_id = f.user_id
     JOIN subjects s ON fa.subject_id = s.id
     JOIN courses c ON s.course_id = c.id
+    JOIN departments cd ON cd.id = c.department_id
     LEFT JOIN classes cl ON fa.class_id = cl.id
     LEFT JOIN divisions d ON fa.division_id = d.id
     LEFT JOIN semesters sem ON fa.semester_id = sem.id
     LEFT JOIN course_batches cb ON fa.course_batch_id = cb.id
 """
+
+
+def _visible(cursor, allocation_id, scope):
+    cursor.execute(
+        'SELECT cd.institution_id FROM faculty_allocations fa JOIN subjects s ON s.id = fa.subject_id '
+        'JOIN courses c ON c.id = s.course_id JOIN departments cd ON cd.id = c.department_id WHERE fa.id = %s',
+        (allocation_id,),
+    )
+    row = cursor.fetchone()
+    return row is not None and scope.allows(row.get('institution_id'))
 
 
 def _read(allocation_id):
@@ -198,15 +224,15 @@ def _read(allocation_id):
         cursor = connection.cursor(dictionary=True)
         cursor.execute(_LIST_SQL + ' WHERE fa.id = %s', (allocation_id,))
         row = cursor.fetchone()
-        if row is None:
+        if row is None or not current_scope(cursor).allows(row.get('institution_id')):
             return reject_input(MESSAGES, 'allocation_not_found')
         return json_ok(_public(row))
     finally:
         close(cursor, connection)
 
 
-def _options(cursor, sql):
-    cursor.execute(sql)
+def _options(cursor, sql, params=()):
+    cursor.execute(sql, params)
     rows = []
     for row in cursor.fetchall():
         record_id = safe_count(row.get('id'))
@@ -227,13 +253,31 @@ def register_allocation_routes(blueprint):
         try:
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
-            faculty = _options(cursor, 'SELECT id, name FROM faculty WHERE is_active = TRUE ORDER BY name')
-            subjects = _options(cursor, "SELECT id, CONCAT(name, ' (', course_code, ')') AS name FROM subjects ORDER BY name")
+            scope = current_scope(cursor)
+            # Faculty the current institution may allocate: its own plus those shared to it.
+            if scope.institution_id is not None:
+                faculty_clause, faculty_params = scope.faculty_clause('f', 'fd')
+            else:
+                faculty_clause, faculty_params = scope.clause('fd.institution_id')
+            faculty = _options(
+                cursor,
+                f'SELECT f.id, f.name FROM faculty f LEFT JOIN departments fd ON fd.id = f.department_id '
+                f'WHERE f.is_active = TRUE AND {faculty_clause} ORDER BY f.name',
+                faculty_params,
+            )
+            subject_clause, subject_params = scope.course_clause('c')
+            subjects = _options(
+                cursor,
+                f"SELECT s.id, CONCAT(s.name, ' (', s.course_code, ')') AS name FROM subjects s "
+                f'JOIN courses c ON c.id = s.course_id WHERE {subject_clause} ORDER BY s.name',
+                subject_params,
+            )
             classes = _options(cursor, 'SELECT id, name FROM classes ORDER BY display_order, name')
             divisions = _options(cursor, 'SELECT id, name FROM divisions ORDER BY name')
             semesters = _options(cursor, 'SELECT id, semester_name AS name FROM semesters ORDER BY semester_number')
             batches = _options(cursor, 'SELECT id, batch_name AS name FROM course_batches WHERE is_active = TRUE ORDER BY batch_name')
-            cursor.execute(_LIST_SQL + ' ORDER BY cl.display_order, c.name, f.name, s.name')
+            list_clause, list_params = scope.clause('cd.institution_id')
+            cursor.execute(_LIST_SQL + f' WHERE {list_clause} ORDER BY cl.display_order, c.name, f.name, s.name', list_params)
             return json_ok({
                 'allocations': [_public(row) for row in cursor.fetchall() if safe_count(row.get('id'))],
                 'faculty': faculty,
@@ -285,7 +329,9 @@ def register_allocation_routes(blueprint):
         cursor = None
         try:
             connection = get_db_connection()
-            cursor = connection.cursor()
+            cursor = connection.cursor(dictionary=True)
+            if not _visible(cursor, allocation_id, current_scope(cursor)):
+                return reject_input(MESSAGES, 'allocation_not_found')
             cursor.execute('DELETE FROM faculty_allocations WHERE id = %s', (allocation_id,))
             if cursor.rowcount == 0:
                 return reject_input(MESSAGES, 'allocation_not_found')

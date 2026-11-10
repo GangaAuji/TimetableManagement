@@ -73,12 +73,51 @@ def fetch_selections(cursor, student_ids):
     return cursor.fetchall()
 
 
+def _schema_has(cursor, table_name, column_name=None):
+    """Return whether this database has the table, or that column when one is named."""
+    if column_name:
+        cursor.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s
+            LIMIT 1
+            """,
+            (table_name, column_name),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = %s
+            LIMIT 1
+            """,
+            (table_name,),
+        )
+    return cursor.fetchone() is not None
+
+
+def fetch_batch_memberships(cursor, student_ids):
+    """lab_batch_members rows of the students: which lab batch each was in, from added_at to ended_at (NULL = still)."""
+    if not student_ids or not _schema_has(cursor, 'lab_batch_members'):
+        return []
+    cursor.execute(
+        f"""
+        SELECT student_id, lab_batch_group_id, added_at, ended_at
+        FROM lab_batch_members
+        WHERE student_id IN ({_marks(student_ids)})
+        ORDER BY student_id, added_at
+        """,
+        tuple(student_ids),
+    )
+    return cursor.fetchall()
+
+
 SLOT_COLUMNS = """
-    t.id, t.subject_id, t.course_id, t.class_id, t.division_id, t.semester_id, t.academic_year_id,
+    t.id, t.subject_id, t.course_id, t.class_id, t.division_id, t.lab_batch_group_id, t.semester_id, t.academic_year_id,
     t.faculty_id AS faculty_user_id, COALESCE(t.is_active, 1) AS is_active,
     t.day_of_week, t.start_time, t.end_time,
-    sub.name AS subject_name, COALESCE(sub.is_elective, 0) AS is_elective,
-    sub.theory_practical, sub.course_type,
+    sub.name AS subject_name, sub.course_code AS subject_code, COALESCE(sub.is_elective, 0) AS is_elective,
+    sub.theory_practical, sub.course_type, lbg.name AS lab_batch_name,
     sem.start_date AS semester_start, sem.end_date AS semester_end
 """
 
@@ -86,6 +125,7 @@ _SLOT_FROM = """
     FROM timetable t
     JOIN subjects sub ON sub.id = t.subject_id
     LEFT JOIN semesters sem ON sem.id = t.semester_id
+    LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
 """
 
 
@@ -105,7 +145,13 @@ def fetch_slots(cursor, cohorts, student_ids=()):
         params.extend(student_ids)
     if not clauses:
         return []
-    cursor.execute(f"SELECT {SLOT_COLUMNS} {_SLOT_FROM} WHERE {' OR '.join(clauses)} ORDER BY t.id", tuple(params))
+    columns, source = SLOT_COLUMNS, _SLOT_FROM
+    if not (_schema_has(cursor, 'timetable', 'lab_batch_group_id') and _schema_has(cursor, 'lab_batch_groups')):
+        columns = SLOT_COLUMNS.replace('t.lab_batch_group_id', 'NULL AS lab_batch_group_id').replace(
+            'lbg.name AS lab_batch_name', 'NULL AS lab_batch_name',
+        )
+        source = _SLOT_FROM.replace('    LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id\n', '')
+    cursor.execute(f"SELECT {columns} {source} WHERE {' OR '.join(clauses)} ORDER BY t.id", tuple(params))
     return cursor.fetchall()
 
 

@@ -63,13 +63,52 @@ class Factory:
         finally:
             cursor.close()
 
-    def department(self, name=None):
-        return self.insert('departments', name=name or f'Department {self._next()}')
+    def department(self, name=None, *, institution_id=None):
+        values = {'name': name or f'Department {self._next()}'}
+        if institution_id is not None:
+            values['institution_id'] = institution_id
+        return self.insert('departments', **values)
 
-    def academic(self):
-        """Department, course, class, division, subject, room, one teacher, and one Monday lecture."""
+    def institution(self, name=None, *, code=None, active=True):
+        """A second (or third) institution in the tenant. Institution 1 exists from revision 0014."""
         n = self._next()
-        department = self.department(f'Science {n}')
+        return self.insert(
+            'institutions', organization_id=1, name=name or f'College {n}', code=code or f'COL{n}',
+            is_active=1 if active else 0, sort_order=n,
+        )
+
+    def membership(self, user, institution_id, *, primary=True, department_id=None):
+        return self.insert(
+            'institution_memberships', user_id=user['id'], institution_id=institution_id, role=user['role'],
+            department_id=department_id, is_primary=1 if primary else 0,
+        )
+
+    def share(self, resource_type, resource_id, institution_id, *, created_by=None):
+        """List a room or faculty member to one more institution (sets sharing='listed' on the row)."""
+        table = 'rooms' if resource_type == 'room' else 'faculty'
+        self.execute(f"UPDATE {table} SET sharing = 'listed' WHERE id = %s", (resource_id,))
+        return self.insert(
+            'resource_shares', resource_type=resource_type, resource_id=resource_id,
+            institution_id=institution_id, created_by=created_by,
+        )
+
+    def capability(self, name, enabled=True, settings=None):
+        """Switch an optional feature on or off for the tenant (core/capabilities.py)."""
+        import json
+
+        self.execute(
+            'INSERT INTO capabilities (capability, enabled, settings_json) VALUES (%s, %s, %s) '
+            'ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), settings_json = VALUES(settings_json)',
+            (name, 1 if enabled else 0, json.dumps(settings or {})),
+        )
+
+    def academic(self, *, institution_id=None):
+        """Department, course, class, division, subject, room, one teacher, and one Monday lecture.
+
+        With `institution_id` the department and room belong to that institution
+        (and so does everything that hangs off the department)."""
+        n = self._next()
+        department = self.department(f'Science {n}', institution_id=institution_id)
         course = self.insert('courses', name=f'B.Sc. {n}', code=f'BSC{n}', program='UG', department_id=department)
         class_id = self.insert('classes', name=f'FY {n}')
         division = self.insert('divisions', name=f'A{n}')
@@ -77,10 +116,14 @@ class Factory:
             'subjects', name=f'Physics {n}', course_code=f'PHY{n}', course_id=course, class_id=class_id,
             credits=3, theory_credits=3, practical_credits=0, marks=100, theory_marks=100, practical_marks=0,
         )
-        room = self.insert('rooms', room_number=f'R{n}', department_id=department)
+        room_values = {'room_number': f'R{n}', 'department_id': department}
+        if institution_id is not None:
+            room_values['institution_id'] = institution_id
+        room = self.insert('rooms', **room_values)
         setup = {
             'department_id': department, 'course_id': course, 'class_id': class_id,
             'division_id': division, 'subject_id': subject, 'room_id': room,
+            'institution_id': institution_id or 1,
         }
         setup['teacher'] = self.user('Teacher', setup=setup)
         setup['timetable_id'] = self.lecture(setup, setup['teacher'])
@@ -93,6 +136,24 @@ class Factory:
             day_of_week=day, start_time=start, end_time=end, subject_id=setup['subject_id'],
             faculty_id=teacher['faculty_id'], room_id=setup['room_id'],
         )
+
+    def lab_batches(self, setup, names=('A1', 'A2'), *, division=True, year_id=None, capacity=None):
+        """Lab batch groups for the setup's cohort in one academic year. Returns {name: group id}; `setup['year_id']` is set."""
+        if year_id is None:
+            year_id = setup.get('year_id') or self.insert(
+                'academic_years', name=f'LY{self._next()}', start_date='2026-01-01', end_date='2026-12-31',
+            )
+        setup['year_id'] = year_id
+        return {
+            name: self.insert(
+                'lab_batch_groups', course_id=setup['course_id'], class_id=setup['class_id'],
+                division_id=setup['division_id'] if division else None, academic_year_id=year_id, name=name, capacity=capacity,
+            )
+            for name in names
+        }
+
+    def enrol_in_batch(self, group_id, student, added_at='2026-01-01', ended_at=None):
+        return self.insert('lab_batch_members', lab_batch_group_id=group_id, student_id=student['student_id'], added_at=added_at, ended_at=ended_at)
 
     def user(self, role, *, setup=None, status='active', link=True, department_id=None, password=None):
         """Create a user. Teacher and Student get their linked faculty or student row unless link=False."""

@@ -13,7 +13,6 @@ from academic_rules.weekdays import weekday_name, weekday_number
 from api.web import reports as report_api
 from api.web import roles as role_api
 from api.web import user_access
-from routes.user_management.actions import export_activity_log, export_users
 from security import passwords
 from security.rate_limit import _UPSERT, record_fixed_window, shared_allow
 from services import teacher_attendance
@@ -87,55 +86,7 @@ def test_plaintext_password_is_upgraded_and_a_hash_is_verified():
     assert passwords.password_matches('correct-horse', 'nope') is False
 
 
-def test_view_permission_cannot_export_users():
-    app = Flask('app')
-    app.secret_key = 'test'
-    seen = []
-
-    def _check(user_id, permission_name):
-        seen.append(permission_name)
-        return permission_name == 'users_view_user', None, False
-
-    import routes.user_management.actions as actions
-    original = actions.check_user_permission
-    actions.check_user_permission = _check
-    try:
-        with app.test_request_context('/admin/users/export'):
-            session['user_id'] = 3
-            session['role'] = 'Admin'
-            denied = export_users()
-            allowed = None
-        assert denied == ('You do not have permission to do that.', 403)
-        assert seen == ['users_export_data']
-        with app.test_request_context('/admin/users/export'):
-            session.clear()
-            assert export_users()[1] == 401
-    finally:
-        actions.check_user_permission = original
-    assert allowed is None
-
-
-def test_export_permission_reaches_the_csv_and_the_api_uses_the_same_name():
-    app = Flask('app')
-    app.secret_key = 'test'
-    import routes.user_management.actions as actions
-    original_check = actions.check_user_permission
-    original_rows = actions.export_user_rows
-    actions.check_user_permission = lambda user_id, permission_name: (permission_name == 'users_export_data', None, False)
-    actions.export_user_rows = lambda role, status, search: [
-        {'id': 1, 'username': 'ada', 'role': 'Admin', 'status': 'active', 'last_login': ''},
-    ]
-    try:
-        with app.test_request_context('/admin/users/export'):
-            session['user_id'] = 3
-            session['role'] = 'Admin'
-            response = export_users()
-        assert response.mimetype == 'text/csv'
-        assert b'ada' in response.get_data()
-    finally:
-        actions.check_user_permission = original_check
-        actions.export_user_rows = original_rows
-
+def test_the_user_export_api_needs_users_export_data():
     captured = []
 
     def _denied(name, code, message):
@@ -149,11 +100,6 @@ def test_export_permission_reaches_the_csv_and_the_api_uses_the_same_name():
     finally:
         user_access.permission_denied = original
     assert captured == ['users_export_data']
-
-
-def test_activity_export_does_not_use_the_user_view_permission():
-    assert 'users_view_user' not in inspect.getsource(export_activity_log)
-    assert 'users_view_activity_log' in inspect.getsource(export_activity_log)
 
 
 def test_denied_report_download_uses_permission_denied(monkeypatch):
@@ -204,9 +150,10 @@ def test_attendance_rejects_another_class_a_bad_date_and_keeps_one_upsert(monkey
         'remarks_15': '',
     })
     assert saved == 1
-    upsert = connection.cursor_obj.calls[-1][0]
+    # The webhook trigger reads the slot after the marks; find the one attendance write.
+    [(upsert, params)] = [call for call in connection.cursor_obj.calls if 'INSERT INTO attendance' in call[0]]
     assert 'ON DUPLICATE KEY UPDATE' in upsert
-    assert connection.cursor_obj.calls[-1][1][0] == 15
+    assert params[0] == 15
     assert connection.commits == 1
 
     outsider = _Connection([{'id': 8}, lecture, enrolled])

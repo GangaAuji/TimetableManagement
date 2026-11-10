@@ -40,9 +40,8 @@ def _export_users(client, context):
 
 
 def _update_attendance(client, context):
-    data = {'attendance_id': context['attendance_id'], 'status': 'Present', 'remarks': 'harness',
-            'csrf_token': csrf_token(client)}
-    return client.post('/admin/attendance/manage/update', data=data, headers={'Origin': SAME_ORIGIN})
+    return api(client, 'POST', f'/api/attendance/manage/{context["attendance_id"]}',
+               json={'status': 'Present', 'remarks': 'harness'})
 
 
 def _attendance_updated(response, context):
@@ -64,7 +63,7 @@ CASES = {
     'POST /api/users/<id>/permissions': Case('users_manage_permissions', _grant_user_permission),
     'POST /api/users/<id>/password': Case('users_change_password', _reset_password),
     'GET /api/users/export': Case('users_export_data', _export_users),
-    'POST /admin/attendance/manage/update': Case('attendance_manage', _update_attendance, _attendance_updated),
+    'POST /api/attendance/manage/<id>': Case('attendance_manage', _update_attendance, _attendance_updated),
     'POST /api/settings': Case('admin_change_settings', _save_settings),
     'GET /api/reports/<id>/download': Case('reports_export', _download_report),
 }
@@ -119,7 +118,7 @@ def test_no_session_is_401(client, context, name):
     assert response.status_code == 401, response.get_data(as_text=True)[:200]
 
 
-@pytest.mark.parametrize('name', [name for name in CASES if name != 'POST /admin/attendance/manage/update'])
+@pytest.mark.parametrize('name', CASES)
 def test_without_the_permission_is_403(client, factory, context, name):
     _hod(factory, client)
     response = CASES[name].call(client, context)
@@ -127,20 +126,11 @@ def test_without_the_permission_is_403(client, factory, context, name):
     assert response.get_json()['error']['code'] == 'forbidden'
 
 
-def test_without_the_permission_the_attendance_form_changes_nothing(client, factory, context):
+def test_without_the_permission_the_attendance_record_is_unchanged(client, factory, context):
     _hod(factory, client)
     response = _update_attendance(client, context)
-    assert response.status_code == 302
+    assert response.status_code == 403
     assert not _attendance_updated(response, context)
-
-
-@pytest.mark.xfail(strict=True, reason=(
-    'POST /admin/attendance/manage/update uses the legacy security.has_permission decorator, which '
-    'redirects (302) instead of answering 403 when the permission is missing.'
-))
-def test_without_the_permission_the_attendance_form_is_403(client, factory, context):
-    _hod(factory, client)
-    assert _update_attendance(client, context).status_code == 403
 
 
 @pytest.mark.parametrize('name', CASES)

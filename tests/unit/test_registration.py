@@ -163,41 +163,52 @@ def test_missing_capture_does_not_roll_back(monkeypatch):
     assert connection.rollbacks == 0
 
 
-def test_student_registration_writes_the_capture_and_uses_the_user_id(monkeypatch, tmp_path):
-    connection, cursor, flashes = _bind(monkeypatch, [None, None, {'ok': 1}], str(tmp_path))
+def _capture_form(**extra):
     captured = base64.b64encode(b'abc').decode('ascii')
-    outcome = registration.register_account(
-        _invitation(),
-        'ada',
-        'secret',
-        {'face_capture_data': f'data:image/jpeg;base64,{captured}'},
-    )
+    form = {'face_capture_data': f'data:image/jpeg;base64,{captured}', 'face_consent': 'yes'}
+    form.update(extra)
+    return form
+
+
+def test_registration_without_consent_is_refused_before_any_insert(monkeypatch, tmp_path):
+    connection, cursor, flashes = _bind(monkeypatch, [None, None], str(tmp_path))
+    outcome = registration.register_account(_invitation(), 'ada', 'secret', _capture_form(face_consent=''))
+    assert outcome == 'form'
+    assert flashes == [(registration.CONSENT_MESSAGE, 'danger')]
+    assert not any(call[0].startswith('INSERT') for call in cursor.calls)
+    assert connection.commits == 0 and connection.rollbacks == 0
+
+    connection, cursor, flashes = _bind(monkeypatch, [None, None, None, None], str(tmp_path))
+    registration.current_app.config['FACE_CONSENT_REQUIRED'] = False
+    assert registration.register_account(_invitation(), 'ada', 'secret', _capture_form(face_consent='')) == 'login'
+    assert not any('face_consents' in call[0] for call in cursor.calls)
+
+
+def test_student_registration_writes_the_capture_and_uses_the_user_id(monkeypatch, tmp_path):
+    connection, cursor, flashes = _bind(monkeypatch, [None, None, {'ok': 1}, {'ok': 1}], str(tmp_path))
+    outcome = registration.register_account(_invitation(), 'ada', 'secret', _capture_form())
     assert outcome == 'login'
     photo = 'uploads/profiles/12_20261026123456_captured.jpg'
     saved = tmp_path / 'static' / 'uploads' / 'profiles' / '12_20261026123456_captured.jpg'
     assert saved.read_bytes() == b'abc'
     statements = [call[0].split(' ', 1)[0] for call in cursor.calls]
-    assert statements == ['SELECT', 'SELECT', 'INSERT', 'UPDATE', 'INSERT', 'SELECT', 'INSERT', 'UPDATE']
+    assert statements == ['SELECT', 'SELECT', 'INSERT', 'UPDATE', 'INSERT', 'SELECT', 'INSERT', 'SELECT', 'INSERT', 'UPDATE']
     assert cursor.calls[2][1] == ('ada', 'hashed', 'Student')
     assert cursor.calls[4][1][0] == 12
     assert cursor.calls[4][1][2] == 'STU202610260012'
     assert 'INSERT INTO faculty' not in cursor.calls[4][0]
-    assert cursor.calls[6][1][1] is None
-    assert cursor.calls[6][1][2] == photo
+    assert 'INSERT INTO face_consents' in cursor.calls[6][0]
+    assert cursor.calls[6][1] == (12, '2026-01')
+    assert cursor.calls[8][1][1] is None
+    assert cursor.calls[8][1][2] == photo
     assert connection.commits == 1
     assert connection.rollbacks == 0
     assert flashes == [('Registration successful! You can now log in as Student.', 'success')]
 
 
 def test_teacher_registration_stores_the_faculty_row_id(monkeypatch, tmp_path):
-    connection, cursor, flashes = _bind(monkeypatch, [None, None, None], str(tmp_path))
-    captured = base64.b64encode(b'abc').decode('ascii')
-    registration.register_account(
-        _invitation(role='Faculty'),
-        'ada',
-        'secret',
-        {'face_capture_data': f'data:image/jpeg;base64,{captured}'},
-    )
+    connection, cursor, flashes = _bind(monkeypatch, [None, None, None, None], str(tmp_path))
+    registration.register_account(_invitation(role='Faculty'), 'ada', 'secret', _capture_form())
     assert 'INSERT INTO faculty' in cursor.calls[4][0]
     assert cursor.calls[4][1] == (12, 12, 'Ada', 'ada@school', 8, 'EMP2026000012')
     assert not any('mobile_face_templates' in call[0] and call[0].startswith('INSERT') for call in cursor.calls)

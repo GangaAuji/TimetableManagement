@@ -7,7 +7,7 @@ import math
 import os
 from datetime import datetime
 
-from flask import current_app, flash
+from flask import current_app, flash, has_app_context
 from werkzeug.security import generate_password_hash
 
 from data_access.registration import (
@@ -20,14 +20,23 @@ from data_access.registration import (
     insert_user,
     mark_invitation_expired,
     mark_invitation_used,
+    save_face_consent,
     save_face_template,
     table_exists,
     update_profile_photo,
 )
+from core.tenancy import scoped_relative_dir
 from extensions import get_db
+from services.face.templates import encode_template
 
 EXPECTED_FACE_TEMPLATE_LENGTH = 192
 DEFAULT_FACE_TEMPLATE_VERSION = 'mobilefacenet_192_l2_v1'
+CONSENT_FIELD = 'face_consent'
+CONSENT_MESSAGE = 'Please agree to the use of your face photo for attendance before registering.'
+
+
+def _consent_given(form):
+    return str(form.get(CONSENT_FIELD) or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def _parse_face_template_json(raw_json):
@@ -155,6 +164,18 @@ def register_account(invitation, username, password, form):
         flash("This email is already registered. Please contact your administrator.", "danger")
         return 'form'
 
+    from services.security_policy import enforced_problem, remember_password_change
+    if enforced_problem(password, cursor):
+        flash('The password does not meet the security policy.', 'danger')
+        return 'form'
+    if invitation['role'] == 'Student':
+        from core.license import refuse_student
+        config = current_app.config if has_app_context() else {}
+        blocked = refuse_student(cursor, config)
+        if blocked:
+            flash(blocked[1], 'danger')
+            return 'form'
+
     hashed_password = generate_password_hash(password)
 
     try:
@@ -247,9 +268,17 @@ def register_account(invitation, username, password, form):
             flash("Face capture is required. Please open camera and capture your face image.", "danger")
             return 'form'
 
-        user_id = insert_user(cursor, username, hashed_password, invitation['role'])
+        consent_required = current_app.config.get('FACE_CONSENT_REQUIRED', True)
+        consent_given = _consent_given(form)
+        if consent_required and not consent_given:
+            flash(CONSENT_MESSAGE, "danger")
+            return 'form'
 
-        upload_root = os.path.join(current_app.root_path, 'static', 'uploads', 'profiles')
+        user_id = insert_user(cursor, username, hashed_password, invitation['role'])
+        remember_password_change(cursor, user_id)
+
+        relative_dir = scoped_relative_dir('uploads/profiles')
+        upload_root = os.path.join(current_app.root_path, 'static', *relative_dir.split('/'))
         os.makedirs(upload_root, exist_ok=True)
 
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -259,7 +288,7 @@ def register_account(invitation, username, password, form):
         with open(target_path, 'wb') as out_file:
             out_file.write(captured_bytes)
 
-        face_image_path = f"uploads/profiles/{final_name}"
+        face_image_path = f"{relative_dir}/{final_name}"
         update_profile_photo(cursor, face_image_path, user_id)
 
         if invitation['role'] == 'Student':
@@ -279,10 +308,13 @@ def register_account(invitation, username, password, form):
                 employee_id,
             ))
 
+        if consent_given and table_exists(cursor, 'face_consents'):
+            save_face_consent(cursor, user_id, current_app.config.get('FACE_CONSENT_NOTICE_VERSION', '2026-01'))
+
         if face_image_path and table_exists(cursor, 'mobile_face_templates'):
             save_face_template(cursor, (
                 user_id,
-                json.dumps(face_template) if face_template else None,
+                encode_template(face_template) if face_template else None,
                 face_image_path,
                 quality_score,
                 embedding_version if face_template else None,

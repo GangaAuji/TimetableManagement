@@ -1,4 +1,4 @@
-"""Who may manage which accounts and roles (security/authority.py), in the JSON API and the legacy routes.
+"""Who may manage which accounts and roles (security/authority.py) in the JSON API.
 
 roles.hierarchy_level: Super Admin 1, Admin 2, HOD 3, Teacher 4, Student 5. An
 actor manages only accounts with a larger level; only a Super Admin manages a
@@ -203,43 +203,33 @@ def test_a_super_admin_may_grant_anything(client, factory):
     assert api(client, 'POST', f'/api/users/{teacher["id"]}/permissions', json={'permission_name': unheld}).status_code == 200
 
 
-# Legacy routes
+# Legacy form URLs: removed; nothing at those paths may write.
 
 @pytest.mark.parametrize('path', ('edit', 'delete', 'reset_password', 'toggle_status', 'unlock'))
-def test_legacy_routes_refuse_an_admin_on_a_super_admin(client, factory, path):
+def test_the_legacy_account_forms_are_gone(client, factory, path):
     root = factory.user('Super Admin')
     before = _row(factory, root)
-    _actor(factory, client, 'Admin', *_ACCOUNT_RIGHTS)
+    _actor(factory, client, 'Super Admin', *_ACCOUNT_RIGHTS)
     data = {'username': root['username'], 'role': 'Admin', 'status': 'inactive'} if path == 'edit' else {}
     response = client.post(
         f'/admin/users/{path}/{root["id"]}', data={**data, 'csrf_token': csrf_token(client)},
         headers={'Origin': SAME_ORIGIN, 'X-Requested-With': 'XMLHttpRequest'},
     )
-    assert response.status_code == 403, response.get_data(as_text=True)[:300]
+    assert response.status_code in (302, 404, 405), response.get_data(as_text=True)[:300]
     assert _row(factory, root) == before
 
 
-def test_legacy_add_refuses_a_senior_role(client, factory):
-    _actor(factory, client, 'Admin', *_ACCOUNT_RIGHTS)
-    form_post(client, '/admin/users/add', {'username': 'climber_2', 'password': 'Harness-Pass-9',
-                                           'role': 'Super Admin', 'status': 'active', 'email': ''})
-    assert factory.query("SELECT 1 FROM users WHERE username = 'climber_2'") == []
-
-
-def test_legacy_grants_need_users_manage_permissions_and_held_permissions(client, factory):
+def test_the_legacy_add_and_grant_forms_are_gone(client, factory):
     teacher = factory.user('Teacher')
-    held, unheld = _held_and_unheld(factory)
-    actor = _actor(factory, client, 'Admin', 'users_change_user')
-    path = f'/admin/users/permissions/{teacher["id"]}/grant'
-    denied = form_post(client, path, {'permission_name': held})
-    assert denied.status_code == 302
+    held, _unheld = _held_and_unheld(factory)
+    _actor(factory, client, 'Super Admin', *_ACCOUNT_RIGHTS, 'users_manage_permissions')
+    form_post(client, '/admin/users/add', {'username': 'climber_2', 'password': 'Harness-Pass-9',
+                                           'role': 'Teacher', 'status': 'active', 'email': ''})
+    assert factory.query("SELECT 1 FROM users WHERE username = 'climber_2'") == []
+    form_post(client, f'/admin/users/permissions/{teacher["id"]}/grant', {'permission_name': held})
+    form_post(client, '/admin/users/permissions/bulk_grant',
+              {'user_ids': [teacher['id']], 'permission_names': [held]})
     assert _direct_grants(factory, teacher) == set()
-    factory.grant(actor, 'users_manage_permissions')
-    assert form_post(client, path, {'permission_name': unheld}).status_code == 403
-    assert form_post(client, '/admin/users/permissions/bulk_grant',
-                     {'user_ids': [teacher['id']], 'permission_names': [unheld]}).status_code == 403
-    assert form_post(client, path, {'permission_name': held}).status_code == 200
-    assert _direct_grants(factory, teacher) == {held}
 
 
 # Roles

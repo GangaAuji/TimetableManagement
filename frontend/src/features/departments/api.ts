@@ -1,5 +1,6 @@
 import { apiRequest } from '../../shared/api/client'
 import { getCsrfToken } from '../../shared/api/endpoints'
+import { asInstitutionOptions, type InstitutionOption } from '../../shared/institutions'
 import { safeCount, safeText } from '../../shared/security/sanitize'
 
 export type DepartmentRecord = {
@@ -10,6 +11,8 @@ export type DepartmentRecord = {
   head_of_department: string
   is_active: boolean
   course_count: number
+  institution_id: number | null
+  institution_name: string
 }
 
 export type DepartmentPermissions = {
@@ -21,6 +24,8 @@ export type DepartmentPermissions = {
 
 export type DepartmentList = {
   departments: DepartmentRecord[]
+  institutions: InstitutionOption[]
+  institution_id: number | null
   permissions: DepartmentPermissions
 }
 
@@ -30,6 +35,7 @@ export type DepartmentDraft = {
   description: string
   head_of_department: string
   is_active: boolean
+  institution_id?: number | null
 }
 
 function asId(value: unknown): number {
@@ -49,6 +55,8 @@ function asDepartment(value: Partial<DepartmentRecord> | null | undefined): Depa
     head_of_department: safeText(value?.head_of_department, 100),
     is_active: value?.is_active === true,
     course_count: safeCount(value?.course_count),
+    institution_id: asId(value?.institution_id) || null,
+    institution_name: safeText(value?.institution_name, 150),
   }
 }
 
@@ -59,6 +67,8 @@ export async function getDepartments(): Promise<DepartmentList> {
     : []
   return {
     departments,
+    institutions: asInstitutionOptions(data.institutions),
+    institution_id: asId(data.institution_id) || null,
     permissions: {
       add: data.permissions?.add === true,
       change: data.permissions?.change === true,

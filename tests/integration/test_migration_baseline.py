@@ -136,6 +136,8 @@ class Server:
             f'mysql+mysqldb://{quote_plus(self.user)}:{quote_plus(self.password)}@{self.host}/{name}'
         )
         app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        # db-adopt opens the database the way every other command does: from the app's MYSQL_* settings.
+        app.config.update(MYSQL_HOST=self.host, MYSQL_USER=self.user, MYSQL_PASSWORD=self.password, MYSQL_DB=name)
         db = SQLAlchemy(app)
         Migrate(app, db, directory=str(MIGRATIONS_DIR))
         register_commands(app)

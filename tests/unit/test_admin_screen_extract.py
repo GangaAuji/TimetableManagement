@@ -1,6 +1,5 @@
-"""Audit, shift, and admin API extracts. No live database."""
+"""Audit and shift extracts. No live database."""
 
-from services import admin_api
 from services import audit_logs
 from services import shift_management
 
@@ -99,18 +98,3 @@ def test_shift_delete_uses_the_private_connection_and_a_plain_cursor(monkeypatch
     assert connection.dictionary is False
     assert connection.actions == ['rollback', 'close']
     assert 'Error deleting shift pattern' in flashes[0][0]
-
-
-def test_coverage_counts_use_integer_ids(monkeypatch):
-    connection = _Connection([
-        [{'id': 2, 'name': 'Math', 'lpw': 3, 'phw': 1}],
-        [{'subject_id': 2, 'cnt': 4}],
-    ])
-    monkeypatch.setattr(admin_api, 'get_db_connection', lambda: connection)
-    subjects, counts = admin_api.coverage_subjects('8', '3', '1')
-    sql, params = connection.cursor_obj.calls[1]
-    assert 'f.user_id' not in sql
-    assert tuple(params[:3]) == (8, 3, 1)
-    assert counts[2] == 4
-    assert subjects[0]['name'] == 'Math'
-    assert connection.actions == ['close']

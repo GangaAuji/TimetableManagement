@@ -4,6 +4,8 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import type { SessionInfo } from '../../../shared/api/endpoints'
 import { ListTable, Stat, displayValue, messageFrom, postJson, useSessionRole, type DataRow } from '../../../shared/components/data-list'
+import { todayInput } from '../../../shared/dates'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 import { TeacherAttendancePage } from '../../teacher/pages/FacultyPortal'
 
@@ -116,7 +118,7 @@ function NotMarkedLectures({ canManage }: { canManage: boolean }) {
           </label>
         ) : null}
       </header>
-      {error ? <p className="px-6 py-3 text-xs text-red-700">{error}</p> : null}
+      <FailureNotice message={error} />
       <table className="w-full text-left text-sm">
         <thead className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
           <tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Time</th><th className="px-6 py-3">Subject</th><th className="px-6 py-3">Class</th><th className="px-6 py-3">Teacher</th>{canManage ? <th className="px-6 py-3" /> : null}</tr>
@@ -200,7 +202,7 @@ export function AttendancePage() {
         <Stat label={`Below ${threshold}% (overall)`} value={summary.defaulters} />
         <Stat label="Lectures not marked" value={summary.notMarked} />
       </div>
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error} />
       <h3 className="text-xs font-bold tracking-wide text-gray-500 uppercase">Below {threshold}% (held lectures only)</h3>
       <ListTable
         columns={[
@@ -221,11 +223,6 @@ export function AttendancePage() {
 type Choice = { id: number; name: string }
 type AttendanceRecord = { id: number; roll: string; student: string; course: string; className: string; division: string; date: string; status: string; remarks: string }
 const markStatuses = ['Present', 'Absent', 'Late']
-
-function todayInput() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
 
 export function AttendanceRecordsPage() {
   const setPageHeader = useSetPageHeader()
@@ -295,8 +292,8 @@ export function AttendanceRecordsPage() {
   return (
     <section className="flex flex-1 flex-col gap-2">
       <p className="text-sm text-gray-500">Marks saved by faculty for the selected day. Correct a status or remark here.</p>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-3 text-sm text-green-700">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <div className="grid gap-2 sm:grid-cols-4">
         <label className="text-sm text-gray-700">Date
           <input className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -424,7 +421,7 @@ function StudentAttendancePage() {
         : `You can miss ${canMiss ?? 0} more lecture${canMiss === 1 ? '' : 's'} and stay at ${threshold}%.`
   return (
     <div className="flex flex-col gap-2">
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      <FailureNotice message={error} />
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
           <p className="text-[10px] font-bold tracking-wider text-gray-400 uppercase">Attendance %</p>
@@ -515,7 +512,7 @@ export function SubjectAttendancePage() {
         <Link to="/my-attendance" className="text-xs font-bold text-indigo-600">Back</Link>
       </div>
       <p className="text-xs text-gray-500">Held {figures.held} · Attended {figures.attended} of {figures.countable} · Absent {figures.absent} · Excused {figures.excused} · Not marked {figures.not_marked}</p>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      <FailureNotice message={error} />
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
         <h3 className="border-b px-6 py-3 text-sm font-bold text-gray-700">Last six months</h3>
         <table className="w-full text-left text-sm"><tbody className="divide-y">{months.map((row) => <tr key={row.month}><td className="px-6 py-3">{row.month}</td><td className="px-6 py-3">{row.attended} of {row.countable} attended</td><td className="px-6 py-3">{row.absent} absent</td><td className="px-6 py-3">{percentLabel(row.percentage)}</td></tr>)}</tbody></table>

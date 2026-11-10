@@ -95,7 +95,7 @@ def test_seed_run_on_a_fresh_database_grants_every_default(cli, database):
     assert result.exit_code == 0, result.output
     assert 'roles: 5 added, 0 already present.' in result.output
     assert f'role_permissions: {len(default_pairs())} granted, 0 already mapped' in result.output
-    assert 'branding_settings: 22 added, 0 already present.' in result.output
+    assert 'branding_settings: 24 added, 0 already present.' in result.output
     assert '--apply-role-defaults' not in result.output
     assert mapping(database) == default_pairs()
 

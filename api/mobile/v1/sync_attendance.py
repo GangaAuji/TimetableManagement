@@ -10,6 +10,8 @@ from flask import Blueprint, current_app, g, jsonify, request, url_for
 from utils.uploads import save_uploaded_file
 
 from extensions import get_db_connection
+from services.face.safeguards import consent_status, has_consent, readable_template
+from services.face.templates import encode_template
 from .security import authenticate_mobile_request
 
 mobile_sync_bp = Blueprint("mobile_sync", __name__, url_prefix="/mobile-sync/v1")
@@ -252,12 +254,15 @@ def _load_face_templates(cursor, user_ids, updated_after_dt=None):
     )
 
     rows = cursor.fetchall() or []
+    consented = consent_status(cursor, [row.get("user_id") for row in rows])
     by_user = {}
     for row in rows:
         user_id = row.get("user_id")
         if user_id in by_user:
             continue
-        normalized_embedding = _normalize_face_template(row.get("embedding_json"))
+        if not consented.get(user_id, False):
+            continue  # no consent: the device never receives the template
+        normalized_embedding = _normalize_face_template(readable_template(row.get("embedding_json")))
         by_user[user_id] = {
             "embedding": normalized_embedding,
             "image_path": row.get("image_path"),
@@ -457,7 +462,11 @@ def _resolve_timetable_id_from_event(
     class_id=None,
     division_id=None,
     at_time=None,
+    student_id=None,
 ):
+    """The timetable id an event names. Lab batch slots of one division share a time, so with a
+    `student_id` the slot whose batch holds the student on that date comes first, and a slot for a
+    batch the student is not in is never chosen."""
     try:
         schedule_date = datetime.strptime(str(attendance_date), "%Y-%m-%d").date()
     except Exception:
@@ -485,13 +494,22 @@ def _resolve_timetable_id_from_event(
     if at_time:
         where_parts.append("%s BETWEEN t.start_time AND t.end_time")
         params.append(at_time)
+    order = "t.start_time"
+    if student_id:
+        in_batch = (
+            "EXISTS (SELECT 1 FROM lab_batch_members lbm WHERE lbm.lab_batch_group_id = t.lab_batch_group_id "
+            "AND lbm.student_id = %s AND lbm.added_at <= %s AND (lbm.ended_at IS NULL OR lbm.ended_at >= %s))"
+        )
+        where_parts.append(f"(t.lab_batch_group_id IS NULL OR {in_batch})")
+        params.extend([student_id, schedule_date, schedule_date])
+        order = "(t.lab_batch_group_id IS NOT NULL) DESC, t.start_time"
 
     cursor.execute(
         f"""
         SELECT t.id
         FROM timetable t
         WHERE {" AND ".join(where_parts)}
-        ORDER BY t.start_time
+        ORDER BY {order}
         LIMIT 1
         """,
         tuple(params),
@@ -762,7 +780,7 @@ def _promote_log_to_attendance(cursor, log_row):
     slot = fetch_slot(cursor, log_row["timetable_id"])
     if not slot:
         raise MarkRefused(f"timetable_id={log_row['timetable_id']} does not exist")
-    if not student_in_roster(cursor, slot, log_row["student_id"]):
+    if not student_in_roster(cursor, slot, log_row["student_id"], log_row.get("attendance_date")):
         raise MarkRefused(
             f"student_id={log_row['student_id']} is not in the roster of timetable_id={log_row['timetable_id']}"
         )
@@ -800,6 +818,18 @@ def _promote_log_to_attendance(cursor, log_row):
             log_row.get("remarks"),
         ),
     )
+    return session_id
+
+
+def emit_marked_webhooks(cursor, touched, marked_by_user_id=None):
+    """One attendance.marked webhook per session a sync touched. `touched` maps session_id -> (timetable_id, date)."""
+    from services.webhooks import on_attendance_marked
+
+    for session_id, (timetable_id, session_date) in touched.items():
+        on_attendance_marked(
+            cursor, session_id=session_id, timetable_id=timetable_id, session_date=session_date,
+            marked_by_user_id=marked_by_user_id, source='mobile',
+        )
 
 
 @mobile_sync_bp.before_request
@@ -1120,6 +1150,11 @@ def upload_face_template(user_id):
         if not cursor.fetchone():
             return _json_error("User not found.", 404)
 
+        if not has_consent(cursor, user_id):
+            return _json_error(
+                "The person has not consented to face recognition; record consent before enrolling a template.", 403,
+            )
+
         cursor.execute(
             """
             INSERT INTO mobile_face_templates (
@@ -1143,7 +1178,7 @@ def upload_face_template(user_id):
             """,
             (
                 user_id,
-                json.dumps(normalized_embedding),
+                encode_template(normalized_embedding),
                 image_path,
                 quality_score,
                 embedding_version,

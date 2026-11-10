@@ -1,13 +1,21 @@
+import { FailureNotice } from '../shared/components/success-notice'
 import { useCallback, useEffect, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useMatches } from 'react-router-dom'
 import { canOpenPage } from './page-access'
+import { PasswordExpiredScreen } from '../features/account/PasswordExpiredScreen'
 import { LoginPage } from '../features/auth/pages/LoginPage'
+import { MaintenancePage } from '../features/errors/MaintenancePage'
 import { getBranding, getSession, type Branding, type SessionInfo } from '../shared/api/endpoints'
 import { fallbackBranding } from '../shared/security/sanitize'
 import { applyBrandingHead } from '../shared/theme'
 import { AdminFrame } from './page-header'
 
 const allowedRoles = new Set(['Admin', 'Super Admin', 'HOD', 'Teacher', 'Student'])
+const staffRoles = new Set(['Admin', 'Super Admin', 'HOD'])
+
+function adminPanel(pathname: string) {
+  return pathname === '/admin' || pathname.startsWith('/admin/')
+}
 
 export function RootGate() {
   const location = useLocation()
@@ -16,15 +24,16 @@ export function RootGate() {
   const [error, setError] = useState('')
   const adminLogin = location.pathname === '/admin/login' || location.pathname.startsWith('/admin/') || location.pathname === '/admin'
 
+  const institutionCode = new URLSearchParams(location.search).get('i') || ''
   const load = useCallback(async () => {
     setError('')
     const [nextBranding, nextSession] = await Promise.all([
-      getBranding().catch(() => fallbackBranding),
+      getBranding(institutionCode).catch(() => fallbackBranding),
       getSession(),
     ])
     setBranding(nextBranding)
     setSession(nextSession)
-  }, [])
+  }, [institutionCode])
 
   useEffect(() => {
     void load().catch(() => setError('The Flask server is not reachable. Start it on port 5000 and try again.'))
@@ -36,18 +45,27 @@ export function RootGate() {
 
   useEffect(() => {
     const refresh = () => {
-      void getBranding().then(setBranding).catch(() => undefined)
+      void getBranding(institutionCode).then(setBranding).catch(() => undefined)
     }
     window.addEventListener('branding-updated', refresh)
     return () => window.removeEventListener('branding-updated', refresh)
-  }, [])
+  }, [institutionCode])
 
   if (error) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6 text-sm text-red-700">{error}</div>
+    return <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6 text-sm text-gray-600"><FailureNotice message={error} hold />The application could not be opened.</div>
   }
 
   if (!session) {
     return <div className="min-h-screen bg-gray-100" />
+  }
+
+  const staff = session.authenticated && staffRoles.has(session.role)
+  if (session.maintenance && (!adminPanel(location.pathname) || (session.authenticated && !staff))) {
+    return <MaintenancePage branding={branding} />
+  }
+
+  if (session.authenticated && session.password_expired) {
+    return <PasswordExpiredScreen branding={branding} onSuccess={() => void load()} />
   }
 
   if (!session.authenticated) {
@@ -77,6 +95,10 @@ export function RootGate() {
 
 function GuardedOutlet({ session }: { session: Extract<SessionInfo, { authenticated: true }> }) {
   const location = useLocation()
+  const matches = useMatches()
+  if (matches.some((match) => (match.handle as { errorPage?: boolean } | undefined)?.errorPage)) {
+    return <Outlet context={session} />
+  }
   if (!canOpenPage(location.pathname, session)) {
     return (
       <section className="mx-auto max-w-lg rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">

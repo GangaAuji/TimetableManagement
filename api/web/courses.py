@@ -7,6 +7,7 @@ from mysql.connector import IntegrityError
 
 from extensions import get_db_connection
 from core.db import transaction
+from core.scope import current_scope
 from api.web.access import InputError, allowed, optional_text, permission_denied, required_text
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_count, safe_text
@@ -130,14 +131,28 @@ def _close(cursor, connection):
         connection.close()
 
 
-def _department_id(cursor, value):
+def _department_id(cursor, value, scope):
+    """A department the scope may use; a course belongs to its department's institution."""
     department_id = safe_count(value)
     if isinstance(value, bool) or department_id < 1 or safe_text(value, 12) != str(department_id):
         raise _CourseInputError('course_department_invalid')
-    cursor.execute('SELECT 1 FROM departments WHERE id = %s', (department_id,))
-    if cursor.fetchone() is None:
+    cursor.execute('SELECT institution_id FROM departments WHERE id = %s', (department_id,))
+    row = cursor.fetchone()
+    if row is None or not scope.allows(row.get('institution_id')):
         raise _CourseInputError('course_department_invalid')
     return department_id
+
+
+def _owned(cursor, course_id, scope):
+    """The course when the scope may change it, else a JSON error (404 keeps other institutions' ids private)."""
+    cursor.execute(
+        'SELECT c.id, d.institution_id FROM courses c JOIN departments d ON d.id = c.department_id WHERE c.id = %s',
+        (course_id,),
+    )
+    row = cursor.fetchone()
+    if row is None or not scope.allows(row.get('institution_id')):
+        return _input_error('course_not_found')
+    return row
 
 
 def _reject_code_conflict(cursor, code, course_id):
@@ -162,11 +177,12 @@ def _save(payload, course_id):
         is_active = _active(payload.get('is_active'))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        department_id = _department_id(cursor, payload.get('department_id'))
+        scope = current_scope(cursor)
+        department_id = _department_id(cursor, payload.get('department_id'), scope)
         if course_id is not None:
-            cursor.execute('SELECT 1 FROM courses WHERE id = %s', (course_id,))
-            if cursor.fetchone() is None:
-                return _input_error('course_not_found')
+            owned = _owned(cursor, course_id, scope)
+            if isinstance(owned, tuple):
+                return owned
         _reject_code_conflict(cursor, code, course_id)
         values = (name, code, program, department_id, duration_years, total_semesters, description, 1 if is_active else 0)
         if course_id is None:
@@ -213,7 +229,7 @@ def _save(payload, course_id):
 
 _LIST_SQL = """
     SELECT c.id, c.name, c.code, c.program, c.department_id, c.duration_years,
-           c.total_semesters, c.description, c.is_active, d.name AS department_name,
+           c.total_semesters, c.description, c.is_active, d.name AS department_name, d.institution_id,
            COUNT(DISTINCT s.id) AS subject_count,
            COUNT(DISTINCT cb.id) AS batch_count
     FROM courses c
@@ -231,7 +247,7 @@ def _read(course_id):
         cursor = connection.cursor(dictionary=True)
         cursor.execute(_LIST_SQL + ' WHERE c.id = %s GROUP BY c.id', (course_id,))
         row = cursor.fetchone()
-        if row is None or not safe_count(row.get('id')):
+        if row is None or not safe_count(row.get('id')) or not current_scope(cursor).allows(row.get('institution_id')):
             return _input_error('course_not_found')
         return json_ok(_public_course(row))
     except Exception:
@@ -253,18 +269,22 @@ def register_course_routes(blueprint):
         try:
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
-            cursor.execute('SELECT id, name FROM departments WHERE is_active = TRUE ORDER BY name')
+            scope = current_scope(cursor)
+            clause, params = scope.clause('institution_id')
+            cursor.execute(f'SELECT id, name FROM departments WHERE is_active = TRUE AND {clause} ORDER BY name', params)
             departments = []
             for row in cursor.fetchall():
                 name = safe_text(row.get('name'), 100)
                 department_id = safe_count(row.get('id'))
                 if department_id and name:
                     departments.append({'id': department_id, 'name': name})
-            cursor.execute(_LIST_SQL + ' GROUP BY c.id ORDER BY c.program, c.name')
+            clause, params = scope.clause('d.institution_id')
+            cursor.execute(_LIST_SQL + f' WHERE {clause} GROUP BY c.id ORDER BY c.program, c.name', params)
             courses = [_public_course(row) for row in cursor.fetchall() if safe_count(row.get('id'))]
             return json_ok({
                 'courses': courses,
                 'departments': departments,
+                'institution_id': scope.institution_id,
                 'permissions': {
                     'add': _can('courses_add_course'),
                     'change': _can('courses_change_course'),
@@ -314,10 +334,10 @@ def register_course_routes(blueprint):
         cursor = None
         try:
             connection = get_db_connection()
-            cursor = connection.cursor()
-            cursor.execute('SELECT 1 FROM courses WHERE id = %s', (course_id,))
-            if cursor.fetchone() is None:
-                return _input_error('course_not_found')
+            cursor = connection.cursor(dictionary=True)
+            owned = _owned(cursor, course_id, current_scope(cursor))
+            if isinstance(owned, tuple):
+                return owned
             for table in (
                 'students',
                 'timetable_generation_settings',

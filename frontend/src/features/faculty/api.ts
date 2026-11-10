@@ -1,9 +1,10 @@
 import { apiRequest } from '../../shared/api/client'
 import { getCsrfToken } from '../../shared/api/endpoints'
+import { asIdList, asInstitutionOptions, asSharing, type InstitutionOption, type Sharing } from '../../shared/institutions'
 import { safeCount, safeText } from '../../shared/security/sanitize'
 
 export type FacultyPermissions = { add: boolean; change: boolean; delete: boolean; invite: boolean }
-export type FacultyOption = { id: number; name: string }
+export type FacultyOption = { id: number; name: string; institution_id?: number | null }
 export type FacultyRecord = {
   id: number
   name: string
@@ -15,6 +16,11 @@ export type FacultyRecord = {
   department_id: number
   department_name: string
   is_active: boolean
+  institution_id: number | null
+  institution_name: string
+  sharing: Sharing
+  shared_with: number[]
+  owned: boolean
 }
 export type FacultyDraft = {
   username: string
@@ -26,6 +32,8 @@ export type FacultyDraft = {
   employee_id: string
   department_id: number | null
   is_active: boolean
+  sharing: Sharing
+  shared_with: number[]
 }
 export type FacultyList = {
   faculty: FacultyRecord[]
@@ -35,6 +43,8 @@ export type FacultyList = {
   totalActive: number
   totalInactive: number
   departments: FacultyOption[]
+  institutions: InstitutionOption[]
+  institution_id: number | null
   permissions: FacultyPermissions
 }
 
@@ -57,6 +67,11 @@ function record(value: Partial<FacultyRecord> | undefined): FacultyRecord {
     department_id: asId(value?.department_id),
     department_name: safeText(value?.department_name, 100),
     is_active: value?.is_active === true,
+    institution_id: asId(value?.institution_id) || null,
+    institution_name: safeText(value?.institution_name, 150),
+    sharing: asSharing(value?.sharing),
+    shared_with: asIdList(value?.shared_with),
+    owned: value?.owned !== false,
   }
 }
 
@@ -97,7 +112,9 @@ export async function getFaculty(search: string, department: string, page: numbe
     total?: unknown
     total_active?: unknown
     total_inactive?: unknown
-    departments?: { id?: unknown; name?: unknown }[]
+    departments?: { id?: unknown; name?: unknown; institution_id?: unknown }[]
+    institutions?: unknown
+    institution_id?: unknown
     permissions?: Partial<FacultyPermissions>
   }>(`/api/faculty?${params.toString()}`)
   return {
@@ -108,8 +125,12 @@ export async function getFaculty(search: string, department: string, page: numbe
     totalActive: safeCount(data.total_active),
     totalInactive: safeCount(data.total_inactive),
     departments: Array.isArray(data.departments)
-      ? data.departments.map((row) => ({ id: asId(row.id), name: safeText(row.name, 100) })).filter((row) => row.id > 0 && row.name)
+      ? data.departments
+        .map((row) => ({ id: asId(row.id), name: safeText(row.name, 100), institution_id: asId(row.institution_id) || null }))
+        .filter((row) => row.id > 0 && row.name)
       : [],
+    institutions: asInstitutionOptions(data.institutions),
+    institution_id: asId(data.institution_id) || null,
     permissions: {
       add: data.permissions?.add === true,
       change: data.permissions?.change === true,
@@ -132,6 +153,8 @@ function payload(draft: FacultyDraft, includeAccount: boolean) {
     department_id: draft.department_id,
     is_active: draft.is_active,
     password: draft.password,
+    sharing: draft.sharing,
+    shared_with: draft.sharing === 'listed' ? draft.shared_with : [],
   }
   if (includeAccount) {
     body.username = draft.username

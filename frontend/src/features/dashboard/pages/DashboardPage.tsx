@@ -1,3 +1,4 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { hasPermission } from '../../../app/page-access'
@@ -54,7 +55,7 @@ export function DashboardRoute() {
     setPageHeader(summary ? <DashboardHeader canGenerate={canGenerate} /> : 'Dashboard')
   }, [canGenerate, setPageHeader, summary])
 
-  if (error) return <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>
+  if (error) return (<><FailureNotice message={error} /><p className="text-sm text-gray-500">The dashboard could not be loaded.</p></>)
   if (!summary) return <p className="text-sm text-gray-500">Loading dashboard…</p>
   return <DashboardPage summary={summary} />
 }
@@ -73,7 +74,8 @@ function DashboardPage({ summary }: { summary: DashboardSummary }) {
     { label: 'Excused', value: attendance.excused, bar: 'bg-sky-500' },
     { label: 'Not marked', value: attendance.not_marked, bar: 'bg-gray-400' },
   ]
-  const mixMax = Math.max(1, ...mix.map((item) => item.value))
+  const mixTotal = mix.reduce((sum, item) => sum + item.value, 0)
+  const hasTrend = attendance.trend.some((item) => item.percentage !== null)
   const trendMax = Math.max(1, ...attendance.trend.map((item) => item.percentage ?? 0))
   const departmentMax = Math.max(1, ...summary.departments.map((item) => item.students))
   const workloadMax = Math.max(1, ...summary.workload.map((item) => item.classes))
@@ -100,23 +102,52 @@ function DashboardPage({ summary }: { summary: DashboardSummary }) {
         <StatCard to="/admin/invitations" label="Invitations" value={summary.pending_invitations} note="Still open" />
       </div>
 
-      <div className={`${pageGrid} lg:grid-cols-3`}>
-        <Panel title="Weekly class load" note="Scheduled classes by day" className="lg:col-span-2">
-          <div className="flex h-52 items-end gap-2">
-            {weekDays.map((day) => {
-              const count = summary.weekly_load[day] || 0
-              return (
-                <div key={day} className="flex flex-1 flex-col items-center justify-end gap-1">
-                  <span className="text-[10px] font-semibold text-gray-600">{count}</span>
-                  <div className="flex h-40 w-full items-end rounded-md bg-gray-100">
-                    <div className="w-full rounded-md bg-indigo-600" style={{ height: `${Math.max(count ? 8 : 0, (count / maxLoad) * 100)}%` }} />
+      <div className={`${pageGrid} items-start lg:grid-cols-3`}>
+        <div className={`${pageStack} lg:col-span-2`}>
+          <Panel title="Weekly class load" note="Scheduled classes by day">
+            <div className="flex items-end gap-2">
+              {weekDays.map((day) => {
+                const count = summary.weekly_load[day] || 0
+                return (
+                  <div key={day} className="flex flex-1 flex-col items-center justify-end gap-1">
+                    <span className="text-[10px] font-semibold text-gray-600">{count}</span>
+                    <div className="flex h-40 w-full items-end rounded-md bg-gray-100">
+                      <div className="w-full rounded-md bg-indigo-600" style={{ height: `${Math.max(count ? 8 : 0, (count / maxLoad) * 100)}%` }} />
+                    </div>
+                    <span className="text-[10px] text-gray-500">{day.slice(0, 3)}</span>
                   </div>
-                  <span className="text-[10px] text-gray-500">{day.slice(0, 3)}</span>
+                )
+              })}
+            </div>
+          </Panel>
+          <Panel title="Attendance mix" note="Marks in the last 30 days">
+            <div className="flex h-3 overflow-hidden rounded-full bg-gray-100">
+              {mix.filter((item) => item.value > 0).map((item) => (
+                <div key={item.label} className={item.bar} style={{ width: `${(item.value / mixTotal) * 100}%` }} title={`${item.label} ${item.value}`} />
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-5">
+              {mix.map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="flex min-w-0 items-center gap-1.5 text-gray-600"><span className={`h-2 w-2 shrink-0 rounded-full ${item.bar}`} />{item.label}</span>
+                  <span className="font-semibold text-gray-800">{item.value}</span>
                 </div>
-              )
-            })}
-          </div>
-        </Panel>
+              ))}
+            </div>
+            {hasTrend ? (
+              <div className="mt-4 flex h-28 items-end gap-1 border-t border-gray-100 pt-3">
+                {attendance.trend.map((item) => (
+                  <div key={item.date} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${item.date} ${percentText(item.percentage)}`}>
+                    <div className="flex h-16 w-full items-end rounded-sm bg-gray-100">
+                      <div className="w-full rounded-sm bg-indigo-600" style={{ height: `${item.percentage === null ? 0 : Math.max(6, (item.percentage / trendMax) * 100)}%` }} />
+                    </div>
+                    <span className="text-[9px] text-gray-400">{item.date.slice(8)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="mt-3 text-xs text-gray-500">No countable lectures in this period.</p>}
+          </Panel>
+        </div>
         <div className={pageStack}>
           <Panel title="Session mix">
             <SessionDonut types={summary.session_types} />
@@ -133,36 +164,6 @@ function DashboardPage({ summary }: { summary: DashboardSummary }) {
             </div>
           </div>
         </div>
-      </div>
-
-      <div className={`${pageGrid} lg:grid-cols-2`}>
-        <Panel title="Attendance mix" note="Marks in the last 30 days">
-          <div className="flex flex-col gap-2">
-            {mix.map((item) => (
-              <div key={item.label} className="grid grid-cols-[88px_1fr_40px] items-center gap-2 text-sm">
-                <span className="text-gray-600">{item.label}</span>
-                <div className="h-2 rounded-full bg-gray-100">
-                  <div className={`h-2 rounded-full ${item.bar}`} style={{ width: `${(item.value / mixMax) * 100}%` }} />
-                </div>
-                <span className="text-right font-semibold text-gray-800">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel title="Attendance trend" note="Percentage of countable lectures">
-          {attendance.trend.length === 0 ? <p className="text-sm text-gray-500">No lectures in this period.</p> : (
-            <div className="flex h-44 items-end gap-1">
-              {attendance.trend.map((item) => (
-                <div key={item.date} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${item.date} ${percentText(item.percentage)}`}>
-                  <div className="flex h-32 w-full items-end rounded-sm bg-gray-100">
-                    <div className="w-full rounded-sm bg-indigo-600" style={{ height: `${item.percentage === null ? 0 : Math.max(6, (item.percentage / trendMax) * 100)}%` }} />
-                  </div>
-                  <span className="text-[9px] text-gray-400">{item.date.slice(8)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
       </div>
 
       <div className={`${pageGrid} lg:grid-cols-3`}>

@@ -48,45 +48,71 @@ def fetch_allocated_faculty(cursor, class_id, division_id, subject_id):
     return cursor.fetchone()
 
 
-def fetch_class_overlap(cursor, course_id, class_id, division_id, day, start_time, end_time):
-    """Return a row when the class already has a session at this time."""
-    cursor.execute(
-        """
-                SELECT 1 FROM timetable
-                WHERE course_id = %s AND class_id = %s AND division_id = %s AND day_of_week = %s
-                                    AND COALESCE(is_active, 1) = 1
-                  AND NOT (end_time <= %s OR start_time >= %s)
-                LIMIT 1
-                """,
-        (course_id, class_id, division_id, day, start_time, end_time),
-    )
+def fetch_class_overlap(cursor, course_id, class_id, division_id, day, start_time, end_time, lab_batch_group_id=None, exclude_id=None):
+    """Return a row when the class already has a session at this time that the new one would clash with.
+
+    Two different lab batches of the division may meet at the same time
+    (academic_rules.clashes.cohort_slots_clash); a whole-division slot
+    clashes with any slot of the division. `exclude_id` ignores one slot,
+    the one being moved.
+    """
+    clauses = [
+        'course_id = %s', 'class_id = %s', 'division_id = %s', 'day_of_week = %s', 'COALESCE(is_active, 1) = 1',
+        'NOT (end_time <= %s OR start_time >= %s)',
+    ]
+    params = [course_id, class_id, division_id, day, start_time, end_time]
+    if lab_batch_group_id is not None:
+        clauses.append('(lab_batch_group_id IS NULL OR lab_batch_group_id = %s)')
+        params.append(lab_batch_group_id)
+    if exclude_id is not None:
+        clauses.append('id <> %s')
+        params.append(exclude_id)
+    cursor.execute(f"SELECT 1 FROM timetable WHERE {' AND '.join(clauses)} LIMIT 1", tuple(params))
     return cursor.fetchone()
 
 
-def fetch_faculty_overlap(cursor, faculty_id, day, start_time, end_time):
-    """Return a row when the faculty user is already teaching at this time."""
+def fetch_faculty_overlap(cursor, faculty_id, day, start_time, end_time, exclude_id=None):
+    """Return a row when the faculty user is already teaching at this time (ignoring `exclude_id`)."""
+    exclude = ' AND id <> %s' if exclude_id is not None else ''
+    params = (faculty_id, day, start_time, end_time) + ((exclude_id,) if exclude_id is not None else ())
     cursor.execute(
-        """
+        f"""
                     SELECT 1 FROM timetable
                     WHERE faculty_id = %s AND day_of_week = %s
                                             AND COALESCE(is_active, 1) = 1
-                      AND NOT (end_time <= %s OR start_time >= %s)
+                      AND NOT (end_time <= %s OR start_time >= %s){exclude}
                     LIMIT 1
                     """,
-        (faculty_id, day, start_time, end_time),
+        params,
     )
     return cursor.fetchone()
 
 
-def insert_timetable_session(cursor, values):
-    """Insert one timetable session."""
-    cursor.execute(
-        """
-                INSERT INTO timetable (course_id, class_id, division_id, subject_id, faculty_id, day_of_week, start_time, end_time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+def insert_timetable_session(cursor, values, lab_batch_group_id=None, room_id=None, version_id=None):
+    """Insert one timetable session. `values` is (course, class, division, subject, faculty, day, start, end).
+
+    `version_id` tags the row with the published timetable version it belongs to (capability
+    `timetable_versions`); None writes the row exactly as before.
+    """
+    if version_id is None:
+        cursor.execute(
+            """
+                INSERT INTO timetable (course_id, class_id, division_id, subject_id, faculty_id, day_of_week, start_time, end_time,
+                                       lab_batch_group_id, room_id, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
                 """,
-        values,
-    )
+            (*values, lab_batch_group_id, room_id),
+        )
+    else:
+        cursor.execute(
+            """
+                INSERT INTO timetable (course_id, class_id, division_id, subject_id, faculty_id, day_of_week, start_time, end_time,
+                                       lab_batch_group_id, room_id, is_active, version_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                """,
+            (*values, lab_batch_group_id, room_id, int(version_id)),
+        )
+    return cursor.lastrowid
 
 
 def deactivate_timetable_session(cursor, timetable_id):

@@ -1,0 +1,95 @@
+# Local and packaged layout: nginx, gunicorn, workers, MariaDB 10.4.
+# Copy deploy/docker.env.example to deploy/docker.env and fill in the passwords.
+#
+#   docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d --build
+#
+# First boot only, with a license mounted or LICENSE_REQUIRED=false:
+#   TIMETABLE_AUTO_UPGRADE=1 docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d --build
+# Later releases: TIMETABLE_RUNTIME=docker deploy/upgrade.sh
+
+services:
+  mariadb:
+    image: mariadb:10.4
+    environment:
+      MARIADB_DATABASE: ${MYSQL_DB:-timetable}
+      MARIADB_USER: ${MYSQL_USER:-timetable}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in deploy/docker.env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD in deploy/docker.env}
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+      target: app
+    env_file:
+      - docker.env
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_DB: ${MYSQL_DB:-timetable}
+      MYSQL_USER: ${MYSQL_USER:-timetable}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      LICENSE_REQUIRED: ${LICENSE_REQUIRED:-true}
+      LICENSE_FILE: /license/license.json
+      BACKGROUND_WORKERS: "False"
+      TRUSTED_PROXY_COUNT: "1"
+      GUNICORN_BIND: 0.0.0.0:8000
+      BACKUP_DIR: /var/backups/timetable
+      TIMETABLE_AUTO_UPGRADE: ${TIMETABLE_AUTO_UPGRADE:-0}
+    volumes:
+      - uploads:/opt/timetable/app/uploads
+      - static-uploads:/opt/timetable/app/static/uploads
+      - backups:/var/backups/timetable
+      - ./license:/license:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  workers:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+      target: app
+    env_file:
+      - docker.env
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_DB: ${MYSQL_DB:-timetable}
+      MYSQL_USER: ${MYSQL_USER:-timetable}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      LICENSE_REQUIRED: ${LICENSE_REQUIRED:-true}
+      LICENSE_FILE: /license/license.json
+      BACKGROUND_WORKERS: "True"
+      BACKUP_DIR: /var/backups/timetable
+      TIMETABLE_AUTO_UPGRADE: "0"
+    command: ["flask", "workers", "run"]
+    volumes:
+      - uploads:/opt/timetable/app/uploads
+      - static-uploads:/opt/timetable/app/static/uploads
+      - backups:/var/backups/timetable
+      - ./license:/license:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+      target: web
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - web
+
+volumes:
+  db:
+  uploads:
+  static-uploads:
+  backups:

@@ -16,43 +16,121 @@ from datetime import timedelta
 from utils.dates import format_hhmm
 
 
-def _start_quality_model_retrainer(app):
+def retrain_quality_model_once(app):
+    """Retrain the learned timetable-quality model for every active tenant (or the single database)."""
+    from core.tenancy import scoped_model_path, tenant_context, tenants_to_serve
+
+    model_path = app.config.get('QUALITY_MODEL_PATH')
+    try:
+        tenants = tenants_to_serve(app)
+    except Exception as registry_error:
+        app.logger.warning('Quality model retrain could not list tenants: %s', str(registry_error))
+        return
+    for tenant in tenants:
+        try:
+            from ml_models.scoring.learned_predictor import train_quality_model_from_database
+
+            with tenant_context(app, tenant):
+                result = train_quality_model_from_database(
+                    model_path=scoped_model_path(model_path),
+                    logger=app.logger,
+                )
+            if result.get('status') == 'trained':
+                app.logger.info(
+                    'Quality model retrained: samples=%s acc=%s path=%s',
+                    result.get('sample_count'),
+                    result.get('training_accuracy'),
+                    result.get('model_path'),
+                )
+            else:
+                app.logger.debug('Quality model retrain skipped: %s', result)
+        except Exception as retrain_error:
+            app.logger.warning('Periodic quality model retrain failed: %s', str(retrain_error))
+
+
+def _start_quality_model_retrainer(app, force=False):
     """Run periodic quality-model retraining in a background daemon thread."""
 
     interval_minutes = int(app.config.get('QUALITY_MODEL_RETRAIN_INTERVAL_MINUTES', 180))
     if interval_minutes <= 0:
         app.logger.info('Quality model retrainer disabled (interval=%s).', interval_minutes)
         return
-
-    model_path = app.config.get('QUALITY_MODEL_PATH')
+    if not force and not app.config.get('BACKGROUND_WORKERS', True):
+        return
 
     def retrain_loop():
         while True:
-            try:
-                with app.app_context():
-                    from ml_models.scoring.learned_predictor import train_quality_model_from_database
-
-                    result = train_quality_model_from_database(
-                        model_path=model_path,
-                        logger=app.logger,
-                    )
-                    if result.get('status') == 'trained':
-                        app.logger.info(
-                            'Quality model retrained: samples=%s acc=%s path=%s',
-                            result.get('sample_count'),
-                            result.get('training_accuracy'),
-                            result.get('model_path'),
-                        )
-                    else:
-                        app.logger.debug('Quality model retrain skipped: %s', result)
-            except Exception as retrain_error:
-                app.logger.warning('Periodic quality model retrain failed: %s', str(retrain_error))
-
+            retrain_quality_model_once(app)
             time.sleep(max(60, interval_minutes * 60))
 
     worker = threading.Thread(target=retrain_loop, name='quality-model-retrainer', daemon=True)
     worker.start()
-    # app.logger.info('Started quality model retrainer thread (interval=%d min).', interval_minutes)
+
+def _database_problem(app):
+    """Why the database(s) are not ready, or None. With a registry, every active tenant must be at head."""
+    if not app.config.get('TENANT_REGISTRY_DB'):
+        return database_reason(get_db_connection)
+    from core.tenancy import tenant_context, tenants_to_serve
+
+    try:
+        tenants = tenants_to_serve(app)
+    except Exception as exc:
+        return f'The tenant registry is unreachable: {exc.__class__.__name__}.'
+    for tenant in tenants:
+        with tenant_context(app, tenant):
+            reason = database_reason(get_db_connection)
+        if reason:
+            return f'Tenant {tenant.slug}: {reason}'
+    return None
+
+
+def _operational_checks(app, checks):
+    """Disk space under the upload folder and the worker heartbeat. Yields (name, problem or None) and fills `checks`."""
+    import shutil
+
+    from services.worker_process import heartbeat_problem, read_heartbeat
+
+    minimum_mb = int(app.config.get('HEALTH_MIN_FREE_MB', 0) or 0)
+    try:
+        free_mb = shutil.disk_usage(app.config['UPLOAD_FOLDER']).free // (1024 * 1024)
+        checks['disk_free_mb'] = free_mb
+        disk_problem = f'{free_mb} MB free under {app.config["UPLOAD_FOLDER"]}; the minimum is {minimum_mb} MB.' \
+            if minimum_mb and free_mb < minimum_mb else None
+    except OSError as exc:
+        checks['disk_free_mb'] = None
+        disk_problem = f'The upload folder is unreadable: {exc.__class__.__name__}.' if minimum_mb else None
+    yield 'disk', disk_problem
+
+    beat = read_heartbeat(app)
+    checks['workers'] = {
+        'heartbeat_age_seconds': beat['age_seconds'],
+        'worker_id': beat.get('worker_id'),
+        'threads': beat.get('threads'),
+    } if beat else None
+    yield 'workers', heartbeat_problem(app) if app.config.get('REQUIRE_WORKERS') else None
+
+    from services.face.templates import key_problem
+
+    face_key = key_problem(app.config)
+    checks['face_key'] = 'configured' if face_key is None else 'missing'
+    # Reported, not fatal: an installation without face attendance has no key and is still healthy.
+    yield 'face_key', None
+
+    checks['notifications'] = 'disabled' if not app.config.get('NOTIFICATIONS_ENABLED', True) else (
+        'server-smtp' if app.config.get('SMTP_HOST') else 'tenant-smtp-or-none'
+    )
+    yield 'notifications', None
+
+    from core.license import evaluate
+
+    license_status = evaluate(app.config)
+    if not license_status['required']:
+        checks['license'] = 'not required'
+        yield 'license', None
+    else:
+        checks['license'] = 'ok' if not license_status['problem'] else license_status['problem']
+        yield 'license', license_status['problem']
+
 
 def format_time_filter(time_obj):
     """Jinja filter to format time/timedelta objects to HH:MM string"""
@@ -80,7 +158,7 @@ def format_time_12hr_filter(time_obj):
         return str(time_obj)
 
 def _configure_logging(app):
-    """Capture all log output to LOG_FILE and the console. Replaces the root logger's handlers."""
+    """Write errors to LOG_FILE. The console follows LOG_LEVEL. Replaces the root logger's handlers."""
     log_file = app.config.get('LOG_FILE', 'app.log')
 
     # Ensure logs directory exists
@@ -88,20 +166,29 @@ def _configure_logging(app):
     if log_dir and not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
 
-    # File handler for all logs
+    from core.observability import ContextFilter, alert_handler_from_config, make_formatter
+
+    formatter = make_formatter(app.config.get('LOG_FORMAT'))
+    context = ContextFilter()
+    console_level = getattr(logging, str(app.config.get('LOG_LEVEL') or 'INFO'), logging.INFO)
+
+    # The log file keeps errors. Debug and request traces stay off this file.
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)  # 10MB per file
-    file_handler.setLevel(logging.DEBUG)  # Capture everything
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setLevel(logging.ERROR)
+    file_handler.addFilter(lambda record: record.levelno >= logging.ERROR)
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(context)
 
-    # Console handler for terminal output
+    # Console handler for terminal output (journald under systemd)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(console_level)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(context)
 
-    # Configure root logger (captures everything from all modules)
+    # DEBUG stays available for a console set to LOG_LEVEL=DEBUG.
+    # The file handler above is what keeps app.log to errors.
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)  # Capture all levels
+    root_logger.setLevel(logging.DEBUG)
 
     # Clear any existing handlers to avoid duplicates
     root_logger.handlers.clear()
@@ -110,10 +197,16 @@ def _configure_logging(app):
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
+    alerts = alert_handler_from_config(app.config)
+    if alerts is not None:
+        alerts.addFilter(context)
+        root_logger.addHandler(alerts)
+
     # Set specific logger levels (they inherit handlers from root)
-    app.logger.setLevel(logging.DEBUG)
-    logging.getLogger('werkzeug').setLevel(logging.INFO)  # Flask dev server
-    logging.getLogger('MySQLdb').setLevel(logging.WARNING)  # Only warnings/errors from DB
+    app.logger.setLevel(logging.INFO)
+    logging.getLogger('werkzeug').setLevel(logging.INFO)  # Request lines stay on the console
+    for name in ('mysql.connector', 'MySQLdb'):
+        logging.getLogger(name).setLevel(logging.ERROR)
 
 
 def create_app(config=None):
@@ -135,9 +228,12 @@ def create_app(config=None):
     if app.config.get('TESTING'):
         from config.testing import test_database_problem
 
-        problem = test_database_problem(app.config.get('MYSQL_DB'))
-        if problem:
-            raise RuntimeError(f'Refusing to create a testing app: {problem}')
+        for setting in ('MYSQL_DB', 'TENANT_REGISTRY_DB'):
+            if setting == 'TENANT_REGISTRY_DB' and not app.config.get(setting):
+                continue
+            problem = test_database_problem(app.config.get(setting))
+            if problem:
+                raise RuntimeError(f'Refusing to create a testing app: {setting}: {problem}')
     proxies = int(app.config.get('TRUSTED_PROXY_COUNT') or 0)
     if proxies > 0:
         from werkzeug.middleware.proxy_fix import ProxyFix
@@ -168,6 +264,8 @@ def create_app(config=None):
     @app.before_first_request
     def test_mysql_connection():
         """Test database connection on first request"""
+        if app.config.get('TENANT_REGISTRY_DB'):
+            return
         try:
             connection = get_db_connection()
             cursor = connection.cursor()
@@ -249,8 +347,14 @@ def create_app(config=None):
 
     if app.config.get('CONFIGURE_LOGGING', True):
         _configure_logging(app)
-    if app.config['CLI_COMMAND']:
-        logging.getLogger('mysql.connector').setLevel(logging.WARNING)
+
+    # First hooks: a request id on every request, then (with a tenant registry) the college by hostname,
+    # before anything opens a database.
+    from core.observability import install_request_ids
+    from core.tenancy.request import install as install_tenant_resolution
+
+    install_request_ids(app)
+    app.config['TENANCY_ENABLED'] = install_tenant_resolution(app)
 
     @app.before_request
     def limit_request_rate():
@@ -274,7 +378,10 @@ def create_app(config=None):
     # Setup session activity tracking
     @app.before_request
     def ensure_session_cookie():
-        """Ensure Flask creates a session cookie on every request"""
+        """Ensure Flask creates a session cookie on every request (not for the key-authenticated public API)."""
+        from flask import request
+        if (request.path or '').startswith('/api/v1'):
+            return
         if not session.get('_csrf_initialized'):
             session['_csrf_initialized'] = True
             session.modified = True
@@ -288,21 +395,13 @@ def create_app(config=None):
     @app.before_request
     def check_maintenance_mode():
         from flask import request, session
-        
-        # Skip maintenance check for static files and health check
-        if request.path.startswith('/static/') or request.path == '/health':
+        from ui.maintenance import maintenance_allows, maintenance_response
+
+        if not app.config.get('MAINTENANCE_MODE', False):
             return None
-        
-        # Check if maintenance mode is enabled
-        if app.config.get('MAINTENANCE_MODE', False):
-            # Allow Super Admin access during maintenance
-            if session.get('role') == 'Super Admin':
-                return None
-            
-            # Show maintenance page for all other users
-            return 'The system is temporarily unavailable.', 503
-        
-        return None
+        if maintenance_allows(request.path, request.method, session.get('role'), 'user_id' in session):
+            return None
+        return maintenance_response(request.path)
     
     # Make BASE_URL and institution details available in all templates
     @app.context_processor
@@ -316,77 +415,23 @@ def create_app(config=None):
         }
     
     with app.app_context():
+        # One request path only: sign-in/sign-out forms and the SSO
+        # callback stay on ``auth_bp``; every screen is served by the
+        # React bundle talking to ``/api``. Legacy page URLs are redirected
+        # by ``ui.errors`` (see ``ui.pages.page_response``).
         from routes.auth import auth_bp
-        from routes.academic import academic_bp
-        from routes.user_management import user_mgmt_bp
-        from routes.profile import profile_bp
-        from routes.faculty import teacher_bp
-        from routes.faculty.attendance import attendance_bp
-        from routes.students import student_bp
         from api.mobile.v1 import mobile_sync_bp
-        
-        # Import modular admin routes
-        from routes.admin import (
-            students_bp as admin_students_bp, 
-            faculty_bp as admin_faculty_bp, 
-            rooms_bp, 
-            timetable_bp, 
-            holiday_bp, 
-            invitations_bp, 
-            proxy_bp,
-            audit_logs_bp,
-            dashboard_bp,
-            departments_bp,
-            api_bp,
-            permissions_bp,
-            shift_management,
-            branding,
-            mobile_devices_bp
-        )
-        from routes.admin.attendance_admin import attendance_admin_bp
-        from routes.admin.reports import reports_bp
+        from api.v1 import public_api_bp
         from api.web import json_api_bp
+        from ui.errors import error_handlers_bp
 
-        # Register core blueprints
         app.register_blueprint(auth_bp)
-        app.register_blueprint(academic_bp)
-        app.register_blueprint(user_mgmt_bp)
-        app.register_blueprint(profile_bp)
-        
-        # Register role-specific blueprints
-        app.register_blueprint(teacher_bp)
-        app.register_blueprint(attendance_bp)
-        app.register_blueprint(student_bp)
         app.register_blueprint(mobile_sync_bp)
         csrf.exempt(mobile_sync_bp)
-        
-        # Register modular admin blueprints
-        app.register_blueprint(admin_students_bp)
-        app.register_blueprint(admin_faculty_bp)
-        app.register_blueprint(rooms_bp)
-        app.register_blueprint(timetable_bp)
-        app.register_blueprint(holiday_bp)
-        app.register_blueprint(invitations_bp)
-        app.register_blueprint(proxy_bp)
-        app.register_blueprint(shift_management.shift_bp)
-        app.register_blueprint(attendance_admin_bp)
-        app.register_blueprint(reports_bp)
-        
-        # Register security and utility admin blueprints
-        app.register_blueprint(audit_logs_bp)
-        app.register_blueprint(dashboard_bp)
-        app.register_blueprint(departments_bp)
-        app.register_blueprint(api_bp)
-        app.register_blueprint(permissions_bp)
-        app.register_blueprint(branding.branding_bp)
-        app.register_blueprint(mobile_devices_bp)
+        app.register_blueprint(public_api_bp)
+        csrf.exempt(public_api_bp)
         app.register_blueprint(json_api_bp)
-        
-        # Register error handlers
-        from ui.errors import error_handlers_bp
         app.register_blueprint(error_handlers_bp)
-        
-        # app.logger.info("Blueprints registered successfully.")
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
@@ -438,29 +483,46 @@ def create_app(config=None):
     def health_check():
         from flask import jsonify
         maintenance = bool(app.config.get('MAINTENANCE_MODE', False))
-        reason = database_reason(get_db_connection) if app.config.get('REQUIRE_MIGRATED_DB') else None
+        payload = {"status": "healthy", "maintenance_mode": maintenance, "checks": {}}
+        if app.config.get('TENANT_REGISTRY_DB'):
+            payload['tenancy'] = 'registry'
+        reason = _database_problem(app) if app.config.get('REQUIRE_MIGRATED_DB') else None
+        payload['checks']['database'] = reason or 'ok'
         if reason:
-            return jsonify({"status": "unavailable", "reason": reason, "maintenance_mode": maintenance}), 503
-        return jsonify({
-            "status": "healthy",
-            "maintenance_mode": maintenance,
-        })
+            payload.update(status='unavailable', reason=reason)
+            return jsonify(payload), 503
+        for name, problem in _operational_checks(app, payload['checks']):
+            if problem:
+                payload.update(status='unavailable', reason=f'{name}: {problem}')
+                return jsonify(payload), 503
+        return jsonify(payload)
 
     if app.config['CLI_COMMAND']:
         return app
 
     if app.config.get('REQUIRE_MIGRATED_DB'):
         with app.app_context():
-            reason = database_reason(get_db_connection)
+            reason = _database_problem(app)
         if reason:
             app.logger.error('Database schema check failed: %s /health will return 503 until this is fixed.', reason)
 
-    should_start_worker = (not app.config.get('DEBUG', False)) or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    # flask run with the debugger on eager-loads the app in the reloader supervisor,
+    # then leaves that process running forever. Workers and their log handlers belong
+    # in the child (WERKZEUG_RUN_MAIN), which is the process that actually serves.
+    from flask.helpers import get_debug_flag
+
+    reloader_child = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    debug_reloader = bool(app.config.get('DEBUG', False)) or get_debug_flag()
+    should_start_worker = reloader_child or not debug_reloader
     if should_start_worker:
         _start_quality_model_retrainer(app)
         from services.attendance_jobs import ensure_worker as ensure_close_day_worker
+        from services.notifications import ensure_worker as ensure_notification_worker
+        from services.webhooks import ensure_worker as ensure_webhook_worker
 
         ensure_close_day_worker(app)
+        ensure_notification_worker(app)
+        ensure_webhook_worker(app)
     
     # app.logger.info("College Timetable Management System application created.")
     return app

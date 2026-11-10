@@ -14,12 +14,15 @@ from flask import current_app
 from api.web.security import safe_clock, safe_stamp, safe_text
 from extensions import get_db_connection
 from services.audit_logs import _EXPORT_QUERY, _append_filters
+from services.job_claims import claim_next, heartbeat_clause, requeue_stale, stale_seconds
+from services.reports_admin import accreditation
 from services.reports_admin._common import (
     ALLOWED_REPORT_TYPES,
+    REPORT_LABELS,
     _get_reports_storage_dir,
-    _write_csv_file,
 )
 from services.reports_admin.dataset import _build_report_export_dataset
+from services.reports_admin.renderers import EXTENSIONS, normalise_format, render
 
 _PAGE = 2000
 _KIND = re.compile(r'[^a-z0-9_-]')
@@ -52,10 +55,10 @@ def enqueue_job(report_type, filters, user_id):
     return job_id
 
 
-def ensure_worker(app):
-    """Start the single background worker for this process. Never under a Flask CLI command."""
+def ensure_worker(app, force=False):
+    """Start the single background worker for this process. Never under a Flask CLI command unless `force` (flask workers run)."""
     global _started
-    if app.config.get('CLI_COMMAND') or not app.config.get('BACKGROUND_WORKERS', True):
+    if not force and (app.config.get('CLI_COMMAND') or not app.config.get('BACKGROUND_WORKERS', True)):
         return
     with _guard:
         if _started:
@@ -64,65 +67,79 @@ def ensure_worker(app):
     threading.Thread(target=_loop, args=(app,), name='export-queue', daemon=True).start()
 
 
-def _loop(app):
-    try:
-        with app.app_context():
-            _requeue_interrupted()
-    except Exception:
-        app.logger.exception('Export queue could not recover interrupted jobs')
-    while True:
-        job_id = None
+def run_pass(app, drain=False):
+    """One pass over every tenant: requeue stale claims, then run one job (or all queued with `drain`). Returns jobs run."""
+    from core.tenancy import tenant_context, tenants_to_serve
+
+    ran = 0
+    for tenant in tenants_to_serve(app):
+        key = tenant.slug if tenant is not None else None
         try:
-            with app.app_context():
-                job_id = _claim_next()
-                if job_id:
+            with tenant_context(app, tenant):
+                requeued = _requeue_interrupted()
+                if requeued:
+                    app.logger.warning('Export queue requeued %s stale job(s) for tenant %s', requeued, key or 'default')
+                while True:
+                    job_id = _claim_next()
+                    if not job_id:
+                        break
                     _process(job_id)
+                    ran += 1
+                    if not drain:
+                        break
+        except Exception:
+            app.logger.exception('Export queue worker failed for tenant %s', key or 'default')
+    return ran
+
+
+def _loop(app):
+    while True:
+        try:
+            worked = run_pass(app)
         except Exception:
             app.logger.exception('Export queue worker failed')
-            job_id = None
-        if not job_id:
+            worked = 0
+        if not worked:
             time.sleep(1.5)
 
 
-def _requeue_interrupted():
-    directory = _get_reports_storage_dir()
-    for name in os.listdir(directory):
-        if name.endswith('.csv.part'):
-            try:
-                os.remove(os.path.join(directory, name))
-            except OSError:
-                current_app.logger.exception('Could not remove a partial export')
+def _requeue_interrupted(seconds=None):
+    """Requeue running exports whose worker stopped reporting. Returns how many were requeued."""
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        cursor.execute(
-            "UPDATE processed_reports SET status = 'queued', progress = 0 WHERE status = 'running'"
-        )
+        count = requeue_stale(cursor, 'processed_reports', 'progress = 0', seconds)
         connection.commit()
     finally:
         cursor.close()
         connection.close()
+    if count:
+        _remove_orphan_partials(stale_seconds() if seconds is None else seconds)
+    return count
+
+
+def _remove_orphan_partials(older_than_seconds):
+    """Drop .part files nobody has written to for that long. A live worker's partial is younger."""
+    directory = _get_reports_storage_dir()
+    cutoff = time.time() - max(0, int(older_than_seconds))
+    for name in os.listdir(directory):
+        if not name.endswith('.part'):
+            continue
+        path = os.path.join(directory, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.remove(path)
+        except OSError:
+            current_app.logger.exception('Could not remove a partial export')
 
 
 def _claim_next():
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
-        cursor.execute(
-            "SELECT id FROM processed_reports WHERE status = 'queued' ORDER BY id ASC LIMIT 1"
-        )
-        row = cursor.fetchone()
-        if not row:
-            connection.rollback()
-            return None
-        job_id = row['id']
-        cursor.execute(
-            "UPDATE processed_reports SET status = 'running', progress = 1 WHERE id = %s AND status = 'queued'",
-            (job_id,),
-        )
-        won = cursor.rowcount == 1
+        job_id = claim_next(cursor, 'processed_reports')
         connection.commit()
-        return job_id if won else None
+        return job_id
     except Exception:
         connection.rollback()
         raise
@@ -145,12 +162,17 @@ def _process(job_id):
         connection.close()
     if not job:
         return
-    _name, final, partial = _paths(job['report_type'])
+    filters = {}
+    partial = None
     try:
         filters = json.loads(job['filters_json'] or '{}')
         if not isinstance(filters, dict):
             filters = {}
         kind = job['report_type']
+        fmt = normalise_format(filters.get('format')) or 'csv'
+        if kind in ('users-export', 'audit-export', 'timetable-export'):
+            fmt = 'csv'  # streamed row by row; the formatted renderers need the whole dataset
+        _name, final, partial = _paths(kind, fmt)
         if kind == 'users-export':
             count = _export_users(job_id, filters, partial)
         elif kind == 'audit-export':
@@ -158,7 +180,7 @@ def _process(job_id):
         elif kind == 'timetable-export':
             count = _export_timetable(job_id, filters, partial)
         elif kind in ALLOWED_REPORT_TYPES:
-            count = _export_report(job_id, kind, filters, partial)
+            count = _export_report(job_id, kind, filters, partial, fmt)
         else:
             raise ValueError('unknown export')
         os.replace(partial, final)
@@ -168,10 +190,10 @@ def _process(job_id):
         _fail(job_id, partial)
 
 
-def _paths(kind):
+def _paths(kind, fmt='csv'):
     safe_kind = _KIND.sub('', str(kind))[:40] or 'export'
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    name = f'{safe_kind}_{stamp}_{uuid.uuid4().hex[:8]}.csv'
+    name = f'{safe_kind}_{stamp}_{uuid.uuid4().hex[:8]}{EXTENSIONS.get(fmt, ".csv")}'
     directory = _get_reports_storage_dir()
     final = os.path.join(directory, name)
     return name, final, final + '.part'
@@ -183,7 +205,7 @@ def _progress(job_id, value):
     cursor = connection.cursor()
     try:
         cursor.execute(
-            "UPDATE processed_reports SET progress = %s WHERE id = %s AND status = 'running'",
+            f"UPDATE processed_reports SET progress = %s, {heartbeat_clause()} WHERE id = %s AND status = 'running'",
             (progress, job_id),
         )
         connection.commit()
@@ -408,15 +430,20 @@ def _export_timetable(job_id, filters, partial):
     return len(rows)
 
 
-def _export_report(job_id, report_type, filters, partial):
+def _export_report(job_id, report_type, filters, partial, fmt='csv'):
     _progress(job_id, 10)
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
+    labels, meta = {}, {}
     try:
-        rows, fieldnames = _build_report_export_dataset(cursor, report_type, filters)
+        if report_type in accreditation.ACCREDITATION_TYPES:
+            rows, fieldnames, labels, meta = accreditation.build(cursor, report_type, filters)
+        else:
+            rows, fieldnames = _build_report_export_dataset(cursor, report_type, filters)
+            meta = {key: value for key, value in filters.items() if key != 'format' and value not in (None, '')}
     finally:
         cursor.close()
         connection.close()
     _progress(job_id, 80)
-    _write_csv_file(partial, fieldnames, rows)
-    return len(rows)
+    title = REPORT_LABELS.get(report_type, report_type)
+    return render(partial, fmt, fieldnames, rows, title=title, meta=meta, labels=labels)

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Assigned = { name: string; module: string; source: string; department_id: number | null; department_name: string }
@@ -267,8 +268,8 @@ export function UserPermissionsPage() {
         </div>
       </section>
 
-      {error && <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[240px_1fr]">
         <aside className="overflow-auto rounded-2xl border border-gray-200 bg-white p-2">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
@@ -139,8 +140,8 @@ export function PermissionsPage() {
       <div className="mb-4 overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <TableToolbar search={query} onSearch={setQuery} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((open) => !open)} matched={visibleModules.reduce((sum, [, items]) => sum + items.length, 0)} source={rows.length} activeCount={(query.trim() ? 1 : 0) + Object.values(filters).filter((value) => value.trim()).length} onClear={() => { setQuery(''); setFilters({ action: '', name: '', description: '' }) }} />
       </div>
-      {error && <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[240px_1fr]">
         <aside className="overflow-auto rounded-2xl border border-gray-200 bg-white p-2">
           <button type="button" onClick={() => setActiveModule('All modules')} className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold ${activeModule === 'All modules' ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>

@@ -1,89 +1,114 @@
-# Lab batches (proposal for timetable v2)
+# Lab batches
 
-Status: proposal. Nothing here exists in the schema yet.
+Status: implemented in revision `0012_lab_batches`. This page describes what
+exists; the original gap and the choices made are kept for context.
 
-## The gap
+## The gap this closes
 
 A practical is usually taught to part of a division at a time: division A
 splits into batches A1, A2 and A3, and each batch has its own lab slot,
-room and sometimes teacher. The schema cannot say this:
+room and sometimes teacher. Before 0012 the schema could not say this:
 
 - `course_batches` is an intake cohort (a course's 2026–2029 students), not
   a lab group. `timetable.course_batch_id` and `students.course_batch_id`
-  point at it.
-- No table says which students are in which lab group, and no timetable
-  column says that a slot belongs to one group.
+  point at it and keep that meaning.
+- No table said which students were in which lab group, and no timetable
+  column said that a slot belonged to one group.
 
-So the attendance roster for a lab slot is the whole division, and a
-teacher can mark a student from another batch. The strict xfail
-`test_batch_lecture_refuses_a_student_in_another_batch` in
-`tests/integration/test_teacher_attendance.py` records this.
+So the attendance roster for a lab slot was the whole division, and a
+teacher could mark a student from another batch.
 
-## Proposed tables
+## Tables
 
 ### `lab_batch_groups`: the batches a division is split into
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | int PK | |
-| `course_id` | int FK `courses.id` | |
-| `class_id` | int FK `classes.id` | |
-| `division_id` | int FK `divisions.id` NULL | NULL splits the whole class (no divisions) |
-| `academic_year_id` | int FK `academic_years.id` | Batches are re-formed each year |
-| `semester_id` | int FK `semesters.id` NULL | NULL means the same split all year |
+| `course_id` | int FK `courses.id` CASCADE | |
+| `class_id` | int FK `classes.id` CASCADE | |
+| `division_id` | int FK `divisions.id` CASCADE, NULL | NULL splits the whole class (no divisions) |
+| `academic_year_id` | int FK `academic_years.id` CASCADE | Batches are re-formed each year |
+| `semester_id` | int FK `semesters.id` CASCADE, NULL | NULL means the same split all year |
 | `name` | varchar(20) | "A1", "Batch 2" |
-| `capacity` | int NULL | Lab seats; the generator can respect it |
-| `is_active` | tinyint(1) | |
+| `capacity` | int NULL | Lab seats; the generator and the member screen respect it |
+| `is_active` | tinyint(1) | Inactive groups are left out of splits and generation |
+| `created_at`, `updated_at` | timestamp | |
 
-Unique key: (`course_id`, `class_id`, `division_id`, `academic_year_id`,
-`semester_id`, `name`).
+Unique key `uq_lab_batch_group` (`course_id`, `class_id`, `division_id`,
+`academic_year_id`, `semester_id`, `name`). MariaDB treats NULLs as distinct
+in unique keys, so `services/lab_batches.py` also checks for a same-named
+group before inserting or renaming (`lab_batch_exists`).
 
-### `lab_batch_members`: which batch a student is in
+### `lab_batch_members`: which batch a student is in, and when
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | int PK | |
-| `lab_batch_group_id` | int FK `lab_batch_groups.id` ON DELETE CASCADE | |
-| `student_id` | int FK `students.id` ON DELETE CASCADE | |
-| `added_at` | timestamp | |
+| `lab_batch_group_id` | int FK `lab_batch_groups.id` CASCADE | |
+| `student_id` | int FK `students.id` CASCADE | |
+| `added_at` | date NOT NULL | First day the student belongs to the batch |
+| `ended_at` | date NULL | Last day; NULL while current |
 
-Unique key: (`lab_batch_group_id`, `student_id`). A student is in at most
-one batch per (division, academic year, semester). The service enforces
-that rule because a single unique key cannot express it.
+Unique key `uq_lab_batch_member` (`lab_batch_group_id`, `student_id`).
+
+Memberships are dated rather than deleted. When a student moves from A1 to
+A2 on 1 March, the A1 row gets `ended_at = 28 Feb` and an A2 row starts on
+1 March. A student is current in at most one batch per split (same cohort,
+year and semester); `set_members` enforces that, since one unique key cannot.
 
 ### Timetable link
 
-Add `timetable.lab_batch_group_id` (int FK `lab_batch_groups.id`, NULL).
-NULL means the slot is for the whole division (or the whole class when
-`division_id` is NULL). `timetable.course_batch_id` keeps its current
-meaning (intake cohort).
+`timetable.lab_batch_group_id` (int FK `lab_batch_groups.id` ON DELETE SET
+NULL, NULL). NULL means the slot is for the whole division (or whole class
+when `division_id` is NULL). Deleting a group turns its slots back into
+whole-division slots; attendance is never deleted. Index
+`idx_timetable_lab_batch`.
 
-Index: (`lab_batch_group_id`), plus the existing timetable indexes.
+## Roster rule
 
-## Roster rule once the tables exist
-
-For a timetable row:
+For a timetable row on a given date:
 
 1. Start from students in the slot's course and class, narrowed to its
-   division when it has one (what `fetch_lecture_roster` does today).
+   division when it has one.
 2. If the subject is an elective, keep students with a
-   `student_subject_selections` row for it (also done today).
-3. If `lab_batch_group_id` is set, keep students with a
-   `lab_batch_members` row in that group.
+   `student_subject_selections` row for it.
+3. If `lab_batch_group_id` is set, keep students with a `lab_batch_members`
+   row in that group where `added_at <= date` and (`ended_at IS NULL OR
+   ended_at >= date`).
 
-## Modules each change touches
+`data_access/teacher_attendance.roster_clauses(lecture, on_date)` is the
+single SQL form of this rule, used by the teacher mark screen, the history
+screen, mobile sync and the mark endpoints. `attendance_calc/roster.py`
+applies the same rule in Python for percentages: `Student.batch_memberships`
+holds the dated rows, so a session before a student's `added_at` or after
+`ended_at` is OUTSIDE the roster and is not counted against them. A saved
+mark is roster evidence, so marks taken before a move keep counting.
 
-| Change | Modules |
+## Clash rule
+
+`academic_rules/clashes.cohort_slots_clash(batch_a, batch_b)`: a
+whole-division slot (NULL) clashes with everything in the division; two
+slots of the same batch clash; slots of different batches do not, so A1 and
+A2 can run practicals at the same time with different teachers and labs.
+Faculty and room clashes are unchanged (one person or room, one place).
+
+## Where it is used
+
+| Area | Modules |
 | --- | --- |
-| `lab_batch_groups`, `lab_batch_members` tables | New Alembic revision (idempotent, with downgrade); `core/schema` comparison (new tables in the baseline diff); new admin CRUD: a `data_access`/`services` pair plus an `api/web` route and a React screen to create batches and assign students; `seeders` (none needed by default) |
-| `timetable.lab_batch_group_id` | Same revision; `data_access/admin_timetable.py` and `api/web/timetable.py` (manual create/edit, conflict checks: two batches of one division may share a time slot, but one batch cannot be in two places); `services/timetable_jobs.py` and the generator in `academic_rules` / `ml_models` (schedule each batch's practical hours, respect `capacity` against `rooms.capacity`); timetable exports in `services/reports_admin/timetable.py` and `dataset.py` |
-| Attendance roster | `data_access/teacher_attendance.py` `fetch_lecture_roster` (step 3 above); `data_access/teacher_portal.py` `fetch_class_students` and `fetch_teaching_class_counts`; `api/mobile/v1/student_sync.py` (`sync_timetable` per-lecture roster, `resolve_timetable`); `api/mobile/v1/sync_attendance.py` (`_resolve_timetable_id_from_event`, `_has_active_timetable_for_group`) |
-| Student timetable and percentages | `data_access/student_portal.py` (today's classes, timetable: show only the student's batch slots); the `attendance_summary` and `student_overall_attendance` views (the denominator should count only the slots the student belongs to) and every consumer of them: `services/attendance_admin/students.py`, `services/attendance_admin/exports.py`, `api/web/attendance.py`, `api/web/student.py` |
-| Faculty load | `data_access/admin_faculty.py`, `api/web/people/faculty.py` (a batch slot is a full teaching hour for the teacher, though it covers only part of the division) |
-| Tests | Turn the batch xfail into a passing test; add roster tests for batch slots, a whole-class slot, and a student who changes batch mid-semester |
+| CRUD and members | `data_access/lab_batches.py`, `services/lab_batches.py`, `api/web/catalog/lab_batches.py` (`/api/lab-batches`, `/members`, `/split`), React `features/academics/pages/LabBatchesPage.tsx`. Permissions are the course-batch ones (`batches_view/add/change/delete`). |
+| Manual slots | `services/timetable_slots.py` (`add_slot`, `remove_slot`), `POST /api/timetable/slots`, `DELETE /api/timetable/slots/<id>`; the timetable page shows a batch label per session and an add-slot form. Removing a slot that already has attendance or sessions retires it (`is_active = 0`) instead of deleting it. |
+| Generation | `services/timetable/generator.py` expands each practical into one session per active batch (`load_lab_batches`), sizes rooms by batch, and fills the other batches into the same slot with a different teacher and lab (`fill_parallel_batches`). `services/timetable/joint_solver.py` models batches as separate demands with the cohort exclusivity rule above. See [TIMETABLE.md](TIMETABLE.md). |
+| Attendance roster | `data_access/teacher_attendance.py`, `services/teacher_attendance.py`, `services/lecture_sessions.py`, `api/mobile/v1/sync_attendance.py`, `api/mobile/v1/student_sync.py` (payloads carry `lab_batch_group_id` and `lab_batch_name`). |
+| Percentages | `data_access/attendance_calc.fetch_batch_memberships`, `services/attendance_calc.to_student`, `attendance_calc/roster.py`. |
+| Student and teacher portals | `data_access/student_portal.STUDENT_SLOT_FILTER` shows only the student's own batch slots; `data_access/teacher_portal.fetch_teaching_class_counts` counts a batch's members. |
+| Notifications | `services/notifications.py` addresses batch slots to batch members only and names the batch in the cohort label. |
+| Tests | `tests/unit/test_lab_batches.py`, `tests/integration/test_lab_batches_live.py`, the batch cases in `tests/integration/test_teacher_attendance.py`; `tests/factories.py` has `lab_batches()` and `enrol_in_batch()`. |
 
 ## Migration of existing data
 
-None is required: every existing timetable row gets `lab_batch_group_id`
-NULL, so it stays a whole-division slot. Colleges then create batches and
-re-point practical slots at them.
+None is required: every existing timetable row has `lab_batch_group_id`
+NULL, so it stays a whole-division slot. Colleges create batches on the Lab
+batches page, assign students (or "deal by roll number"), and either add
+batch slots by hand or regenerate the timetable.

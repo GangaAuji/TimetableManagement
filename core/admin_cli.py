@@ -13,6 +13,8 @@ import sys
 import click
 from flask.cli import with_appcontext
 
+from core.tenancy.cli import tenant_option
+
 PASSWORD_ENV = 'SUPERADMIN_PASSWORD'
 SUPER_ADMIN = 'Super Admin'
 _ACTIVITY = 'superadmin_created'
@@ -39,6 +41,9 @@ def _password(from_stdin):
         )
     if not 8 <= len(password) <= 128:
         raise click.ClickException('The password must be 8 to 128 characters.')
+    from services.security_policy import enforced_problem
+    if enforced_problem(password):
+        raise click.ClickException('The password does not meet the security policy.')
     return password
 
 
@@ -65,8 +70,15 @@ def _audit(cursor, user_id, username, email, forced):
 @click.option('--password-stdin', is_flag=True, help='Read the password from the first line of standard input.')
 @click.option('--force', is_flag=True, help='Create the account even when a Super Admin already exists.')
 @with_appcontext
+@tenant_option
 def create_superadmin(username, email, password_stdin, force):
     """Create a Super Admin account."""
+    user_id = create_superadmin_account(username, email, password_stdin, force)
+    click.echo(f"Created Super Admin '{username}' (id {user_id}).")
+
+
+def create_superadmin_account(username, email, password_stdin, force):
+    """Validate, prompt for the password, insert the account and audit it. Returns the new user id."""
     from core.schema.status import database_reason
     from extensions import get_db_connection
     from security.passwords import hash_password
@@ -114,4 +126,4 @@ def create_superadmin(username, email, password_stdin, force):
     finally:
         cursor.close()
         connection.close()
-    click.echo(f"Created Super Admin '{username}' (id {user_id}).")
+    return user_id

@@ -4,6 +4,8 @@ import { ThemeModeButton } from '../ThemeModeButton'
 type HeaderProps = {
   title: ReactNode
   onMenuToggle: () => void
+  /** Rendered between the title and the clock, e.g. the institution switcher. */
+  tools?: ReactNode
 }
 
 function formatClock(date: Date) {
@@ -16,7 +18,7 @@ function formatClock(date: Date) {
   return `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()} • ${hour12}:${minutes} ${suffix}`
 }
 
-export function Header({ title, onMenuToggle }: HeaderProps) {
+export function Header({ title, onMenuToggle, tools }: HeaderProps) {
   const [clock, setClock] = useState(() => formatClock(new Date()))
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export function Header({ title, onMenuToggle }: HeaderProps) {
         </button>
         <div className="min-w-0 flex-1 text-lg font-bold sm:text-xl">{title}</div>
         <div className="flex shrink-0 items-center gap-2">
+          {tools}
           <ThemeModeButton compact className="shell-chip px-2.5" />
           <div className="shell-chip hidden items-center rounded-full px-3 py-1 text-sm font-medium lg:flex">
             <i className="far fa-clock mr-2" style={{ color: 'var(--color-secondary, #10b981)' }} />

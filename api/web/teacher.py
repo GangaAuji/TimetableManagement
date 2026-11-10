@@ -48,6 +48,24 @@ def _teacher_only():
     return None
 
 
+def _workload_card(cursor, faculty_user_id):
+    """{hours, min, max, status, designation} against the teacher's workload norm; None when the capability is off."""
+    from services import workload
+
+    try:
+        rows = workload.assess(cursor, faculty_ids=[faculty_user_id])
+    except Exception:
+        current_app.logger.exception('Teacher workload card failed')
+        return None
+    if not rows:
+        return None
+    row = rows[0]
+    return {
+        'hours': row['hours'], 'min': row['min'], 'max': row['max'], 'status': row['status'],
+        'designation': safe_text(row.get('designation') or '', 50),
+    }
+
+
 def _home():
     denied = _teacher_only()
     if denied:
@@ -106,6 +124,7 @@ def _home():
             'today': today,
             'sessions': sessions,
             'absences': absences,
+            'workload': _workload_card(cursor, faculty['user_id']),
         })
     except Exception:
         current_app.logger.exception('Teacher home failed')

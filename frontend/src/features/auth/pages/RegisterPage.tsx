@@ -1,3 +1,4 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
@@ -46,6 +47,7 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [capture, setCapture] = useState('')
+  const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
   const [cameraError, setCameraError] = useState('')
   const [ready, setReady] = useState(false)
@@ -175,6 +177,10 @@ export function RegisterPage() {
       setError('Capture a face photo before continuing.')
       return
     }
+    if (!consent) {
+      setError('Tick the consent box to let the college use your face photo for attendance.')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {
@@ -185,6 +191,7 @@ export function RegisterPage() {
       body.set('password', password)
       body.set('confirm_password', confirmPassword)
       body.set('face_capture_data', capture)
+      body.set('face_consent', 'yes')
       body.set('face_template_version', 'mobilefacenet_192_l2_v1')
       body.set('face_detector_model', 'yolov8n_float32.tflite')
       const response = await fetch(`/register/${encodeURIComponent(token)}`, {
@@ -236,7 +243,7 @@ export function RegisterPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{state === 'expired' ? 'This invitation has expired' : state === 'used' ? 'This invitation was already used' : 'This registration link is not valid'}</h1>
               <p className="mt-2 text-sm text-gray-500">{state === 'expired' ? 'Ask an administrator to resend the invitation.' : 'Ask an administrator for a new registration link.'}</p>
-              {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+              <FailureNotice message={error} />
               <a href="/" className="mt-6 inline-block text-sm font-semibold text-slate-700 underline">Back to sign in</a>
             </div>
           )}
@@ -253,7 +260,7 @@ export function RegisterPage() {
                 <h1 className="text-2xl font-bold text-gray-900">Complete registration</h1>
                 <p className="mt-1 text-sm text-gray-500">{invite.name || 'Invited user'}{invite.role ? ` · ${invite.role}` : ''}</p>
               </div>
-              {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              <FailureNotice message={error} />
               <label className="block text-sm font-medium text-gray-700">Username
                 <input required minLength={3} maxLength={50} value={username} onChange={(event) => setUsername(event.target.value)} className={`mt-1 ${fieldClass}`} />
               </label>
@@ -284,6 +291,10 @@ export function RegisterPage() {
                   </div>
                 </div>
               </div>
+              <label className="flex items-start gap-2 text-xs text-gray-600">
+                <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5" />
+                <span>I agree that the college stores a face template made from this photo and uses it to recognise me for attendance. I can withdraw this consent at any time from my profile, which deletes the template.</span>
+              </label>
               <button type="submit" disabled={submitting} className="flex w-full justify-center rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">{submitting ? 'Saving…' : 'Create account'}</button>
             </form>
           )}

@@ -74,6 +74,7 @@ def _bind(monkeypatch, rows, password_ok=True, password_error=None):
 
     monkeypatch.setattr(login_service, 'password_matches', _check)
     monkeypatch.setattr(login_service, 'upgraded_hash', lambda stored, raw: None)
+    monkeypatch.setattr(login_service, 'apply_at_login', lambda cursor, session: None)  # covered in test_institutions
 
     class _Clock(datetime):
         @classmethod

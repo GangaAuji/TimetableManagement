@@ -3,6 +3,8 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { getCsrfToken } from '../../../shared/api/endpoints'
 import { DefinitionItem, displayValue, messageFrom, type DataRow } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
+import { SecondFactorCard } from '../SecondFactorCard'
 
 export function AccountPage() {
   const setPageHeader = useSetPageHeader()
@@ -74,8 +76,8 @@ export function AccountPage() {
     <section className="space-y-4">
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
         <h2 className="text-sm font-bold text-gray-800">Profile</h2>
-        {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
-        {saved && <p className="mt-3 text-xs text-emerald-700">{saved}</p>}
+        <FailureNotice message={error} />
+        <SuccessNotice message={saved} />
         {profile && (
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <DefinitionItem label="Username" value={String(profile.username)} />
@@ -108,6 +110,7 @@ export function AccountPage() {
         </label>
         <button type="submit" className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white">Change password</button>
       </form>
+      <SecondFactorCard />
     </section>
   )
 }

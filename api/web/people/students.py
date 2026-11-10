@@ -8,6 +8,8 @@ from mysql.connector import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from core.pagination import bounded_page_size, page_bounds
+from core.scope import current_scope
+from data_access import institutions as institutions_store
 from extensions import get_db_connection
 from api.web.access import (
     InputError,
@@ -46,6 +48,7 @@ _MESSAGES = {
     'student_name_invalid': 'Enter a student name up to 100 characters.',
     'student_username_invalid': 'Enter a username up to 50 characters.',
     'student_password_invalid': 'Enter a password up to 128 characters.',
+    'password_policy': 'The password does not meet the security policy.',
     'student_email_invalid': 'Enter a valid email address.',
     'student_phone_invalid': 'Phone must be 20 characters or fewer.',
     'student_roll_invalid': 'Roll number must be 50 characters or fewer.',
@@ -58,6 +61,8 @@ _MESSAGES = {
     'student_ids_invalid': 'Choose at least one student.',
     'student_not_found': 'That student was not found.',
     'students_unavailable': 'The student list could not be loaded.',
+    'license_required': 'A valid license is required before another student can be added.',
+    'license_students': 'The license does not allow another student.',
 }
 
 _LIST_FROM = """
@@ -97,6 +102,9 @@ def _password(value, required):
         return None
     if not isinstance(value, str) or _CONTROL.search(value) or not value.strip() or len(value) > 128:
         raise InputError('student_password_invalid')
+    from services.security_policy import enforced_problem
+    if enforced_problem(value):
+        raise InputError('password_policy')
     return value
 
 
@@ -150,16 +158,35 @@ def _accessible_ids():
 
 
 def _scope_clause(scope):
-    if scope is None:
-        return '', []
-    if not scope:
-        return ' AND s.id = -1', []
-    placeholders = ','.join(['%s'] * len(scope))
-    return f' AND s.id IN ({placeholders})', list(scope)
+    """Department scope (ids) plus institution scope (SQL) in one fragment."""
+    sql = ''
+    params = []
+    if scope is not None:
+        if not scope:
+            sql = ' AND s.id = -1'
+        else:
+            placeholders = ','.join(['%s'] * len(scope))
+            sql = f' AND s.id IN ({placeholders})'
+            params = list(scope)
+    institution_sql, institution_params = current_scope().student_clause('s')
+    if institution_sql != '1=1':
+        sql += f' AND {institution_sql}'
+        params.extend(institution_params)
+    return sql, params
 
 
 def _in_scope(student_id, scope):
-    return scope is None or student_id in scope
+    if scope is not None and student_id not in scope:
+        return False
+    institution_scope = current_scope()
+    if not institution_scope.multiple:
+        return True
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        return institution_scope.allows(institutions_store.institution_of_student(cursor, student_id))
+    finally:
+        close(cursor, connection)
 
 
 def _exists(cursor, table, row_id):
@@ -172,6 +199,8 @@ def _placement(cursor, payload):
     class_id = optional_id(payload.get('class_id'), 'student_class_invalid')
     division_id = optional_id(payload.get('division_id'), 'student_division_invalid')
     if not _exists(cursor, 'courses', course_id):
+        raise InputError('student_course_invalid')
+    if not current_scope(cursor).allows(institutions_store.institution_of_course(cursor, course_id)):
         raise InputError('student_course_invalid')
     if class_id is not None and not _exists(cursor, 'classes', class_id):
         raise InputError('student_class_invalid')
@@ -200,7 +229,8 @@ def _public(row, include_username=False):
 
 
 def _options(cursor):
-    cursor.execute('SELECT id, name FROM courses ORDER BY name')
+    clause, params = current_scope(cursor).course_clause('c')
+    cursor.execute(f'SELECT c.id, c.name FROM courses c WHERE {clause} ORDER BY c.name', params)
     courses = [{'id': safe_count(row['id']), 'name': safe_text(row['name'], 100)} for row in cursor.fetchall()]
     cursor.execute('SELECT id, name FROM classes ORDER BY display_order, name')
     classes = [{'id': safe_count(row['id']), 'name': safe_text(row['name'], 100)} for row in cursor.fetchall()]
@@ -388,11 +418,17 @@ def _create():
         cursor.execute('SELECT id FROM students WHERE email = %s', (email,))
         if cursor.fetchone():
             return _fail('student_email_taken')
+        from core.license import refuse_student
+        blocked = refuse_student(cursor, current_app.config)
+        if blocked:
+            return json_error(blocked[1], 409, blocked[0])
         cursor.execute(
             "INSERT INTO users (username, password, role) VALUES (%s, %s, 'Student')",
             (username, generate_password_hash(password)),
         )
         user_id = cursor.lastrowid
+        from services.security_policy import remember_password_change
+        remember_password_change(cursor, user_id)
         admission_id = f'ADM{datetime.now().year}{user_id:06d}'
         cursor.execute(
             """
@@ -462,6 +498,8 @@ def _update(student_id):
                 'UPDATE users SET password = %s WHERE id = %s AND role = %s',
                 (generate_password_hash(password), current['user_id'], 'Student'),
             )
+            from services.security_policy import remember_password_change
+            remember_password_change(cursor, current['user_id'])
         connection.commit()
         return json_ok({'id': safe_count(student_id)})
     except InputError as exc:

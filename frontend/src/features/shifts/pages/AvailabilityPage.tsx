@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
-import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { messageFrom, postJson, useCapability } from '../../../shared/components/data-list'
+import { PreferencesEditor } from '../../timetable/PreferencesEditor'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { pageFill } from '../../../shared/layout/page-frame'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
@@ -18,6 +20,7 @@ type Slot = {
 
 type FacultyRow = {
   userId: number
+  facultyId: number
   name: string
   departmentId: number | null
   department: string
@@ -66,6 +69,7 @@ function readFaculty(row: Record<string, unknown>): FacultyRow {
   const departmentId = safeCount(row.department_id)
   return {
     userId: safeCount(row.user_id),
+    facultyId: safeCount(row.faculty_id),
     name: safeText(row.name, 100),
     departmentId: departmentId || null,
     department: safeText(row.department, 100),
@@ -86,6 +90,8 @@ export function AvailabilityPage() {
   const [busyKey, setBusyKey] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
   const [selectedFaculty, setSelectedFaculty] = useState<number[]>([])
+  const [openPreferences, setOpenPreferences] = useState<number | null>(null)
+  const preferencesOn = useCapability('timetable_preferences')
   const [selectedDays, setSelectedDays] = useState<string[]>([])
   const [bulkShift, setBulkShift] = useState('')
   const [markAvailable, setMarkAvailable] = useState(true)
@@ -279,7 +285,7 @@ export function AvailabilityPage() {
         </div>
       </div>
 
-      {error && <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         <div className="flex-1 overflow-auto">
@@ -305,10 +311,21 @@ export function AvailabilityPage() {
                 </tr>
               )}
               {!loading && visible.map((row) => (
-                <tr key={row.userId} className="hover:bg-indigo-50">
+                <Fragment key={row.userId}>
+                <tr className="hover:bg-indigo-50">
                   <td className="sticky left-0 bg-white px-4 py-3">
                     <div className="font-semibold text-gray-900">{row.name}</div>
                     <div className="text-xs text-gray-500">{row.department}</div>
+                    {preferencesOn && row.facultyId > 0 && (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                        onClick={() => setOpenPreferences((current) => (current === row.facultyId ? null : row.facultyId))}
+                      >
+                        <i className={`fas ${openPreferences === row.facultyId ? 'fa-chevron-up' : 'fa-sliders-h'} mr-1`} />
+                        {openPreferences === row.facultyId ? 'Hide preferences' : 'Preferences'}
+                      </button>
+                    )}
                   </td>
                   {week.map(([day]) => {
                     const slot = row.days[day]
@@ -367,6 +384,14 @@ export function AvailabilityPage() {
                     )
                   })}
                 </tr>
+                {preferencesOn && openPreferences === row.facultyId && (
+                  <tr className="bg-indigo-50/40">
+                    <td colSpan={8} className="px-4 py-3">
+                      <PreferencesEditor path={`/api/faculty/${row.facultyId}/preferences`} compact />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -436,11 +461,8 @@ export function AvailabilityPage() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed right-4 bottom-4 z-50 rounded-lg px-6 py-3 text-white shadow-lg ${toast.tone === 'ok' ? 'bg-green-500' : 'bg-red-500'}`} role="status">
-          {toast.text}
-        </div>
-      )}
+      {toast?.tone === 'ok' ? <SuccessNotice key={toast.id} message={toast.text} /> : null}
+      {toast?.tone === 'bad' ? <FailureNotice key={toast.id} message={toast.text} /> : null}
     </section>
   )
 }

@@ -1,5 +1,6 @@
 import { apiRequest } from '../../shared/api/client'
 import { getCsrfToken } from '../../shared/api/endpoints'
+import { asIdList, asInstitutionOptions, asSharing, type InstitutionOption, type Sharing } from '../../shared/institutions'
 import { safeCount, safeText } from '../../shared/security/sanitize'
 
 export const roomTypes = ['Classroom', 'Laboratory', 'Conference', 'Auditorium'] as const
@@ -12,15 +13,26 @@ export type RoomRecord = {
   capacity: number
   department_id: number | null
   department_name: string
+  institution_id: number | null
+  institution_name: string
+  institution_short_name: string
+  sharing: Sharing
+  shared_with: number[]
+  /** False when another institution owns the room and merely shares it with this one. */
+  owned: boolean
 }
 
-export type DepartmentOption = { id: number; name: string }
+export type DepartmentOption = { id: number; name: string; institution_id?: number | null }
 
 export type RoomPermissions = { add: boolean; change: boolean; delete: boolean }
 
 export type RoomList = {
   rooms: RoomRecord[]
   departments: DepartmentOption[]
+  /** Empty in a single-institution tenant. */
+  institutions: InstitutionOption[]
+  /** The institution the session works in, or null for the whole organization. */
+  institution_id: number | null
   permissions: RoomPermissions
 }
 
@@ -41,6 +53,10 @@ export type RoomDraft = {
   room_type: RoomType
   capacity: number
   department_id: number | null
+  /** Omitted in a single-institution tenant; the server keeps the current owner. */
+  institution_id?: number | null
+  sharing?: Sharing
+  shared_with?: number[]
 }
 
 function asId(value: unknown): number {
@@ -59,6 +75,12 @@ function asRoom(value: Partial<RoomRecord> | null | undefined): RoomRecord | nul
     capacity: safeCount(value?.capacity),
     department_id: asId(value?.department_id) || null,
     department_name: safeText(value?.department_name, 120),
+    institution_id: asId(value?.institution_id) || null,
+    institution_name: safeText(value?.institution_name, 150),
+    institution_short_name: safeText(value?.institution_short_name, 40),
+    sharing: asSharing(value?.sharing),
+    shared_with: asIdList(value?.shared_with),
+    owned: value?.owned !== false,
   }
 }
 
@@ -67,12 +89,14 @@ export async function getRooms(): Promise<RoomList> {
   const rooms = Array.isArray(data.rooms) ? data.rooms.map((row) => asRoom(row)).filter((row): row is RoomRecord => row !== null) : []
   const departments = Array.isArray(data.departments)
     ? data.departments
-        .map((row) => ({ id: asId(row?.id), name: safeText(row?.name, 120) }))
+        .map((row) => ({ id: asId(row?.id), name: safeText(row?.name, 120), institution_id: asId(row?.institution_id) || null }))
         .filter((row) => row.id > 0 && row.name)
     : []
   return {
     rooms,
     departments,
+    institutions: asInstitutionOptions(data.institutions),
+    institution_id: asId(data.institution_id) || null,
     permissions: {
       add: data.permissions?.add === true,
       change: data.permissions?.change === true,

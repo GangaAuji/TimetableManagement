@@ -1,7 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { FailureNotice } from '../../../shared/components/success-notice'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { submitLogin } from '../../../shared/api/auth'
+import { loadPendingSignIn, submitLogin, submitSecondFactor } from '../../../shared/api/auth'
+import { RecoveryCodes } from '../../account/SecondFactorCard'
+import { apiRequest } from '../../../shared/api/client'
 import type { Branding } from '../../../shared/api/endpoints'
+import { safeText } from '../../../shared/security/sanitize'
 import { copyrightLine } from '../../../shared/components/layout/Footer'
 import { ThemeModeButton } from '../../../shared/components/ThemeModeButton'
 import { staticAssetUrl } from '../../../shared/security/sanitize'
@@ -12,15 +16,71 @@ type LoginPageProps = {
   onSuccess: () => void
 }
 
+type SsoDescriptor = { enabled: boolean; provider: string; button_label: string }
+
+const ssoMessages: Record<string, string> = {
+  sso_disabled: 'Single sign-on is not enabled.',
+  sso_incomplete: 'Single sign-on is not fully configured. Contact the administrator.',
+  sso_provider_unavailable: 'The sign-in provider could not be reached. Try again later.',
+  sso_provider_denied: 'The sign-in provider did not complete the sign-in.',
+  sso_state_mismatch: 'The sign-in request expired or did not start here. Try again.',
+  sso_token_failed: 'The sign-in provider rejected the request. Contact the administrator.',
+  sso_token_invalid: 'The sign-in provider returned an invalid token. Contact the administrator.',
+  sso_email_unverified: 'Your provider account has no verified email address.',
+  sso_domain_not_allowed: 'Your email domain is not allowed to sign in here.',
+  sso_no_account: 'No staff account matches your sign-in. Contact the administrator.',
+  sso_account_locked: 'Your account has been locked. Contact the administrator.',
+  sso_account_inactive: 'Your account has been deactivated. Contact the administrator.',
+  sso_second_factor: 'The authenticator could not be started. Contact the administrator.',
+  sso_network: 'Sign-in is not allowed from this network.',
+}
+
+function ssoErrorFromUrl() {
+  const code = safeText(new URLSearchParams(window.location.search).get('sso_error'), 40)
+  return code ? ssoMessages[code] || 'Single sign-on failed.' : ''
+}
+
 export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
   const admin = mode === 'admin'
   const loginLogo = staticAssetUrl(branding.login_logo) || staticAssetUrl(branding.site_logo)
   const background = staticAssetUrl(admin ? branding.admin_login_background : branding.login_background)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(ssoErrorFromUrl)
   const [submitting, setSubmitting] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
+  const [sso, setSso] = useState<SsoDescriptor | null>(null)
+  const [step, setStep] = useState<'password' | 'totp' | 'enroll' | 'codes'>('password')
+  const [code, setCode] = useState('')
+  const [setupSecret, setSetupSecret] = useState('')
+  const [setupAccount, setSetupAccount] = useState('')
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    apiRequest<Record<string, unknown>>('/api/sso')
+      .then((data) => {
+        if (cancelled || data.enabled !== true) return
+        setSso({ enabled: true, provider: safeText(data.provider, 20), button_label: safeText(data.button_label, 60) || 'Sign in with SSO' })
+      })
+      .catch(() => { /* no SSO button */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadPendingSignIn()
+      .then((pending) => {
+        if (cancelled || !pending) return
+        setStep(pending.pending)
+        setSetupSecret(pending.secret)
+        setSetupAccount(pending.account)
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
+
+  const ssoIcon = sso?.provider === 'google' ? 'fab fa-google' : sso?.provider === 'microsoft' ? 'fab fa-microsoft' : 'fas fa-id-badge'
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -30,6 +90,11 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
       const result = await submitLogin(admin ? '/admin/login' : '/login', username, password)
       if (result.ok) {
         onSuccess()
+      } else if ('pending' in result) {
+        setStep(result.pending)
+        setSetupSecret(result.secret)
+        setSetupAccount(result.account)
+        setCode('')
       } else {
         setError(result.message)
       }
@@ -40,6 +105,35 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
     }
   }
 
+  async function onCode(event: FormEvent) {
+    event.preventDefault()
+    setSubmitting(true)
+    setError('')
+    try {
+      const result = await submitSecondFactor(code)
+      if (result.ok) {
+        if (result.recoveryCodes?.length) {
+          setRecoveryCodes(result.recoveryCodes)
+          setStep('codes')
+        } else {
+          onSuccess()
+        }
+      } else if ('message' in result) {
+        setError(result.message)
+        if (result.cleared) {
+          setStep('password')
+          setCode('')
+        }
+      }
+    } catch {
+      setError('The Flask server is not reachable. Start it on port 5000 and try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const groupedSecret = setupSecret.replace(/(.{4})/g, '$1 ').trim()
+
   return (
     <div
       className={`relative flex min-h-screen items-center justify-center p-6 font-sans ${background ? 'bg-slate-900 bg-cover bg-center' : 'bg-gray-100'}`}
@@ -47,7 +141,7 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
     >
       {background ? <div className="absolute inset-0 bg-slate-950/45" /> : null}
       <ThemeModeButton className="fixed top-4 right-4 z-20 border border-gray-200 bg-white text-gray-700 shadow-sm" />
-      <div className="relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:h-[460px] md:flex-row">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:min-h-[460px] md:flex-row">
         <div className={`relative hidden flex-col justify-between overflow-hidden p-8 text-white md:flex md:w-5/12 ${admin ? 'bg-slate-900' : 'bg-blue-900'}`}>
           <div className="relative z-10">
             <div className="mb-4 flex items-center gap-2">
@@ -87,13 +181,75 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
             {loginLogo ? <img src={loginLogo} alt="" className="mb-4 h-9 w-auto max-w-[120px] object-contain md:hidden" /> : null}
             <div className={`mb-5 ${admin ? 'border-b border-gray-100 pb-3' : ''}`}>
               <h1 className="text-2xl font-bold text-gray-900">{admin ? 'Admin Sign In' : branding.login_title}</h1>
-              <p className="mt-2 text-sm text-gray-500">{admin ? 'Please identify yourself to continue.' : 'Please enter your details to sign in.'}</p>
+              <p className="mt-2 text-sm text-gray-500">
+                {step === 'codes'
+                  ? 'Save these codes before continuing.'
+                  : step === 'enroll'
+                    ? 'Add this key to your authenticator app, then enter the 6-digit code.'
+                    : step === 'totp'
+                      ? 'Enter the 6-digit code from your authenticator app, or a recovery code.'
+                      : admin ? 'Please identify yourself to continue.' : 'Please enter your details to sign in.'}
+              </p>
             </div>
-            {error ? (
-              <div role="alert" className="mb-4 rounded-lg border-l-4 border-red-500 bg-red-50 p-4 text-sm text-red-700">
-                {error}
+            <FailureNotice message={error} />
+            {step === 'codes' ? (
+              <div className="space-y-4">
+                <RecoveryCodes codes={recoveryCodes} />
+                <button
+                  type="button"
+                  onClick={onSuccess}
+                  className={`flex w-full justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${admin ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                  style={admin ? undefined : { backgroundColor: branding.primary_color || '#059669' }}
+                >
+                  I have saved these codes
+                </button>
               </div>
             ) : null}
+            {step === 'totp' || step === 'enroll' ? (
+              <form onSubmit={(event) => void onCode(event)} className="space-y-4">
+                {step === 'enroll' && setupSecret ? (
+                  <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
+                    <p>In your authenticator app, choose “enter a setup key”. Time-based, 6 digits.</p>
+                    <p className="mt-2">Account <span className="font-semibold text-gray-900">{setupAccount || username}</span></p>
+                    <p className="mt-1 font-mono text-sm tracking-wide text-gray-900">{groupedSecret}</p>
+                  </div>
+                ) : null}
+                {step === 'enroll' && !setupSecret ? (
+                  <p className="text-sm text-gray-600">The setup key is no longer available. Sign in with your password again.</p>
+                ) : null}
+                <div>
+                  <label htmlFor="otp-code" className="mb-1 block text-sm font-medium text-gray-700">
+                    {step === 'enroll' ? '6-digit code' : 'Code'}
+                  </label>
+                  <input
+                    id="otp-code"
+                    name="code"
+                    required
+                    autoComplete="one-time-code"
+                    value={code}
+                    maxLength={20}
+                    onChange={(event) => setCode(event.target.value)}
+                    className={`w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-sm outline-none focus:border-transparent focus:ring-2 ${admin ? 'focus:ring-red-500' : 'focus:ring-blue-500'}`}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`flex w-full justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${admin ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                  style={admin ? undefined : { backgroundColor: branding.primary_color || '#059669' }}
+                >
+                  {submitting ? 'Checking…' : 'Continue'}
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-sm font-medium text-gray-500 hover:text-gray-800"
+                  onClick={() => { setStep('password'); setCode(''); setError('') }}
+                >
+                  Use password again
+                </button>
+              </form>
+            ) : null}
+            {step === 'password' ? (
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
                 <label htmlFor="username" className="mb-1 block text-sm font-medium text-gray-700">
@@ -157,6 +313,21 @@ export function LoginPage({ mode, branding, onSuccess }: LoginPageProps) {
                 {submitting ? 'Signing in…' : admin ? 'Access Dashboard' : 'Sign In'}
               </button>
             </form>
+            ) : null}
+            {step === 'password' && sso && !admin ? (
+              <div className="mt-4">
+                <div className="mb-3 flex items-center gap-3 text-[11px] font-medium tracking-wide text-gray-400 uppercase">
+                  <span className="h-px flex-1 bg-gray-200" />staff<span className="h-px flex-1 bg-gray-200" />
+                </div>
+                <a
+                  href="/auth/sso/start"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
+                >
+                  <i className={ssoIcon} aria-hidden="true" />
+                  {sso.button_label}
+                </a>
+              </div>
+            ) : null}
             {admin ? (
               <Link to="/" className="mt-6 block text-sm text-slate-500 hover:text-slate-800 md:hidden">
                 Student and teacher sign in

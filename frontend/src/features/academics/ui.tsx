@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactNode } from 'react'
 import { ApiError } from '../../shared/api/client'
 import { DataTableHead, TablePager, TableToolbar, useDataTable } from '../../shared/components/table-page'
 import { pageFill } from '../../shared/layout/page-frame'
+import { FailureNotice, SuccessNotice } from '../../shared/components/success-notice'
 
 export function messageFrom(error: unknown) {
   if (error instanceof ApiError) return error.message
@@ -28,8 +29,8 @@ export function Screen({ title, subtitle, action, children }: { title: string; s
 export function Banners({ error, notice }: { error: string; notice: string }) {
   return (
     <>
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-      {notice ? <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
     </>
   )
 }

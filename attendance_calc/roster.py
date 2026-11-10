@@ -20,13 +20,33 @@ def in_roster(slot: Slot, student: Student, on: date) -> bool:
         return False
     if slot.is_elective and not _chose(slot, student):
         return False
-    if slot.batch_id is not None and slot.batch_id not in student.batch_ids:
+    if slot.batch_id is not None and not _in_batch(slot, student, on):
         return False
     if student.enrolled_from is not None and on < student.enrolled_from:
         return False
     if student.enrolled_to is not None and on > student.enrolled_to:
         return False
     return True
+
+
+def _in_batch(slot: Slot, student: Student, on: date) -> bool:
+    """Whether the student is in the slot's lab batch on that date.
+
+    Dated memberships win: the student is in the batch from added_at up to
+    and including ended_at (open when None). Without dated memberships the
+    plain batch_ids set decides.
+    """
+    if not student.batch_memberships:
+        return slot.batch_id in student.batch_ids
+    for batch_id, added_at, ended_at in student.batch_memberships:
+        if batch_id != slot.batch_id:
+            continue
+        if added_at is not None and on < added_at:
+            continue
+        if ended_at is not None and on > ended_at:
+            continue
+        return True
+    return False
 
 
 def _chose(slot: Slot, student: Student) -> bool:

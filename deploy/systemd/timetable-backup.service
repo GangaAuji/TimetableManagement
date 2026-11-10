@@ -1,0 +1,11 @@
+[Unit]
+Description=Timetable Management nightly backup (databases and uploads)
+After=mariadb.service
+
+[Service]
+Type=oneshot
+User=timetable
+Group=timetable
+WorkingDirectory=/opt/timetable/app
+EnvironmentFile=/opt/timetable/app/.env
+ExecStart=/opt/timetable/app/deploy/backup.sh

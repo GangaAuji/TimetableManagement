@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { displayValue, messageFrom, postJson, type DataRow } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
@@ -246,13 +247,8 @@ export function UsersPage() {
           {flags.delete && <button type="button" className="text-[10px] font-bold text-red-700" onClick={() => void bulk('delete')}>Delete</button>}
         </div>
       )}
-      {error && <p className="px-5 py-2 text-xs text-red-700">{error}</p>}
-      {notice && (
-        <p className="px-5 py-2 text-xs text-emerald-700">
-          {notice}
-          {exportQueued && <> <Link to="/admin/reports" className="font-bold underline">Open Reports</Link> to follow the progress and download the file.</>}
-        </p>
-      )}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} href={exportQueued ? '/admin/reports' : undefined} hrefLabel="Open Reports" note={exportQueued ? 'to follow the progress and download the file.' : undefined} />
       <TableToolbar
         search={search}
         onSearch={setSearch}

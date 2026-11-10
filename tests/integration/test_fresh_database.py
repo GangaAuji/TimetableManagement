@@ -95,11 +95,11 @@ def test_seed_run_adds_the_branding_defaults_once(app, database):
     runner = app.test_cli_runner()
     first = runner.invoke(args=['seed', 'run'])
     assert first.exit_code == 0, first.output
-    assert 'branding_settings: 22 added, 0 already present.' in first.output
+    assert 'branding_settings: 24 added, 0 already present.' in first.output
     second = runner.invoke(args=['seed', 'run'])
-    assert 'branding_settings: 0 added, 22 already present.' in second.output
+    assert 'branding_settings: 0 added, 24 already present.' in second.output
     cursor.execute(f'SELECT COUNT(*) FROM `{name}`.branding_settings')
-    assert cursor.fetchone()[0] == 22
+    assert cursor.fetchone()[0] == 24
 
 
 def test_health_is_ok_at_head(client):
@@ -113,7 +113,8 @@ def test_branding_endpoints_read_the_seeded_rows(client, database):
     assert _data(client.get('/api/branding'))['site_title'] == 'Timetable Management System'
     cursor.execute(f"UPDATE `{name}`.branding_settings SET setting_value = 'Fresh College' WHERE setting_key = 'site_title'")
     assert _data(client.get('/api/branding'))['site_title'] == 'Fresh College'
-    assert client.get('/admin/branding/').status_code < 400
+    redirected = client.get('/admin/branding/')
+    assert redirected.status_code == 302 and redirected.headers['Location'].endswith('/admin/settings')
 
 
 def test_reports_list_queue_and_download(client):

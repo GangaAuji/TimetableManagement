@@ -1,8 +1,10 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { Stat, messageFrom } from '../../../shared/components/data-list'
+import { todayInput } from '../../../shared/dates'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Activity = {
@@ -51,11 +53,11 @@ export function FacultyAttendancePage() {
   const setPageHeader = useSetPageHeader()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [dateFrom, setDateFrom] = useState(todayInput)
+  const [dateTo, setDateTo] = useState(todayInput)
   const [perPage, setPerPage] = useState('20')
   const [page, setPage] = useState(1)
-  const [applied, setApplied] = useState({ q: '', status: '', dateFrom: '', dateTo: '', perPage: '20' })
+  const [applied, setApplied] = useState(() => ({ q: '', status: '', dateFrom: todayInput(), dateTo: todayInput(), perPage: '20' }))
   const [stats, setStats] = useState({ faculty: 0, records: 0, present: 0, late: 0, absent: 0, percentage: 0 })
   const [today, setToday] = useState<TodayShift[]>([])
   const [rows, setRows] = useState<Activity[]>([])
@@ -156,7 +158,7 @@ export function FacultyAttendancePage() {
           <p className="mt-1 text-xl font-bold text-gray-800">{percentText(stats.percentage)}</p>
         </div>
       </div>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      <FailureNotice message={error} />
       {!available ? <p className="text-sm text-gray-500">Faculty attendance is not available yet.</p> : null}
       <section className="rounded-2xl border border-gray-200 bg-white p-4">
         <h2 className="text-sm font-bold text-gray-800">Today’s snapshot</h2>

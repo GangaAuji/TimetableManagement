@@ -4,7 +4,21 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { getCsrfToken, type SessionInfo } from '../../../shared/api/endpoints'
 import { displayValue, messageFrom } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
+import { SecondFactorCard } from '../SecondFactorCard'
 import { staticAssetUrl } from '../../../shared/security/sanitize'
+
+type FaceConsent = { required: boolean; notice_version: string; given: boolean; given_at: string; has_template: boolean }
+
+function readConsent(data: Record<string, unknown>): FaceConsent {
+  return {
+    required: data.required === true,
+    notice_version: displayValue(data.notice_version, 40),
+    given: data.given === true,
+    given_at: displayValue(data.given_at, 19),
+    has_template: data.has_template === true,
+  }
+}
 
 const fieldClass = 'w-full rounded-lg border px-3 py-2 text-sm outline-none'
 const readClass = 'border-transparent bg-transparent px-0 font-medium text-gray-800'
@@ -33,6 +47,8 @@ export function PortalProfilePage() {
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [consent, setConsent] = useState<FaceConsent | null>(null)
+  const [consentBusy, setConsentBusy] = useState(false)
   const portrait = staticAssetUrl(photoPath || session.profile_photo)
   const showPhoto = Boolean(portrait) && !portrait.endsWith('/default-avatar.svg') && !portrait.endsWith('/default-avatar.png')
   const home = role === 'Student' ? 'text-emerald-700 bg-emerald-50' : 'text-indigo-700 bg-indigo-50'
@@ -55,7 +71,31 @@ export function PortalProfilePage() {
         setPhotoPath(displayValue(data.profile_photo, 180))
       })
       .catch((reason: unknown) => setError(messageFrom(reason)))
+    void apiRequest<Record<string, unknown>>('/api/account/face-consent')
+      .then((data) => setConsent(readConsent(data)))
+      .catch(() => setConsent(null))
   }, [session.role, setPageHeader])
+
+  async function changeConsent(give: boolean) {
+    if (!give && !window.confirm('Withdraw consent? Your face template is deleted at once and attendance devices will no longer recognise you.')) return
+    setConsentBusy(true)
+    setError('')
+    setSaved('')
+    try {
+      const { csrf_token: csrfToken } = await getCsrfToken()
+      const data = await apiRequest<Record<string, unknown>>('/api/account/face-consent', {
+        method: give ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: give ? JSON.stringify({ agree: true }) : undefined,
+      })
+      setConsent(readConsent(data))
+      setSaved(give ? 'Consent recorded.' : 'Consent withdrawn and your face template deleted.')
+    } catch (reason) {
+      setError(messageFrom(reason))
+    } finally {
+      setConsentBusy(false)
+    }
+  }
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault()
@@ -160,6 +200,26 @@ export function PortalProfilePage() {
             <span className="text-sm font-semibold">Change Password</span>
           </button>
         </section>
+        {consent ? (
+          <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-lg">
+            <h3 className="mb-2 text-[10px] font-bold tracking-wider text-gray-400 uppercase">Face recognition</h3>
+            <p className="text-xs text-gray-600">
+              {consent.given
+                ? `You agreed on ${consent.given_at || 'record'} (notice ${consent.notice_version}) that the college stores a face template and uses it to mark your attendance.`
+                : 'You have not agreed to face recognition for attendance. Without it, devices cannot mark you present automatically.'}
+              {consent.has_template ? ' A face template is on file.' : ' No face template is on file.'}
+            </p>
+            <button
+              type="button"
+              disabled={consentBusy}
+              onClick={() => void changeConsent(!consent.given)}
+              className={`mt-3 w-full rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-60 ${consent.given ? 'border border-red-200 bg-red-50 text-red-700' : 'bg-indigo-600 text-white'}`}
+            >
+              {consent.given ? 'Withdraw consent and delete my template' : 'Give consent'}
+            </button>
+          </section>
+        ) : null}
+        <SecondFactorCard />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl lg:col-span-8">
@@ -174,8 +234,8 @@ export function PortalProfilePage() {
           </label>
         </div>
         <div className="flex flex-col gap-2 p-6">
-          {error ? <p className="text-xs text-red-700">{error}</p> : null}
-          {saved ? <p className="text-xs text-emerald-700">{saved}</p> : null}
+          <FailureNotice message={error} />
+          <SuccessNotice message={saved} />
           <div>
             <h4 className="mb-3 flex items-center text-[10px] font-bold tracking-wider text-indigo-500 uppercase"><i className="fas fa-address-card mr-2" /> Contact Info</h4>
             <div className="grid gap-5 md:grid-cols-2">

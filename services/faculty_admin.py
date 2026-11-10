@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from flask import current_app, flash
+from flask import current_app, flash, session
 from werkzeug.security import generate_password_hash
 
 from data_access.admin_faculty import (
@@ -45,8 +45,14 @@ from data_access.admin_faculty import (
     update_user_password,
 )
 from extensions import get_db_connection
-from routes.admin_utils import _admin_find_and_assign_proxy, _is_faculty_free, format_time, paginate
 from security.permissions import get_accessible_faculty_ids
+from services.admin_queries import assign_admin_proxy, faculty_is_free as _is_faculty_free, query_page as paginate
+from utils.dates import format_hhmm as format_time
+
+
+def _admin_find_and_assign_proxy(absent_faculty_id, absence_date):
+    """Assign a proxy for each lecture on the absence weekday, as the signed-in admin."""
+    assign_admin_proxy(absent_faculty_id, absence_date, session)
 
 _DAY_MAP = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6}
 _DAY_NAMES = {1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday'}
@@ -142,7 +148,12 @@ def add_faculty_member(username, password, name, email, department_id, phone, de
         if fetch_faculty_email(cursor, email):
             flash('Email already registered for a faculty member.', 'danger')
             return 'duplicate'
+        from services.security_policy import enforced_problem, remember_password_change
+        if enforced_problem(password, cursor):
+            flash('The password does not meet the security policy.', 'danger')
+            return 'policy'
         user_id = insert_teacher_user(cursor, username, generate_password_hash(password))
+        remember_password_change(cursor, user_id)
         if not employee_id:
             employee_id = f"EMP{datetime.now().year}{user_id:06d}"
         insert_faculty_profile(cursor, (
@@ -177,7 +188,13 @@ def change_faculty(faculty_id, name, email, department_id, phone, designation, i
         if password:
             result = fetch_faculty_user_id(cursor, faculty_id)
             if result and result['user_id']:
+                from services.security_policy import enforced_problem, remember_password_change
+                if enforced_problem(password, cursor):
+                    connection.rollback()
+                    flash('The password does not meet the security policy.', 'danger')
+                    return
                 update_user_password(cursor, generate_password_hash(password), result['user_id'])
+                remember_password_change(cursor, result['user_id'])
         connection.commit()
         flash('Faculty member updated successfully.', 'success')
     except Exception as exc:
@@ -516,10 +533,21 @@ def approve_faculty_proxy(faculty_id, proxy_id, selected_proxy_id, approved_by):
                 break
     final_status = 'ASSIGNED' if proxy_faculty_id else 'UNASSIGNED'
     approve_proxy_log(cursor, final_status, proxy_faculty_id, approved_by, proxy_id)
+    _notify_proxy(cursor, proxy_id)
     connection.commit()
     cursor.close()
     flash('Proxy request approved successfully.', 'success')
     return 'ok', proxy_faculty_id
+
+
+def _notify_proxy(cursor, proxy_id):
+    """Queue the substitute notices in the approval's transaction; a notification problem never blocks the approval."""
+    from services import notifications
+
+    try:
+        notifications.on_proxy_assigned(cursor, proxy_id)
+    except Exception:
+        current_app.logger.exception('Proxy notices for proxy_log %s were not queued', proxy_id)
 
 
 def reject_faculty_proxy(faculty_id, proxy_id, approved_by):

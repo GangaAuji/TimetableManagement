@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { ApiError } from '../../../shared/api/client'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, useDataTable, type TableColumnSpec } from '../../../shared/components/table-page'
 import { getCsrfToken } from '../../../shared/api/endpoints'
+import { institutionLabel, type InstitutionOption } from '../../../shared/institutions'
 import {
   createDepartment,
   deleteDepartment,
@@ -15,7 +17,9 @@ import {
 } from '../api'
 
 const emptyPermissions: DepartmentPermissions = { add: false, change: false, delete: false, invite: false }
-const emptyDraft: DepartmentDraft = { name: '', code: '', description: '', head_of_department: '', is_active: true }
+function emptyDraft(institutionId: number | null): DepartmentDraft {
+  return { name: '', code: '', description: '', head_of_department: '', is_active: true, institution_id: institutionId }
+}
 const departmentColumns: TableColumnSpec[] = [
   { key: 'name', label: 'Department' },
   { key: 'code', label: 'Code' },
@@ -23,6 +27,7 @@ const departmentColumns: TableColumnSpec[] = [
   { key: 'course_count', label: 'Stats', className: 'hidden sm:table-cell' },
   { key: 'status', label: 'Status', className: 'text-center' },
 ]
+const institutionColumn: TableColumnSpec = { key: 'institution_name', label: 'Institution', className: 'hidden lg:table-cell' }
 
 function departmentValue(department: DepartmentRecord, key: string) {
   if (key === 'status') return department.is_active ? 'Active' : 'Inactive'
@@ -37,6 +42,8 @@ function messageFrom(error: unknown) {
 export function DepartmentsPage() {
   const setPageHeader = useSetPageHeader()
   const [departments, setDepartments] = useState<DepartmentRecord[]>([])
+  const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
+  const [institutionId, setInstitutionId] = useState<number | null>(null)
   const [permissions, setPermissions] = useState<DepartmentPermissions>(emptyPermissions)
   const [statusFilter, setStatusFilter] = useState('')
   const [error, setError] = useState('')
@@ -51,8 +58,12 @@ export function DepartmentsPage() {
   async function load() {
     const data = await getDepartments()
     setDepartments(data.departments)
+    setInstitutions(data.institutions)
+    setInstitutionId(data.institution_id)
     setPermissions(data.permissions)
   }
+  const multiInstitution = institutions.length > 1
+  const columns = useMemo(() => (multiInstitution ? [...departmentColumns, institutionColumn] : departmentColumns), [multiInstitution])
 
   useEffect(() => {
     setPageHeader('Departments')
@@ -68,7 +79,7 @@ export function DepartmentsPage() {
     const status = department.is_active ? 'Active' : 'Inactive'
     return !statusFilter || status === statusFilter
   }), [departments, statusFilter])
-  const table = useDataTable(rows, departmentColumns, departmentValue)
+  const table = useDataTable(rows, columns, departmentValue)
 
   async function openEdit(departmentId: number) {
     setError('')
@@ -82,6 +93,7 @@ export function DepartmentsPage() {
           description: department.description,
           head_of_department: department.head_of_department,
           is_active: department.is_active,
+          institution_id: department.institution_id,
         },
       })
     } catch (reason) {
@@ -146,7 +158,7 @@ export function DepartmentsPage() {
               <p className="text-xs text-gray-500">Academic units configuration</p>
             </div>
             {permissions.add ? (
-              <button type="button" className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white shadow hover:bg-indigo-700 xl:hidden" onClick={() => setEditor({ id: null, draft: emptyDraft })}>
+              <button type="button" className="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white shadow hover:bg-indigo-700 xl:hidden" onClick={() => setEditor({ id: null, draft: emptyDraft(institutionId) })}>
                 <i className="fas fa-plus" />
               </button>
             ) : null}
@@ -158,7 +170,7 @@ export function DepartmentsPage() {
               <option value="Inactive">Inactive</option>
             </select>
             {permissions.add ? (
-              <button type="button" className="hidden items-center rounded bg-indigo-600 px-4 py-1.5 text-xs whitespace-nowrap text-white shadow hover:bg-indigo-700 xl:flex" onClick={() => setEditor({ id: null, draft: emptyDraft })}>
+              <button type="button" className="hidden items-center rounded bg-indigo-600 px-4 py-1.5 text-xs whitespace-nowrap text-white shadow hover:bg-indigo-700 xl:flex" onClick={() => setEditor({ id: null, draft: emptyDraft(institutionId) })}>
                 <i className="fas fa-plus mr-2" /> Add Department
               </button>
             ) : null}
@@ -166,23 +178,23 @@ export function DepartmentsPage() {
         </div>
       </section>
 
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-      {notice ? <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />
         <div className="max-h-[70vh] overflow-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
-              <DataTableHead columns={departmentColumns} sortKey={table.sortKey} sortDir={table.sortDir} onSort={table.toggleSort} filtersOpen={table.filtersOpen} filters={table.filters} onFilter={table.setFilter} trailing={<th className="px-4 py-2.5 text-right text-[10px] font-bold tracking-wider text-gray-400 uppercase">Actions</th>} />
+              <DataTableHead columns={columns} sortKey={table.sortKey} sortDir={table.sortDir} onSort={table.toggleSort} filtersOpen={table.filtersOpen} filters={table.filters} onFilter={table.setFilter} trailing={<th className="px-4 py-2.5 text-right text-[10px] font-bold tracking-wider text-gray-400 uppercase">Actions</th>} />
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading departments…</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-6 py-8 text-center text-gray-500">Loading departments…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No departments found.</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-6 py-8 text-center text-gray-500">No departments found.</td></tr>
               ) : table.rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No departments match these filters.</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-6 py-8 text-center text-gray-500">No departments match these filters.</td></tr>
               ) : table.rows.map((department) => (
                 <tr key={department.id} className="group transition-colors hover:bg-indigo-50">
                   <td className="px-4 py-2">
@@ -205,6 +217,9 @@ export function DepartmentsPage() {
                       <span className="inline-flex rounded bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600 uppercase">Inactive</span>
                     )}
                   </td>
+                  {multiInstitution ? (
+                    <td className="hidden px-4 py-2 text-xs text-gray-600 lg:table-cell">{department.institution_name || '—'}</td>
+                  ) : null}
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-2 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
                       {permissions.invite ? (
@@ -242,6 +257,21 @@ export function DepartmentsPage() {
             </div>
             <form className="p-6" onSubmit={(event) => void onSave(event)}>
               <div className="grid grid-cols-2 gap-4">
+                {multiInstitution ? (
+                  <label className="col-span-2 block text-xs font-semibold text-gray-700">
+                    Institution <span className="text-red-500">*</span>
+                    <select
+                      required
+                      value={editor.draft.institution_id ?? ''}
+                      onChange={(event) => setEditor({ ...editor, draft: { ...editor.draft, institution_id: event.target.value ? Number(event.target.value) : null } })}
+                      className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="">-- Choose an institution --</option>
+                      {institutions.map((item) => <option key={item.id} value={item.id}>{item.name}{item.short_name ? ` (${institutionLabel(item)})` : ''}</option>)}
+                    </select>
+                    <p className="mt-1 text-[10px] text-gray-500">Courses, subjects, faculty and students of this department belong to that institution.</p>
+                  </label>
+                ) : null}
                 <label className="col-span-2 block text-xs font-semibold text-gray-700 sm:col-span-1">
                   Name <span className="text-red-500">*</span>
                   <input required maxLength={100} value={editor.draft.name} onChange={(event) => setEditor({ ...editor, draft: { ...editor.draft, name: event.target.value } })} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500" />

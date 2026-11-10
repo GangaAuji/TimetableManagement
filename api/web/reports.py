@@ -1,6 +1,7 @@
 """One report page. Exports are queued and written by the background worker."""
 
 import os
+import re
 import time
 
 from flask import current_app, send_file, session
@@ -8,6 +9,7 @@ from flask import current_app, send_file, session
 from api.web.access import InputError, allowed, body, close, iso_date, optional_id, optional_text, permission_denied, reject_input
 from api.web.responses import json_error, json_ok
 from api.web.security import safe_count, safe_stamp, safe_text
+from core import capabilities
 from extensions import get_db_connection
 from security import log_activity
 from services.export_jobs import enqueue_job, ensure_worker
@@ -16,6 +18,7 @@ from services.reports_admin._common import (
     REPORT_LABELS,
     _get_reports_storage_dir,
 )
+from services.reports_admin.renderers import FORMATS, MIMETYPES
 
 _TYPE_PERMISSION = {
     'attendance': 'reports_view_attendance',
@@ -24,11 +27,22 @@ _TYPE_PERMISSION = {
     'shifts': 'reports_view_shifts',
     'proxy-log': 'reports_view_proxy',
     'invitations': 'reports_view_invitations',
+    'defaulters': 'reports_view_attendance',
+    'subject-wise': 'reports_view_attendance',
+    'monthly-register': 'reports_view_attendance',
+    'faculty-workload': 'reports_view_timetable',
+    'syllabus-coverage': 'reports_view_attendance',
+    'co-attainment': 'reports_view_attendance',
 }
+_TYPE_ORDER = (
+    'attendance', 'timetable', 'audit-logs', 'shifts', 'proxy-log', 'invitations',
+    'defaulters', 'subject-wise', 'monthly-register', 'faculty-workload', 'syllabus-coverage', 'co-attainment',
+)
 _FIELDS = frozenset((
-    'report_type', 'start_date', 'end_date', 'course_id', 'class_id', 'division_id',
-    'faculty_id', 'user_id', 'entity_id', 'view', 'status', 'role', 'action',
+    'report_type', 'format', 'start_date', 'end_date', 'course_id', 'class_id', 'division_id', 'subject_id',
+    'department_id', 'faculty_id', 'user_id', 'entity_id', 'view', 'status', 'role', 'action', 'month', 'threshold',
 ))
+_MONTH = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 _SHIFT_STATUS = frozenset(('pending', 'approved', 'rejected'))
 _INVITE_ROLES = frozenset(('Super Admin', 'Admin', 'HOD', 'Teacher', 'Student'))
 _VIEWS = frozenset(('class', 'faculty', 'room'))
@@ -78,7 +92,7 @@ def _list():
             """
         )
         reports = [_job(row) for row in cursor.fetchall()]
-        types = _available_types()
+        types = _available_types(cursor)
         try:
             options = _cached_options(cursor) if types else {}
         except Exception:
@@ -106,6 +120,14 @@ def _generate():
         report_type = payload.get('report_type')
         if report_type not in ALLOWED_REPORT_TYPES or not allowed(_TYPE_PERMISSION[report_type]):
             raise InputError('report_type_invalid')
+        if report_type == 'syllabus-coverage':
+            off = capabilities.require_capability('syllabus')
+            if off:
+                return off
+        if report_type == 'co-attainment':
+            off = capabilities.require_capability('assessments')
+            if off:
+                return off
         filters = _filters(report_type, payload)
         processed_id = enqueue_job(report_type, filters, session.get('user_id'))
         try:
@@ -186,7 +208,9 @@ def _download(report_id):
             cursor=cursor,
         )
         connection.commit()
-        return send_file(candidate, as_attachment=True, download_name=record['file_name'], mimetype='text/csv')
+        extension = os.path.splitext(record['file_name'] or '')[1].lstrip('.').lower()
+        mimetype = MIMETYPES.get(extension, 'application/octet-stream')
+        return send_file(candidate, as_attachment=True, download_name=record['file_name'], mimetype=mimetype)
     except Exception:
         current_app.logger.exception('Report download failed')
         return json_error(_MESSAGES['report_not_found'], 404, 'report_not_found')
@@ -194,16 +218,19 @@ def _download(report_id):
         close(cursor, connection)
 
 
-def _available_types():
+def _available_types(cursor):
     if not allowed('reports_export'):
         return []
-    return [
+    types = [
         {'id': report_type, 'label': REPORT_LABELS[report_type]}
-        for report_type in (
-            'attendance', 'timetable', 'audit-logs', 'shifts', 'proxy-log', 'invitations',
-        )
+        for report_type in _TYPE_ORDER
         if report_type in ALLOWED_REPORT_TYPES and allowed(_TYPE_PERMISSION[report_type])
     ]
+    if any(item['id'] == 'syllabus-coverage' for item in types) and not capabilities.enabled(cursor, 'syllabus'):
+        types = [item for item in types if item['id'] != 'syllabus-coverage']
+    if any(item['id'] == 'co-attainment' for item in types) and not capabilities.enabled(cursor, 'assessments'):
+        types = [item for item in types if item['id'] != 'co-attainment']
+    return types
 
 
 _option_cache = {'at': 0.0, 'value': None}
@@ -237,10 +264,22 @@ def _options(cursor):
         'faculty': choices('SELECT user_id AS id, name FROM faculty ORDER BY name'),
         'rooms': choices("SELECT id, room_number AS name FROM rooms ORDER BY room_number"),
         'users': choices('SELECT id, username AS name FROM users ORDER BY username'),
+        'subjects': choices("SELECT id, CONCAT(COALESCE(course_code, ''), ' ', name) AS name FROM subjects ORDER BY name"),
+        'departments': choices('SELECT id, name FROM departments ORDER BY name'),
+        'formats': [{'id': fmt, 'name': fmt.upper()} for fmt in FORMATS],
     }
 
 
 def _filters(report_type, payload):
+    filters = _type_filters(report_type, payload)
+    fmt = payload.get('format') or 'csv'
+    if not isinstance(fmt, str) or fmt.lower() not in FORMATS:
+        raise InputError('report_filters_invalid')
+    filters['format'] = fmt.lower()
+    return filters
+
+
+def _type_filters(report_type, payload):
     start = iso_date(payload.get('start_date'), 'report_filters_invalid', required=False)
     end = iso_date(payload.get('end_date'), 'report_filters_invalid', required=False)
     course_id = optional_id(payload.get('course_id'), 'report_filters_invalid')
@@ -253,6 +292,44 @@ def _filters(report_type, payload):
         if view not in _VIEWS or not entity_id:
             raise InputError('report_filters_invalid')
         return {'report_type': view, 'entity_id': entity_id}
+    if report_type in ('defaulters', 'subject-wise', 'monthly-register'):
+        _copy_dates(filters, start, end)
+        _copy_id(filters, 'course_id', course_id)
+        _copy_id(filters, 'class_id', class_id)
+        _copy_id(filters, 'division_id', division_id)
+        _copy_id(filters, 'subject_id', optional_id(payload.get('subject_id'), 'report_filters_invalid'))
+        if report_type == 'defaulters':
+            threshold = payload.get('threshold')
+            if threshold not in (None, ''):
+                try:
+                    threshold = float(threshold)
+                except (TypeError, ValueError):
+                    raise InputError('report_filters_invalid')
+                if not 0 <= threshold <= 100:
+                    raise InputError('report_filters_invalid')
+                filters['threshold'] = threshold
+        if report_type == 'monthly-register':
+            month = payload.get('month')
+            if not isinstance(month, str) or not _MONTH.match(month):
+                raise InputError('report_filters_invalid')
+            filters['month'] = month
+            if not (course_id and class_id):
+                raise InputError('report_filters_invalid')
+        return filters
+    if report_type == 'faculty-workload':
+        _copy_dates(filters, start, end)
+        _copy_id(filters, 'department_id', optional_id(payload.get('department_id'), 'report_filters_invalid'))
+        _copy_id(filters, 'faculty_id', optional_id(payload.get('faculty_id'), 'report_filters_invalid'))
+        return filters
+    if report_type == 'syllabus-coverage':
+        _copy_id(filters, 'subject_id', optional_id(payload.get('subject_id'), 'report_filters_invalid'))
+        _copy_id(filters, 'department_id', optional_id(payload.get('department_id'), 'report_filters_invalid'))
+        return filters
+    if report_type == 'co-attainment':
+        _copy_id(filters, 'subject_id', optional_id(payload.get('subject_id'), 'report_filters_invalid'))
+        _copy_id(filters, 'course_id', course_id)
+        _copy_id(filters, 'department_id', optional_id(payload.get('department_id'), 'report_filters_invalid'))
+        return filters
     if report_type == 'attendance':
         _copy_dates(filters, start, end)
         _copy_id(filters, 'course_id', course_id)

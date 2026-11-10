@@ -1,3 +1,4 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
@@ -15,6 +16,41 @@ const weekColumns = [
 ]
 
 type SessionRow = { day: string; start: string; end: string; subject: string; faculty: string; room: string; className: string; division: string; today: boolean }
+type Workload = { hours: number; min: number | null; max: number | null; status: 'over' | 'under' | 'ok' | 'no_norm'; designation: string }
+
+function readHours(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 && number <= 200 ? Math.round(number * 10) / 10 : null
+}
+
+function readWorkload(raw: unknown): Workload | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const status = row.status === 'over' || row.status === 'under' || row.status === 'ok' ? row.status : 'no_norm'
+  return { hours: readHours(row.hours) ?? 0, min: readHours(row.min), max: readHours(row.max), status, designation: displayValue(row.designation) }
+}
+
+const workloadTone: Record<Workload['status'], { card: string; text: string; label: string }> = {
+  over: { card: 'border-red-200 bg-red-50', text: 'text-red-700', label: 'Over your norm' },
+  under: { card: 'border-amber-200 bg-amber-50', text: 'text-amber-700', label: 'Under your norm' },
+  ok: { card: 'border-emerald-200 bg-emerald-50', text: 'text-emerald-700', label: 'Within your norm' },
+  no_norm: { card: 'border-gray-200 bg-white', text: 'text-gray-500', label: 'No norm set for your designation' },
+}
+
+function WorkloadCard({ workload }: { workload: Workload }) {
+  const tone = workloadTone[workload.status]
+  const norm = workload.min === null && workload.max === null
+    ? ''
+    : `Norm ${workload.min === null ? 'up to' : `${workload.min} –`} ${workload.max === null ? 'any' : workload.max} h/week`
+  return (
+    <section className={`rounded-2xl border px-4 py-3 ${tone.card}`} aria-label="My workload">
+      <p className="text-[10px] font-bold tracking-wide text-gray-400 uppercase">My workload{workload.designation ? ` · ${workload.designation}` : ''}</p>
+      <p className="text-lg font-bold text-gray-800">{workload.hours} h this week</p>
+      <p className={`text-xs font-semibold ${tone.text}`}>{tone.label}{norm ? ` · ${norm}` : ''}</p>
+    </section>
+  )
+}
 
 function todayLabel() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -65,7 +101,7 @@ export function StudentDashboard() {
   return (
     <div className="flex flex-col gap-2">
       <Welcome name={session.username} detail={`You have ${todayRows.length} classes scheduled for today. Keep up the great work!`} badge="Semester Active" asideLabel="Class" asideValue={`${className || '-'} ${division}`.trim()} />
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
+      <FailureNotice message={error} />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Stat icon="fa-book-open" iconClass="bg-blue-50 text-blue-600" chip="Today" value={String(todayRows.length)} label="Classes Today" />
         <Stat icon="fa-calendar-alt" iconClass="bg-purple-50 text-purple-600" chip="Weekly" value={String(rows.length)} label="Total Classes" />
@@ -118,6 +154,7 @@ export function TeacherDashboard() {
   const [leaves, setLeaves] = useState(0)
   const [todayName, setTodayName] = useState('')
   const [facultyName, setFacultyName] = useState('')
+  const [workload, setWorkload] = useState<Workload | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     setPageHeader('Overview')
@@ -126,6 +163,7 @@ export function TeacherDashboard() {
         const absences = Array.isArray(data.absences) ? data.absences : []
         setTodayName(displayValue(data.today))
         setFacultyName(displayValue(data.name))
+        setWorkload(readWorkload(data.workload))
         setLeaves(absences.length)
         setPending(absences.filter((item) => String((item as Record<string, unknown>).status || '').toLowerCase() === 'pending').length)
         const source = Array.isArray(data.sessions) ? data.sessions : []
@@ -149,43 +187,68 @@ export function TeacherDashboard() {
   const todayCount = rows.filter((row) => row.today).length
   return (
     <div className="flex flex-col gap-2">
-      <Welcome name={facultyName || session.username} detail={`You have ${todayCount} classes scheduled for today. Ready to inspire some minds?`} badge="System Active" asideLabel="Today" asideValue={todayName || todayLabel()} />
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat icon="fa-book-open" iconClass="bg-blue-50 text-blue-600" chip="Today" value={String(todayCount)} label="Classes Scheduled" />
-        <Stat icon="fa-chart-pie" iconClass="bg-purple-50 text-purple-600" chip="Weekly" value={String(rows.length)} label="Total Load" />
-        <Stat icon="fa-hourglass-half" iconClass="bg-amber-50 text-amber-600" value={String(pending)} label="Pending Requests" />
-        <Stat icon="fa-user-clock" iconClass="bg-red-50 text-red-600" value={String(leaves)} label="Total Leaves" />
+      <section className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
+        <p className="text-[11px] font-bold tracking-wide text-gray-400 uppercase">{todayName || todayLabel()}</p>
+        <h2 className="text-lg font-bold text-gray-800">Hello, {facultyName || session.username}</h2>
+        <p className="text-sm text-gray-500">You have {todayCount} classes scheduled for today.</p>
+      </section>
+      <FailureNotice message={error} />
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <QuietStat label="Today" value={String(todayCount)} />
+        <QuietStat label="This week" value={String(rows.length)} />
+        <QuietStat label="Pending requests" value={String(pending)} />
+        <QuietStat label="Leaves" value={String(leaves)} />
       </div>
-      <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
-        <header className="border-b border-gray-100 px-8 py-6">
-          <h3 className="text-lg font-bold text-gray-800">Weekly Schedule</h3>
-          <p className="mt-1 text-xs text-gray-500">Your teaching timeline</p>
+      {workload && <WorkloadCard workload={workload} />}
+      <nav className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <Shortcut href="/my-attendance" label="Attendance" />
+        <Shortcut href="/my-timetable" label="Timetable" />
+        <Shortcut href="/my-classes" label="Classes" />
+        <Shortcut href="/my-assignments" label="Subjects" />
+        <Shortcut href="/my-proxy" label="Proxy" />
+        <Shortcut href="/my-shifts" label="Shifts" />
+        <Shortcut href="/my-availability" label="Availability" />
+      </nav>
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <header className="border-b border-gray-100 px-4 py-3">
+          <h3 className="text-sm font-bold text-gray-800">Weekly schedule</h3>
+          <p className="mt-0.5 text-xs text-gray-500">Your teaching timeline</p>
         </header>
-        <div className="overflow-auto">
-          <table className="w-full text-left">
-            <thead className="bg-white text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-              <tr>
-                <th className="px-6 py-4">Day</th>
-                <th className="px-6 py-4">Timing</th>
-                <th className="px-6 py-4">Subject</th>
-                <th className="px-6 py-4">Location</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 text-sm">
-              {rows.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-16 text-center text-gray-500">No schedule found</td></tr>
-              ) : rows.map((row) => (
-                <tr key={`${row.day}-${row.start}-${row.subject}`} className="hover:bg-gray-50/80">
-                  <td className="px-6 py-4"><span className="rounded-lg border border-gray-100 bg-gray-100/50 px-3 py-1 text-sm font-bold text-gray-700">{row.day.slice(0, 3)}</span></td>
-                  <td className="px-6 py-4 text-gray-600"><i className="far fa-clock mr-2 text-gray-300" />{row.start} - {row.end}</td>
-                  <td className="px-6 py-4 font-bold text-gray-800">{row.subject}</td>
-                  <td className="px-6 py-4"><span className="rounded-md border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-600">{row.className}</span> <span className="text-xs text-gray-400">Div {row.division}</span></td>
-                </tr>
+        {rows.length === 0 ? <p className="px-4 py-10 text-center text-sm text-gray-500">No schedule found</p> : (
+          <>
+            <ul className="divide-y divide-gray-100 md:hidden">
+              {rows.map((row) => (
+                <li key={`${row.day}-${row.start}-${row.subject}`} className="px-4 py-3">
+                  <p className="text-xs font-bold tracking-wide text-gray-400 uppercase">{row.day} · {row.start} – {row.end}</p>
+                  <p className="font-semibold text-gray-800">{row.subject}</p>
+                  <p className="text-sm text-gray-500">{row.className}{row.division ? ` · Div ${row.division}` : ''}</p>
+                </li>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </ul>
+            <div className="hidden overflow-auto md:block">
+              <table className="w-full text-left">
+                <thead className="bg-white text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                  <tr>
+                    <th className="px-4 py-3">Day</th>
+                    <th className="px-4 py-3">Timing</th>
+                    <th className="px-4 py-3">Subject</th>
+                    <th className="px-4 py-3">Class</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {rows.map((row) => (
+                    <tr key={`${row.day}-${row.start}-${row.subject}`}>
+                      <td className="px-4 py-3 font-semibold text-gray-700">{row.day}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.start} – {row.end}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{row.subject}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.className}{row.division ? ` · Div ${row.division}` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     </div>
   )
@@ -223,6 +286,19 @@ function Stat({ icon, iconClass, chip, value, label, valueClass = 'text-gray-800
       <p className="mt-1 text-xs font-medium tracking-wide text-gray-500 uppercase">{label}</p>
     </div>
   )
+}
+
+function QuietStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white px-3 py-2">
+      <p className="text-[10px] font-bold tracking-wide text-gray-400 uppercase">{label}</p>
+      <p className="text-lg font-bold text-gray-800">{value}</p>
+    </div>
+  )
+}
+
+function Shortcut({ href, label }: { href: string; label: string }) {
+  return <Link to={href} className="rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-800">{label}</Link>
 }
 
 function Action({ href, icon, tint, title, text }: { href: string; icon: string; tint: string; title: string; text: string }) {
@@ -285,30 +361,41 @@ export function WeekSchedule({ title, path }: { title: string; path: string }) {
       .catch((reason: unknown) => setError(messageFrom(reason)))
   }, [path, setPageHeader, title])
   return (
-    <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
-      <header className="border-b border-gray-100 px-8 py-6">
-        <h3 className="text-lg font-bold text-gray-800">{title}</h3>
-        {note ? <p className="mt-1 text-xs text-gray-500">{note}</p> : null}
-        {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+    <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <header className="border-b border-gray-100 px-4 py-3">
+        <h3 className="text-sm font-bold text-gray-800">{title}</h3>
+        {note ? <p className="mt-0.5 text-xs text-gray-500">{note}</p> : null}
+        <FailureNotice message={error} />
       </header>
-      <div className="overflow-auto">
-        <table className="w-full text-left">
-          <thead className="bg-white text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-            <tr>
-              {weekColumns.map((column) => <th key={column.key} className="px-6 py-4">{column.label}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50 text-sm">
-            {rows.length === 0 ? (
-              <tr><td colSpan={weekColumns.length} className="px-6 py-16 text-center text-gray-500">No classes scheduled</td></tr>
-            ) : rows.map((row, index) => (
-              <tr key={`${row.day}-${row.start_time}-${index}`} className="hover:bg-gray-50/80">
-                {weekColumns.map((column) => <td key={column.key} className="px-6 py-4 text-gray-700">{displayValue(row[column.key])}</td>)}
-              </tr>
+      {rows.length === 0 ? <p className="px-4 py-10 text-center text-sm text-gray-500">No classes scheduled</p> : (
+        <>
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {rows.map((row, index) => (
+              <li key={`${row.day}-${row.start_time}-${index}`} className="px-4 py-3">
+                <p className="text-xs font-bold tracking-wide text-gray-400 uppercase">{displayValue(row.day)} · {displayValue(row.start_time)} – {displayValue(row.end_time)}</p>
+                <p className="font-semibold text-gray-800">{displayValue(row.subject)}</p>
+                <p className="text-sm text-gray-500">{displayValue(row.class_name)}{row.room ? ` · ${displayValue(row.room)}` : ''}</p>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+          <div className="hidden overflow-auto md:block">
+            <table className="w-full text-left">
+              <thead className="bg-white text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                <tr>
+                  {weekColumns.map((column) => <th key={column.key} className="px-4 py-3">{column.label}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-sm">
+                {rows.map((row, index) => (
+                  <tr key={`${row.day}-${row.start_time}-${index}`}>
+                    {weekColumns.map((column) => <td key={column.key} className="px-4 py-3 text-gray-700">{displayValue(row[column.key])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   )
 }

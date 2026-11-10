@@ -153,7 +153,11 @@ def change_password(session, current_password, new_password):
         result = fetch_password_hash(cursor, user_id)
         if not result or not check_password_hash(result['password'], current_password):
             return 'wrong'
+        from services.security_policy import enforced_problem, remember_password_change
+        if enforced_problem(new_password, cursor):
+            return 'policy'
         update_password(cursor, generate_password_hash(new_password), user_id)
+        remember_password_change(cursor, user_id)
         log_activity(user_id, 'change_password', 'Changed password', cursor=cursor)
         connection.commit()
         return 'ok'

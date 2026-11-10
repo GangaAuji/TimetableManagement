@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
 import { Dialog, fieldClass } from '../../academics/ui'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
@@ -214,8 +215,8 @@ export function InvitationsPage() {
         </div>
         {canInvite && <button type="button" onClick={() => { setOpen(true); setError('') }} className={primaryButton}>Create invitation</button>}
       </header>
-      {error && <p className="px-5 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="px-5 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <TableToolbar search={search} onSearch={setSearch} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((open) => !open)} matched={total} source={stats.total} activeCount={(search.trim() ? 1 : 0) + Object.values(filters).filter((value) => value.trim()).length} onClear={() => { setSearch(''); setFilters({ name: '', email: '', role: '', place: '', status: '', expires_at: '' }) }} />
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-left text-xs">

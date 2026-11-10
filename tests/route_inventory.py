@@ -97,7 +97,8 @@ def render_inventory(rows):
         '',
         'Baseline Flask URL map for this branch. Regenerate with `python -m tests.route_inventory`.',
         '',
-        'The React app calls `/api`. Mobile sync calls `/mobile-sync/v1`. No `/api/v1` routes are registered.',
+        'The React app calls `/api`. Mobile sync calls `/mobile-sync/v1`. Other systems call the key-authenticated `/api/v1`. '
+        'The only HTML-era views left are the sign-in, sign-out, registration and SSO routes on `routes/auth.py`.',
         '',
         '| Method | URL | Blueprint | File |',
         '| --- | --- | --- | --- |',

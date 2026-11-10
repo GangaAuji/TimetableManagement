@@ -44,12 +44,14 @@ class Baseline:
             cursor.close()
 
     def changed(self, connection):
+        """Captured tables whose rows differ now. A table a module downgraded away is not 'changed'."""
         cursor = connection.cursor()
         try:
-            current = _checksums(cursor, self.tables)
+            present = [name for name in _tables(cursor) if name in self.checksums]
+            current = _checksums(cursor, present) if present else {}
         finally:
             cursor.close()
-        return [name for name in self.tables if current.get(name) != self.checksums.get(name)]
+        return [name for name in present if current.get(name) != self.checksums.get(name)]
 
     def restore(self, connection):
         """Put every changed table back to its captured rows. Returns the restored table names."""

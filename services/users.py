@@ -62,8 +62,14 @@ def create_user(username, password, role, status, _email, session):
         if not may_manage_role(cursor, session['user_id'], role):
             flash('You cannot create an account with that role.', 'danger')
             return
+        from services.security_policy import enforced_problem, remember_password_change
+        if password and enforced_problem(password, cursor):
+            flash('The password does not meet the security policy.', 'danger')
+            return
         hashed = generate_password_hash(password) if password else ''
         user_id = insert_user(cursor, username, hashed, role, status)
+        if password:
+            remember_password_change(cursor, user_id)
         log_activity(
             session['user_id'],
             'create_user',
@@ -268,10 +274,14 @@ def change_user(user_id, username, password, role, status, email, department_id,
         dept_id = int(department_id) if department_id and department_id != '' else None
         stored_email = email or None
         if password:
+            from services.security_policy import enforced_problem, remember_password_change
+            if enforced_problem(password, cursor):
+                return 'policy'
             hashed = generate_password_hash(password)
             update_user_with_password(cursor, [
                 username, stored_email, hashed, role, status, dept_id, is_hod, user_id,
             ])
+            remember_password_change(cursor, user_id)
         else:
             update_user_without_password(cursor, [
                 username, stored_email, role, status, dept_id, is_hod, user_id,

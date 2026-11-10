@@ -5,6 +5,7 @@ from mysql.connector import IntegrityError
 
 from extensions import get_db_connection
 from core.db import transaction
+from core.scope import current_scope
 from api.web.access import (
     InputError,
     allowed,
@@ -55,6 +56,22 @@ def _public(row):
     }
 
 
+def _course_in_scope(cursor, course_id, scope):
+    cursor.execute('SELECT d.institution_id FROM courses c JOIN departments d ON d.id = c.department_id WHERE c.id = %s', (course_id,))
+    row = cursor.fetchone()
+    return row is not None and scope.allows(row.get('institution_id'))
+
+
+def _visible(cursor, batch_id, scope):
+    cursor.execute(
+        'SELECT d.institution_id FROM course_batches cb JOIN courses c ON c.id = cb.course_id '
+        'JOIN departments d ON d.id = c.department_id WHERE cb.id = %s',
+        (batch_id,),
+    )
+    row = cursor.fetchone()
+    return row is not None and scope.allows(row.get('institution_id'))
+
+
 def _save(payload, batch_id):
     connection = None
     cursor = None
@@ -71,17 +88,15 @@ def _save(payload, batch_id):
         is_active = flag(payload.get('is_active'))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute('SELECT 1 FROM courses WHERE id = %s', (course_id,))
-        if cursor.fetchone() is None:
+        scope = current_scope(cursor)
+        if not _course_in_scope(cursor, course_id, scope):
             raise InputError('batch_course_invalid')
         if year_id is not None:
             cursor.execute('SELECT 1 FROM academic_years WHERE id = %s', (year_id,))
             if cursor.fetchone() is None:
                 raise InputError('batch_year_invalid')
-        if batch_id is not None:
-            cursor.execute('SELECT 1 FROM course_batches WHERE id = %s', (batch_id,))
-            if cursor.fetchone() is None:
-                return reject_input(MESSAGES, 'batch_not_found')
+        if batch_id is not None and not _visible(cursor, batch_id, scope):
+            return reject_input(MESSAGES, 'batch_not_found')
         values = (course_id, name, year_id, start_year, end_year, total_students, current_semester, 1 if is_active else 0)
         if batch_id is None:
             cursor.execute(
@@ -150,7 +165,12 @@ def register_batch_routes(blueprint):
         try:
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
-            cursor.execute('SELECT id, name, program FROM courses WHERE is_active = TRUE ORDER BY name')
+            scope = current_scope(cursor)
+            course_clause, course_params = scope.course_clause('c')
+            cursor.execute(
+                f'SELECT c.id, c.name, c.program FROM courses c WHERE c.is_active = TRUE AND {course_clause} ORDER BY c.name',
+                course_params,
+            )
             courses = []
             for row in cursor.fetchall():
                 course_id = safe_count(row.get('id'))
@@ -167,8 +187,10 @@ def register_batch_routes(blueprint):
                 FROM course_batches cb
                 JOIN courses c ON cb.course_id = c.id
                 LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id
+                WHERE {course_clause}
                 ORDER BY cb.start_year DESC, c.name
-                """
+                """.replace('{course_clause}', course_clause),
+                course_params,
             )
             return json_ok({
                 'batches': [_public(row) for row in cursor.fetchall() if safe_count(row.get('id'))],
@@ -217,7 +239,9 @@ def register_batch_routes(blueprint):
         cursor = None
         try:
             connection = get_db_connection()
-            cursor = connection.cursor()
+            cursor = connection.cursor(dictionary=True)
+            if not _visible(cursor, batch_id, current_scope(cursor)):
+                return reject_input(MESSAGES, 'batch_not_found')
             cursor.execute('DELETE FROM course_batches WHERE id = %s', (batch_id,))
             if cursor.rowcount == 0:
                 return reject_input(MESSAGES, 'batch_not_found')

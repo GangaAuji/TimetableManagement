@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from flask import flash
+from flask import current_app, flash
 
 from academic_rules.clashes import faculty_timetable_free
 from data_access.teacher_portal import (
@@ -389,6 +389,16 @@ def load_my_shifts(faculty_id):
         return str(exc)
 
 
+def _notify_shift_request(cursor, request_id):
+    """Queue the HOD notice with the request; a notification problem never blocks the submission."""
+    from services import notifications
+
+    try:
+        notifications.on_shift_request(cursor, request_id)
+    except Exception:
+        current_app.logger.exception('Shift request %s notice was not queued', request_id)
+
+
 def submit_shift_change(faculty_id, day_of_week, current_shift_name, requested_shift_name, reason):
     """Store a shift-change request. Return missing or ok."""
     connection, cursor = _cursor()
@@ -405,6 +415,7 @@ def submit_shift_change(faculty_id, day_of_week, current_shift_name, requested_s
             requested_shift_name,
             reason,
         )
+        _notify_shift_request(cursor, cursor.lastrowid)
         connection.commit()
         flash('Shift change request submitted successfully! Admin will review it soon.', 'success')
         return 'ok'

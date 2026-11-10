@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { ApiError } from '../../../shared/api/client'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
 import {
   createStudent,
@@ -229,8 +230,8 @@ export function StudentsPage() {
         </div>
       </div>
 
-      {error && <p className="border-x border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="border-x border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <div className="relative flex flex-1 flex-col overflow-hidden rounded-b-2xl border-x border-b border-gray-200 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.02)]">
         <TableToolbar search={search} onSearch={setSearch} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((open) => !open)} matched={list?.total ?? 0} source={list?.total ?? 0} activeCount={(search.trim() ? 1 : 0) + Object.values(fields).filter((value) => value.trim()).length + (query.course ? 1 : 0) + (query.sort !== 'name' || query.order !== 'ASC' ? 1 : 0)} onClear={() => { setSearch(''); setFields({ name: '', roll: '', courseName: '', className: '', email: '' }); setQuery((current) => ({ ...current, course: '', sort: 'name', order: 'ASC', page: 1 })) }} />

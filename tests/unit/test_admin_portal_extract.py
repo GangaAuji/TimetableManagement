@@ -1,10 +1,7 @@
-"""Admin dashboard, rooms, and teacher portal extracts. No live database."""
+"""Teacher portal extract. No live database."""
 
 from datetime import date
 
-from services import admin_dashboard
-from services import admin_departments
-from services import admin_rooms
 from services import teacher_portal
 
 
@@ -66,45 +63,6 @@ def _bind(monkeypatch, module, connection):
             logger = _Logger()
         monkeypatch.setattr(module, 'current_app', _App())
     return flashes
-
-
-def test_department_choices_close_the_connection(monkeypatch):
-    connection = _Connection([[{'id': 2, 'name': 'Civil'}]])
-    _bind(monkeypatch, admin_departments, connection)
-    assert admin_departments.list_department_choices() == [{'id': 2, 'name': 'Civil'}]
-    assert connection.cursor_obj.calls[0][0] == 'SELECT id, name FROM departments ORDER BY name'
-    assert connection.cursor_obj.closed is True
-    assert connection.actions == ['close']
-
-
-def test_dashboard_counts_students_before_faculty(monkeypatch):
-    rows = [{'count': 3}] * 8
-    rows.append([{'room_type': 'Lab', 'count': 2}])
-    rows.append([])
-    rows.append([])
-    rows.append([])
-    rows.append([])
-    rows.append([])
-    rows.append([])
-    connection = _Connection(rows)
-    _bind(monkeypatch, admin_dashboard, connection)
-    page = admin_dashboard.load_admin_dashboard()
-    assert connection.cursor_obj.calls[0][0] == 'SELECT COUNT(id) as count FROM students WHERE is_active = 1'
-    assert connection.cursor_obj.calls[1][0] == 'SELECT COUNT(id) as count FROM faculty WHERE is_active = 1'
-    assert page['stats']['total_students'] == 3
-    assert page['stats']['recent_updates'] == []
-    assert connection.cursor_obj.closed is True
-    assert connection.actions == []
-
-
-def test_duplicate_room_does_not_roll_back(monkeypatch):
-    connection = _Connection([{'taken': 1}])
-    flashes = _bind(monkeypatch, admin_rooms, connection)
-    payload, status = admin_rooms.create_room('A1', 'Lab', '20', '')
-    assert status == 400
-    assert payload['error'] == 'Room number already exists.'
-    assert connection.actions == ['close']
-    assert flashes == []
 
 
 def test_teacher_absence_inserts_unprocessed(monkeypatch):

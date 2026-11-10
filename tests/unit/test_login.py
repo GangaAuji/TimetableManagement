@@ -72,6 +72,7 @@ def _bind(monkeypatch, rows, raise_on=None, password_ok=True):
     monkeypatch.setattr(login_service, '_spend_one_hash', lambda password: None)
     monkeypatch.setattr(login_service, 'password_matches', lambda stored, raw: password_ok and stored == 'hash' and raw == 'secret')
     monkeypatch.setattr(login_service, 'upgraded_hash', lambda stored, raw: None)
+    monkeypatch.setattr(login_service, 'apply_at_login', lambda cursor, session: None)  # covered in test_institutions
     monkeypatch.setattr(login_service.uuid, 'uuid4', lambda: 'sid-1')
 
     class _Clock(datetime):
@@ -194,3 +195,59 @@ def test_several_student_rows_do_not_pick_one(monkeypatch):
     assert session == {}
     assert connection.commits == 0
     assert flashes == [('This account is not linked to a student record.', 'danger')]
+
+
+def test_second_factor_does_not_open_a_session(monkeypatch):
+    connection, cursor, _flashes, _attempts, _activities, _app, _failures, resets = _bind(
+        monkeypatch, [_user(), {'id': 15, 'name': 'Ada', 'email': 'ada@school', 'course_id': 2, 'class_id': 4, 'division_id': 6}],
+    )
+    monkeypatch.setattr('services.second_factor.prepare', lambda cursor, user, username: 'totp')
+    session = {}
+    assert login_service.sign_in('ada', 'secret', '10.0.0.8', 'browser', session) == 'totp'
+    assert 'user_id' not in session
+    assert session['pending_2fa']['step'] == 'totp'
+    assert session['pending_2fa']['user_id'] == 7
+    assert [call[0].split(' ', 1)[0] for call in cursor.calls] == ['SELECT', 'SELECT']
+    assert connection.commits == 0
+    assert resets == []
+
+
+def test_pending_code_opens_the_session_and_a_wrong_code_does_not(monkeypatch):
+    import time
+    profile = {'department_id': 3, 'is_hod': 0, 'profile_photo': ''}
+    student = {'id': 15, 'name': 'Ada', 'email': 'ada@school', 'course_id': 2, 'class_id': 4, 'division_id': 6}
+    user = {**_user(), 'username': 'ada', 'locked_now': 0}
+    connection, _cursor, _flashes, attempts, activities, _app, failures, resets = _bind(
+        monkeypatch, [user, student, profile],
+    )
+    monkeypatch.setattr('services.second_factor.active', lambda cursor: True)
+    monkeypatch.setattr('services.second_factor.accept_sign_in', lambda cursor, user_id, code, burn_totp=True: True)
+    pending = {
+        'user_id': 7, 'username': 'ada', 'role': 'Student', 'kind': 'portal', 'step': 'totp',
+        'via': 'password', 'expires': int(time.time()) + 60, 'attempts': 0,
+    }
+    session = {'pending_2fa': dict(pending)}
+    assert login_service.finish_pending('123456', '10.0.0.8', 'browser', session)['ok'] is True
+    assert session['user_id'] == 7
+    assert session['student_id'] == 15
+    assert 'pending_2fa' not in session
+    assert connection.commits == 1
+    assert resets == [7]
+    assert attempts == [('ada', 'success')]
+    assert activities == [(7, 'login', 'User ada logged in as Student with a second factor')]
+
+    connection, _cursor, _flashes, attempts, activities, _app, failures, resets = _bind(
+        monkeypatch, [dict(user), dict(student)],
+    )
+    monkeypatch.setattr('services.second_factor.active', lambda cursor: True)
+    monkeypatch.setattr('services.second_factor.accept_sign_in', lambda *args, **kwargs: False)
+    session = {'pending_2fa': dict(pending)}
+    result = login_service.finish_pending('000000', '10.0.0.8', 'browser', session)
+    assert result == {'ok': False, 'message': 'That code was not accepted.', 'cleared': False}
+    assert 'user_id' not in session
+    assert session['pending_2fa']['attempts'] == 1
+    assert connection.commits == 0
+    assert failures == [7]
+    assert resets == []
+    assert activities == []
+    assert attempts == [('ada', 'failed', 'Invalid second factor')]

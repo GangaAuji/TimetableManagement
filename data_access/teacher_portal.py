@@ -203,18 +203,23 @@ def fetch_teaching_class_counts(cursor, faculty_user_id):
             d.name as division_name, 
             co.name as course_name,
             s.name as subject_name,
+            lbg.name as lab_batch_name,
             COUNT(DISTINCT st.id) as student_count
         FROM timetable t
         JOIN classes cl ON t.class_id = cl.id
         JOIN divisions d ON t.division_id = d.id
         JOIN courses co ON t.course_id = co.id
         JOIN subjects s ON t.subject_id = s.id
+        LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
         LEFT JOIN students st ON st.class_id = t.class_id 
             AND st.division_id = t.division_id 
             AND st.course_id = t.course_id
+            AND (t.lab_batch_group_id IS NULL OR EXISTS (
+                SELECT 1 FROM lab_batch_members lbm
+                WHERE lbm.student_id = st.id AND lbm.lab_batch_group_id = t.lab_batch_group_id AND lbm.ended_at IS NULL))
         WHERE t.faculty_id = %s
-        GROUP BY cl.id, d.id, co.id, s.id
-        ORDER BY cl.name, d.name, s.name
+        GROUP BY cl.id, d.id, co.id, s.id, lbg.id
+        ORDER BY cl.name, d.name, s.name, lbg.name
         """,
         [faculty_user_id],
     )
@@ -359,13 +364,13 @@ def fetch_owned_lecture(cursor, timetable_id, faculty_user_id):
 
 
 def insert_pending_proxy(cursor, faculty_user_id, proxy_user_id, timetable_id, absence_date):
-    """Insert a teacher proxy request with status PENDING."""
+    """Insert a teacher proxy request. Approval stays pending; status only records whether a substitute was named."""
     cursor.execute(
         """
             INSERT INTO proxy_log (original_faculty_id, proxy_faculty_id, timetable_id, absence_date, status)
             VALUES (%s, %s, %s, %s, %s)
             """,
-        (faculty_user_id, proxy_user_id, timetable_id, absence_date, 'PENDING'),
+        (faculty_user_id, proxy_user_id, timetable_id, absence_date, 'ASSIGNED' if proxy_user_id else 'UNASSIGNED'),
     )
 
 

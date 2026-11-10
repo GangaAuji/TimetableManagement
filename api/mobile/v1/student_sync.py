@@ -11,6 +11,7 @@ from flask import current_app, g, jsonify, request
 
 from data_access.teacher_attendance import fetch_lecture_roster
 from extensions import get_db_connection
+from services.face import safeguards
 from .sync_attendance import (
     ALLOWED_STATUSES,
     _has_active_timetable_for_group,
@@ -21,6 +22,7 @@ from .sync_attendance import (
     _parse_iso_datetime,
     _pick,
     _promote_log_to_attendance,
+    emit_marked_webhooks,
     _resolve_faculty_record_by_reference,
     _resolve_recent_timetable_for_student,
     _resolve_student_class_division,
@@ -35,7 +37,7 @@ from .sync_attendance import (
 )
 
 
-def _roster_payload(cursor, lecture):
+def _roster_payload(cursor, lecture, on_date=None):
     """The active students the lecture covers, in the shape the device expects (the same roster the teacher's form shows)."""
     return [
         {
@@ -45,7 +47,7 @@ def _roster_payload(cursor, lecture):
             "roll_number": student["roll_number"],
             "admission_id": student["admission_id"],
         }
-        for student in fetch_lecture_roster(cursor, lecture)
+        for student in fetch_lecture_roster(cursor, lecture, on_date)
     ]
 
 
@@ -99,6 +101,8 @@ def sync_timetable():
                 t.class_id,
                 d.name AS division_name,
                 t.division_id,
+                t.lab_batch_group_id,
+                lbg.name AS lab_batch_name,
                 t.semester_id,
                 t.academic_year_id,
                 COALESCE(s.is_elective, 0) AS is_elective,
@@ -106,6 +110,7 @@ def sync_timetable():
                 t.end_time,
                 t.day_of_week
             FROM timetable t
+            LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
             JOIN subjects s ON s.id = t.subject_id
             JOIN classes c ON c.id = t.class_id
             LEFT JOIN divisions d ON d.id = t.division_id
@@ -119,7 +124,7 @@ def sync_timetable():
         response_rows = []
         active_rows = []
         for lecture in lectures:
-            students = _roster_payload(cursor, lecture)
+            students = _roster_payload(cursor, lecture, schedule_date)
 
             start_time_str = str(lecture["start_time"])
             end_time_str = str(lecture["end_time"])
@@ -152,6 +157,10 @@ def sync_timetable():
                 "divisionId": lecture["division_id"],
                 "division_name": lecture["division_name"],
                 "divisionName": lecture["division_name"],
+                "lab_batch_group_id": lecture.get("lab_batch_group_id"),
+                "labBatchGroupId": lecture.get("lab_batch_group_id"),
+                "lab_batch_name": lecture.get("lab_batch_name"),
+                "labBatchName": lecture.get("lab_batch_name"),
                 "day_of_week": lecture["day_of_week"],
                 "dayOfWeek": lecture["day_of_week"],
                 "start_time": start_time_str,
@@ -281,6 +290,8 @@ def resolve_timetable_session():
                 c.name AS class_name,
                 t.division_id,
                 d.name AS division_name,
+                t.lab_batch_group_id,
+                lbg.name AS lab_batch_name,
                 t.start_time,
                 t.end_time,
                 t.day_of_week
@@ -288,6 +299,7 @@ def resolve_timetable_session():
             JOIN subjects s ON s.id = t.subject_id
             JOIN classes c ON c.id = t.class_id
             LEFT JOIN divisions d ON d.id = t.division_id
+            LEFT JOIN lab_batch_groups lbg ON lbg.id = t.lab_batch_group_id
             WHERE {" AND ".join(where_parts)}
             ORDER BY t.start_time
             LIMIT 5
@@ -339,6 +351,10 @@ def resolve_timetable_session():
                     "divisionId": row["division_id"],
                     "division_name": row["division_name"],
                     "divisionName": row["division_name"],
+                    "lab_batch_group_id": row.get("lab_batch_group_id"),
+                    "labBatchGroupId": row.get("lab_batch_group_id"),
+                    "lab_batch_name": row.get("lab_batch_name"),
+                    "labBatchName": row.get("lab_batch_name"),
                     "start_time": str(row["start_time"]),
                     "startTime": str(row["start_time"]),
                     "start": str(row["start_time"]),
@@ -374,6 +390,151 @@ def resolve_timetable_session():
         connection.close()
 
 
+RECOGNITION_STATUSES = {"Present", "Late"}
+REASON_MESSAGES = {
+    safeguards.NO_CONSENT: "The student has not consented to face recognition",
+    safeguards.LOW_CONFIDENCE: "Recognition confidence is below the server minimum",
+    safeguards.LOW_LIVENESS: "Liveness score is below the server minimum",
+    safeguards.DUPLICATE_FRAME: "This frame was already used on this device",
+    safeguards.TEMPLATE_TOO_OLD: "The matched face template is older than allowed; re-enrol the student",
+    safeguards.SESSION_CODE_REQUIRED: "A session code is required; the teacher must open the lecture first",
+    safeguards.SESSION_CODE_INVALID: "The session code does not match the lecture",
+    safeguards.SESSION_CODE_EXPIRED: "The session code has expired; the teacher must reopen the lecture",
+    safeguards.SESSION_CLOSED: "The lecture is cancelled",
+}
+
+
+def _user_id_of_student(cursor, student_id):
+    cursor.execute("SELECT user_id FROM students WHERE id = %s", (student_id,))
+    row = cursor.fetchone()
+    return row["user_id"] if row else None
+
+
+def _judge_event(cursor, event, *, device_id, event_uuid, student_id, timetable_id, attendance_date, status):
+    """Session-code and passive liveness checks for one event; every decision is written to the audit.
+
+    Returns None when the event may be recorded, otherwise the message to
+    reject it with. Manual marks (`source: manual`, or a status that is not
+    a recognition) skip the recognition checks but still need a valid
+    session code when codes are required.
+    """
+    user_id = _user_id_of_student(cursor, student_id)
+    confidence = event.get("confidence")
+    liveness = _pick(event, "liveness_score", "livenessScore")
+    frame_hash = safeguards.frame_hash_of(_pick(event, "frame_hash", "frameHash", "frame_id", "frameId"))
+    manual = str(_pick(event, "marking_source", "markingSource", "source", default="") or "").strip().lower() == "manual"
+    recognition = status in RECOGNITION_STATUSES and not manual
+
+    def _audit(decision, reason, details=None):
+        safeguards.record_decision(
+            cursor, device_id=device_id, decision=decision, reason=reason, event_uuid=event_uuid, user_id=user_id,
+            student_id=student_id, timetable_id=timetable_id, attendance_date=attendance_date, confidence=confidence,
+            liveness_score=liveness, frame_hash=frame_hash,
+            template_age_days=(details or {}).get("template_age_days"),
+        )
+
+    ok, reason = safeguards.check_session_code(
+        cursor, timetable_id, attendance_date, _pick(event, "session_code", "sessionCode"),
+    )
+    if not ok:
+        _audit(safeguards.REJECTED, reason)
+        return REASON_MESSAGES[reason]
+
+    if not recognition:
+        _audit(safeguards.ACCEPTED, "manual" if manual else status.lower())
+        return None
+
+    ok, reason, details = safeguards.check_recognition(
+        cursor, device_id=device_id, user_id=user_id, confidence=confidence, liveness_score=liveness,
+        frame_hash=frame_hash, event_uuid=event_uuid,
+    )
+    _audit(safeguards.ACCEPTED if ok else safeguards.REJECTED, reason, details)
+    return None if ok else REASON_MESSAGES[reason]
+
+
+@mobile_sync_bp.route("/sessions/open", methods=["POST"])
+def open_lecture_session():
+    """The device's owner (the teacher) opens a lecture for marking and receives its session code.
+
+    The device can then only mark that lecture, until the code expires or
+    the teacher closes it. Only the slot's teacher or the approved proxy for
+    the date may open it; a cancelled lecture cannot be opened.
+    """
+    from data_access.lecture_sessions import fetch_slot
+    from services.lecture_sessions import SessionCancelled, may_mark, record_held_session
+
+    payload = request.get_json(silent=True) or {}
+    auth_details = getattr(g, "mobile_auth", {})
+    timetable_id = _pick(payload, "timetable_id", "timetableId")
+    attendance_date = _normalize_attendance_date(_pick(payload, "attendance_date", "attendanceDate", "date"))
+    teacher_user_id = _pick(payload, "user_id", "userId", "teacher_user_id", "teacherUserId") or auth_details.get("owner_user_id")
+    try:
+        timetable_id = int(timetable_id)
+        teacher_user_id = int(teacher_user_id)
+    except (TypeError, ValueError):
+        return _json_error("timetable_id and a teacher user_id (or a device owner) are required.")
+    if not attendance_date:
+        return _json_error("attendance_date is required (YYYY-MM-DD).")
+    if auth_details.get("owner_user_id") not in (None, teacher_user_id):
+        return _json_error("This device belongs to another user.", 403)
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        slot = fetch_slot(cursor, timetable_id)
+        if not slot:
+            return _json_error("Unknown timetable_id.", 404)
+        if not may_mark(cursor, timetable_id, attendance_date, teacher_user_id, slot["faculty_id"]):
+            return _json_error("Only the lecture's teacher or the approved proxy may open it.", 403)
+        cursor.execute("SELECT id FROM faculty WHERE user_id = %s", (teacher_user_id,))
+        faculty = cursor.fetchone()
+        try:
+            session_id = record_held_session(
+                cursor, timetable_id, attendance_date, faculty["id"] if faculty else None, "mobile",
+            )
+        except SessionCancelled:
+            connection.rollback()
+            return _json_error("The lecture is cancelled.", 409)
+        code, expires_at = safeguards.open_session_code(cursor, session_id)
+        connection.commit()
+        return jsonify({
+            "success": True,
+            "session_id": session_id, "sessionId": session_id,
+            "timetable_id": timetable_id, "timetableId": timetable_id,
+            "attendance_date": attendance_date, "attendanceDate": attendance_date,
+            "session_code": code, "sessionCode": code,
+            "expires_at": expires_at.isoformat() + "Z", "expiresAt": expires_at.isoformat() + "Z",
+        })
+    except Exception as exc:
+        connection.rollback()
+        current_app.logger.exception("open_lecture_session failed: %s", exc)
+        return _json_error("Failed to open the lecture session.", 500)
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def _record_synced_lesson(cursor, session_id, log_row, recorded_by):
+    """Store `topic` from the raw event once the lecture exists. Ignored when `syllabus` is off."""
+    raw = log_row.get("raw_payload")
+    if not raw:
+        return
+    try:
+        event = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return
+    if not isinstance(event, dict):
+        return
+    from services.syllabus import LessonRejected, lesson_from_event, write_lesson
+
+    try:
+        lesson = lesson_from_event(cursor, log_row.get("timetable_id"), event)
+        if lesson and session_id:
+            write_lesson(cursor, session_id, lesson, recorded_by=recorded_by)
+    except LessonRejected:
+        return
+
+
 @mobile_sync_bp.route("/attendance/sync", methods=["POST"])
 def upload_attendance_logs():
     payload = request.get_json(silent=True) or {}
@@ -392,6 +553,7 @@ def upload_attendance_logs():
     cursor = connection.cursor(dictionary=True)
 
     processed = []
+    touched_sessions = {}
     accepted = 0
     duplicated = 0
     failed = 0
@@ -539,6 +701,7 @@ def upload_attendance_logs():
                         class_id=class_id,
                         division_id=division_id,
                         at_time=captured_time,
+                        student_id=student_id,
                     )
                     or 0
                 )
@@ -602,11 +765,27 @@ def upload_attendance_logs():
             faculty_id = faculty_row.get("id")
             marked_by_user_id = faculty_row.get("user_id") or marked_by_user_id
 
+            from services.syllabus import LessonRejected, lesson_from_event
+
+            try:
+                lesson_from_event(cursor, timetable_id, event)
+            except LessonRejected as rejected:
+                _record_failure(event_uuid, str(rejected))
+                continue
+
             try:
                 captured_value = _pick(event, "captured_at", "capturedAt")
                 captured_at = _parse_iso_datetime(captured_value) if captured_value else None
             except ValueError:
                 captured_at = None
+
+            verdict = _judge_event(
+                cursor, event, device_id=device_id, event_uuid=event_uuid, student_id=student_id,
+                timetable_id=timetable_id, attendance_date=attendance_date, status=status,
+            )
+            if verdict is not None:
+                _record_failure(event_uuid, verdict)
+                continue
 
             try:
                 cursor.execute(
@@ -661,7 +840,10 @@ def upload_attendance_logs():
             try:
                 cursor.execute("SELECT * FROM attendance_logs WHERE id = %s", (log_id,))
                 log_row = cursor.fetchone()
-                _promote_log_to_attendance(cursor, log_row)
+                session_id = _promote_log_to_attendance(cursor, log_row)
+                if session_id:
+                    touched_sessions[session_id] = (log_row["timetable_id"], log_row["attendance_date"])
+                    _record_synced_lesson(cursor, session_id, log_row, marked_by_user_id)
                 cursor.execute(
                     """
                     UPDATE attendance_logs
@@ -685,6 +867,7 @@ def upload_attendance_logs():
                     (str(process_error)[:500], log_id),
                 )
 
+        emit_marked_webhooks(cursor, touched_sessions)
         connection.commit()
 
         current_app.logger.info(
@@ -759,10 +942,14 @@ def reprocess_failed_logs():
         )
         log_rows = cursor.fetchall()
 
+        touched_sessions = {}
         for log_row in log_rows:
             retried += 1
             try:
-                _promote_log_to_attendance(cursor, log_row)
+                session_id = _promote_log_to_attendance(cursor, log_row)
+                if session_id:
+                    touched_sessions[session_id] = (log_row["timetable_id"], log_row["attendance_date"])
+                    _record_synced_lesson(cursor, session_id, log_row, log_row.get("marked_by_user_id"))
                 cursor.execute(
                     """
                     UPDATE attendance_logs
@@ -786,6 +973,7 @@ def reprocess_failed_logs():
                     (str(process_error)[:500], log_row["id"]),
                 )
 
+        emit_marked_webhooks(cursor, touched_sessions)
         connection.commit()
 
         return jsonify(

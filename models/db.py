@@ -16,9 +16,19 @@ logger = logging.getLogger(__name__)
 
 
 def connection_settings():
-    """Return host, user, password and database from the active config, plus MYSQL_INIT_COMMAND when set."""
+    """Return host, user, password and database from the active config, plus MYSQL_INIT_COMMAND when set.
+
+    With a tenant bound to the app context (core.tenancy.bind, set per request
+    by hostname or per command by --tenant) the database is that tenant's.
+    With a tenant registry configured and no tenant bound, there is no database
+    to open and a RuntimeError says so, rather than falling back to MYSQL_DB.
+    """
+    tenant = None
     if has_app_context():
         read = current_app.config.get
+        tenant = getattr(g, 'tenant', None)
+        if tenant is None and read('TENANT_REGISTRY_DB'):
+            raise RuntimeError('No tenant is bound to this app context; this installation has a tenant registry.')
     else:
         def read(name):
             return getattr(Config, name, None)
@@ -26,7 +36,7 @@ def connection_settings():
         'host': read('MYSQL_HOST'),
         'user': read('MYSQL_USER'),
         'password': read('MYSQL_PASSWORD'),
-        'database': read('MYSQL_DB'),
+        'database': tenant.db_name if tenant is not None else read('MYSQL_DB'),
     }
     if read('MYSQL_INIT_COMMAND'):
         settings['init_command'] = read('MYSQL_INIT_COMMAND')

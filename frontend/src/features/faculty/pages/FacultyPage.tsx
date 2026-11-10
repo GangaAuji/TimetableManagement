@@ -1,7 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { ApiError } from '../../../shared/api/client'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
+import { SharingFields } from '../../../shared/components/SharingFields'
 import { DataTableHead, TablePager, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
+import { sharingLabels, type InstitutionOption } from '../../../shared/institutions'
 import {
   createFaculty,
   deactivateFaculty,
@@ -28,6 +31,8 @@ const emptyDraft: FacultyDraft = {
   employee_id: '',
   department_id: null,
   is_active: true,
+  sharing: 'private',
+  shared_with: [],
 }
 
 const fieldClass = 'w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
@@ -129,6 +134,8 @@ export function FacultyPage() {
           employee_id: detail.employee_id,
           department_id: detail.department_id || null,
           is_active: detail.is_active,
+          sharing: detail.sharing,
+          shared_with: detail.shared_with,
         },
       })
     } catch (reason) {
@@ -180,6 +187,11 @@ export function FacultyPage() {
 
   const faculty = list?.faculty ?? []
   const departments = list?.departments ?? []
+  const institutions = list?.institutions ?? []
+  const multiInstitution = institutions.length > 1
+  const columns = multiInstitution
+    ? [...facultyColumns, { key: 'institution', label: 'Institution', sortable: false, filterable: false, className: 'hidden lg:table-cell' } satisfies TableColumnSpec]
+    : facultyColumns
   const filtered = Boolean(appliedSearch || department || fields.name || fields.email || fields.designation || fields.username)
 
   function toggleSort(sort: string) {
@@ -223,8 +235,8 @@ export function FacultyPage() {
           )}
         </div>
       </div>
-      {error && <p className="border-x border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="border-x border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <div className="flex flex-1 flex-col overflow-hidden rounded-b-2xl border-x border-b border-gray-200 bg-white">
         <TableToolbar search={search} onSearch={setSearch} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((open) => !open)} matched={list?.total ?? 0} source={list?.total ?? 0} activeCount={(search.trim() ? 1 : 0) + Object.values(columnFilters).filter((value) => value.trim()).length + (department ? 1 : 0) + (fields.sort !== 'name' || fields.order !== 'ASC' ? 1 : 0)} onClear={() => { setSearch(''); setDepartment(''); setColumnFilters({ name: '', email: '', designation: '', username: '' }); setFields((current) => ({ ...current, sort: 'name', order: 'ASC' })) }} />
         <div className="flex-1 overflow-hidden">
@@ -232,25 +244,25 @@ export function FacultyPage() {
           <table className="w-full border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/90">
               <DataTableHead
-                columns={facultyColumns}
+                columns={columns}
                 sortKey={fields.sort}
                 sortDir={fields.order === 'DESC' ? 'desc' : 'asc'}
                 onSort={toggleSort}
                 filtersOpen={filtersOpen}
                 filters={columnFilters}
                 onFilter={(key, value) => setColumnFilters((current) => ({ ...current, [key]: value }))}
-                leading={permissions.delete ? <th className="w-10 px-5 py-2.5 text-center"><input type="checkbox" checked={faculty.length > 0 && selected.length === faculty.length} onChange={(event) => setSelected(event.target.checked ? faculty.map((member) => member.id) : [])} aria-label="Select all faculty" /></th> : undefined}
+                leading={permissions.delete ? <th className="w-10 px-5 py-2.5 text-center"><input type="checkbox" checked={faculty.some((member) => member.owned) && selected.length === faculty.filter((member) => member.owned).length} onChange={(event) => setSelected(event.target.checked ? faculty.filter((member) => member.owned).map((member) => member.id) : [])} aria-label="Select all faculty" /></th> : undefined}
                 trailing={<th className="px-5 py-2.5 text-right text-[10px] font-bold tracking-wider text-gray-400 uppercase">Actions</th>}
               />
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={8} className="px-6 py-16 text-center text-gray-400">Loading faculty...</td></tr>}
-              {!loading && faculty.length === 0 && <tr><td colSpan={8} className="px-6 py-16 text-center text-gray-400">No faculty match your search.</td></tr>}
+              {loading && <tr><td colSpan={columns.length + 2} className="px-6 py-16 text-center text-gray-400">Loading faculty...</td></tr>}
+              {!loading && faculty.length === 0 && <tr><td colSpan={columns.length + 2} className="px-6 py-16 text-center text-gray-400">No faculty match your search.</td></tr>}
               {faculty.map((member) => (
                 <tr key={member.id} className="hover:bg-emerald-50/40">
                   {permissions.delete && (
                     <td className="px-5 py-2 text-center">
-                      <input type="checkbox" checked={selected.includes(member.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, member.id] : current.filter((id) => id !== member.id))} aria-label={`Select ${member.name}`} />
+                      <input type="checkbox" disabled={!member.owned} checked={selected.includes(member.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, member.id] : current.filter((id) => id !== member.id))} aria-label={`Select ${member.name}`} />
                     </td>
                   )}
                   <td className="px-5 py-2 font-semibold text-gray-800">{member.name}</td>
@@ -261,9 +273,16 @@ export function FacultyPage() {
                   <td className="hidden px-5 py-2 text-center sm:table-cell">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{member.is_active ? 'Active' : 'Inactive'}</span>
                   </td>
+                  {multiInstitution && (
+                    <td className="hidden px-5 py-2 text-gray-600 lg:table-cell">
+                      {member.institution_name || '-'}
+                      {!member.owned && <span className="ml-1 rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700" title="Belongs to another institution and is shared with this one">shared in</span>}
+                      {member.owned && member.sharing !== 'private' && <span className="ml-1 rounded border border-sky-100 bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">{sharingLabels[member.sharing]}</span>}
+                    </td>
+                  )}
                   <td className="px-5 py-2 text-right">
                     <a href={`/admin/faculty/${member.id}`} className="mr-2 text-[10px] font-bold text-gray-500 hover:text-emerald-700">Details</a>
-                    {permissions.change && <button type="button" onClick={() => void openEdit(member)} className="text-[10px] font-bold text-gray-500 hover:text-emerald-700">Edit</button>}
+                    {permissions.change && member.owned && <button type="button" onClick={() => void openEdit(member)} className="text-[10px] font-bold text-gray-500 hover:text-emerald-700">Edit</button>}
                   </td>
                 </tr>
               ))}
@@ -278,6 +297,7 @@ export function FacultyPage() {
           id={editor.id}
           draft={editor.draft}
           departments={departments}
+          institutions={institutions}
           saving={saving}
           onChange={(draft) => setEditor({ id: editor.id, draft })}
           onClose={() => setEditor(null)}
@@ -316,6 +336,7 @@ function Editor({
   id,
   draft,
   departments,
+  institutions,
   saving,
   onChange,
   onClose,
@@ -324,6 +345,7 @@ function Editor({
   id: number | null
   draft: FacultyDraft
   departments: FacultyOption[]
+  institutions: InstitutionOption[]
   saving: boolean
   onChange: (draft: FacultyDraft) => void
   onClose: () => void
@@ -332,6 +354,7 @@ function Editor({
   function set<K extends keyof FacultyDraft>(key: K, value: FacultyDraft[K]) {
     onChange({ ...draft, [key]: value })
   }
+  const ownerId = departments.find((item) => item.id === draft.department_id)?.institution_id ?? null
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="faculty-editor-title">
       <button type="button" className="absolute inset-0 bg-gray-900/40" aria-label="Close" onClick={onClose} />
@@ -356,6 +379,14 @@ function Editor({
           </label>
           <label className="block space-y-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">Designation<input value={draft.designation} onChange={(event) => set('designation', event.target.value)} className={fieldClass} /></label>
           {!id && <label className="block space-y-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">Employee ID<input value={draft.employee_id} onChange={(event) => set('employee_id', event.target.value)} placeholder="Leave blank to generate" className={fieldClass} /></label>}
+          <SharingFields
+            institutions={institutions}
+            ownerId={ownerId}
+            sharing={draft.sharing}
+            sharedWith={draft.shared_with}
+            noun="faculty member"
+            onChange={(next) => onChange({ ...draft, sharing: next.sharing, shared_with: next.sharedWith })}
+          />
           <label className="flex items-center gap-2 text-xs font-medium text-gray-700"><input type="checkbox" checked={draft.is_active} onChange={(event) => set('is_active', event.target.checked)} /> Active</label>
         </div>
         <div className="flex gap-3 border-t px-6 py-4">

@@ -1,5 +1,7 @@
 """Shared admin pagination and proxy assignment."""
 
+import logging
+
 from academic_rules.clashes import faculty_timetable_free
 from core.pagination import page_bounds
 from data_access.admin_queries import (
@@ -35,6 +37,16 @@ def faculty_is_free(cursor, faculty_id, day, start_time, end_time):
     )
 
 
+def _notify_proxy(cursor, proxy_id):
+    """Queue the substitute notices with the assignment; a notification problem never blocks it."""
+    from services import notifications
+
+    try:
+        notifications.on_proxy_assigned(cursor, proxy_id)
+    except Exception:
+        logging.getLogger(__name__).exception('Proxy notices for proxy_log %s were not queued', proxy_id)
+
+
 def assign_admin_proxy(absent_faculty_id, absence_date, session):
     """Assign a proxy for each lecture on the absence weekday. The connection stays open."""
     connection = get_db_connection()
@@ -60,5 +72,7 @@ def assign_admin_proxy(absent_faculty_id, absence_date, session):
             cursor,
             (absent_faculty_id, assigned_proxy_id, timetable_id, absence_date, status, session.get('user_id')),
         )
+        if assigned_proxy_id and getattr(cursor, 'lastrowid', None):
+            _notify_proxy(cursor, cursor.lastrowid)
     connection.commit()
     cursor.close()

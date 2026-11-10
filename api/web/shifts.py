@@ -145,6 +145,7 @@ def availability_view(page, can_change):
         department_id = safe_count(person.get('department_id'))
         faculty.append({
             'user_id': safe_count(person.get('user_id')),
+            'faculty_id': safe_count(person.get('id')),
             'name': safe_text(person.get('name'), 100),
             'department_id': department_id or None,
             'department': safe_text(person.get('department_name') or '', 100),

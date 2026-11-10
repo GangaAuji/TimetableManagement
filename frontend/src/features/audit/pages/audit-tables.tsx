@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, type TableColumnSpec } from '../../../shared/components/table-page'
 import { Dialog } from '../../academics/ui'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
@@ -228,8 +228,8 @@ export function AuditLogsPage() {
           <button type="button" disabled={exporting} onClick={() => void exportCsv()} className={primaryButton}>Export</button>
         </div>
       </header>
-      {error && <p className="px-5 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="px-5 py-2 text-xs text-emerald-700">{notice} <Link to="/admin/reports" className="font-bold underline">Open Reports</Link> to follow the progress and download the file.</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} href="/admin/reports" hrefLabel="Open Reports" note="to follow the progress and download the file." />
       <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={total} source={total} activeCount={table.activeCount} onClear={table.clear} />
       <div className="flex-1 overflow-auto">
         <table className="w-full min-w-[860px] text-left text-xs">
@@ -342,8 +342,8 @@ export function AuditSessionsPage() {
         </div>
         <a href="/admin/audit" className={secondaryButton}>Overview</a>
       </header>
-      {error && <p className="px-5 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="px-5 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={total} source={total} activeCount={table.activeCount} onClear={table.clear} />
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left text-xs">
@@ -413,7 +413,7 @@ export function AuditFailedPage() {
         </div>
         <a href="/admin/audit" className={secondaryButton}>Overview</a>
       </header>
-      {error && <p className="px-5 py-2 text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error} />
       <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={total} source={total} activeCount={table.activeCount} onClear={table.clear} />
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left text-xs">

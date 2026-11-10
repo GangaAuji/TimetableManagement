@@ -127,6 +127,15 @@ def test_faculty_activity_row_keeps_shift_and_marker():
     assert 'email' not in row
 
 
+def test_dashboard_trend_keeps_the_latest_two_weeks():
+    from api.web.dashboard import clip_trend
+    rows = [{'date': f'2026-10-{day:02d}', 'present': day, 'late': 0, 'absent': 1, 'percentage': 150} for day in range(1, 20)]
+    clipped = clip_trend(rows)
+    assert len(clipped) == 14
+    assert clipped[0]['date'] == '2026-10-06'
+    assert clipped[-1]['percentage'] is None
+
+
 def test_assignment_rows_drop_a_syllabus_that_is_not_https():
     rows = teacher_api.assignment_rows([{
         'subject': 'Maths',

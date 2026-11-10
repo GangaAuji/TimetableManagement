@@ -31,18 +31,39 @@ _HEAD_CHANGES = (
     'rate_limit_counters', 'seed_history', 'failed_window_start', 'locked_until',
     'lecture_sessions', 'attendance_excuses', 'session_id', 'idx_attendance_session', 'fk_attendance_session',
     'attendance_summary', 'student_overall_attendance',
+    'locked_by', 'heartbeat_at',
+    'face_consents', 'face_recognition_audit',
+    'notifications', 'notification_settings',
+    'lab_batch_groups', 'lab_batch_members', 'lab_batch_group_id', 'idx_timetable_lab_batch', 'fk_timetable_lab_batch',
+    'api_keys', 'webhook_endpoints', 'webhook_deliveries', 'sso_settings', 'sso_identities',
+    'organizations', 'institutions', 'institution_memberships', 'resource_shares',
+    'institution_id', 'fk_department_institution', 'fk_room_institution', 'sharing',
+    'capabilities',
+    'faculty_preferences', 'timetable_rules',
+    'timetable_versions', 'timetable_version_cohorts', 'version_id', 'fk_timetable_version',
+    'bookings',
+    'academic_terms', 'calendar',
+    'syllabus_units', 'lesson_logs', 'uq_syllabus_unit', 'uq_lesson_session',
+    'fk_syllabus_unit_subject', 'fk_lesson_session', 'fk_lesson_unit', 'fk_lesson_recorder',
+    'assessment_components', 'assessment_marks', 'course_outcomes', 'program_outcomes', 'co_po_map', 'component_co_map',
+    'exams', 'exam_sessions', 'exam_session_cohorts', 'exam_session_rooms', 'exam_seats', 'invigilation_duties',
+    'user_second_factors',
+    'institution_scope', 'uq_branding_scope', 'fk_branding_institution', 'branding_settings.setting_key',
+    'security_settings', 'password_changed_at',
 )
 _SESSION_OBJECTS = {'lecture_sessions', 'attendance_excuses'}
 _DROPPED_VIEWS = {'attendance_summary', 'student_overall_attendance'}
+_MID_TABLE_COLUMNS = ('column `users.', 'column `attendance.', 'column `timetable.', 'column `departments.', 'column `rooms.', 'column `faculty.')
 
 
-def _unexplained(differences):
-    """Lines not caused by revisions 0004 to 0008. 0006 and 0007 add columns mid-table, which moves later columns."""
-    return [
-        line for line in differences
-        if not any(part in line for part in _HEAD_CHANGES)
-        and not (line.startswith(('column `users.', 'column `attendance.')) and ' position: ' in line)
-    ]
+def _moved_column(line):
+    """0006, 0007, 0012 and 0014 add columns mid-table, which moves later columns."""
+    return line.startswith(_MID_TABLE_COLUMNS) and ' position: ' in line
+
+
+def _unexplained(differences, changes=_HEAD_CHANGES):
+    """Lines not caused by the revisions after the baseline."""
+    return [line for line in differences if not any(part in line for part in changes) and not _moved_column(line)]
 
 
 def _rate_limit_collation(schema):
@@ -93,9 +114,7 @@ def test_upgrade_downgrade_upgrade_on_the_live_schema(copy):
     assert with_views['columns']['attendance.session_id']['nullable'] == 'YES'
     for view in _DROPPED_VIEWS:
         assert with_views['views'][view] == live['views'][view]
-    assert all(
-        any(part in line for part in _HEAD_CHANGES[6:]) for line in compare(with_views, upgraded)
-    )
+    assert _unexplained(compare(with_views, upgraded), _HEAD_CHANGES[6:]) == []
     migrate(name, 'upgrade', 'head')
     assert compare(upgraded, read_schema(cursor, name)) == []
 

@@ -1,6 +1,4 @@
-"""Global errors keep today's JSON shape. Pages still go to the React app."""
-
-from urllib.parse import urlparse
+"""API errors keep the JSON envelope. Browser errors are status pages."""
 
 import pytest
 from flask import abort
@@ -75,10 +73,13 @@ def test_unknown_mobile_path_keeps_the_api_json_shape(client):
     }
 
 
-def test_unknown_page_still_redirects_to_the_react_app(client):
+def test_unknown_page_is_a_status_page(client):
     response = client.get('/this-page-is-not-registered', follow_redirects=False)
-    assert response.status_code == 302
-    assert urlparse(response.headers['Location']).path == '/'
+    assert response.status_code == 404
+    page = response.get_data(as_text=True)
+    assert 'Page not found' in page
+    assert 'This page does not exist.' in page
+    assert '<pre>' not in page
 
 
 def test_forbidden_and_unavailable_keep_their_codes(client):
@@ -116,7 +117,8 @@ def test_application_errors_use_the_same_json_shape(client):
     }
 
 
-def test_unexpected_exception_stays_unavailable(client):
+def test_unexpected_exception_stays_hidden_when_debug_is_off(client):
+    client.application.config['DEBUG'] = False
     response = client.get('/api/__phase5_runtime')
     assert response.status_code == 500
     assert response.get_json() == {
@@ -126,7 +128,23 @@ def test_unexpected_exception_stays_unavailable(client):
     assert 'db down' not in response.get_data(as_text=True)
 
 
-def test_application_error_on_a_page_still_opens_the_react_app(client):
+def test_unexpected_exception_is_shown_when_debug_is_on(client):
+    client.application.config['DEBUG'] = True
+    try:
+        response = client.get('/api/__phase5_runtime')
+        assert response.status_code == 500
+        body = response.get_json()
+        assert body['error']['code'] == 'unavailable'
+        assert 'db down' in body['error']['message']
+        assert 'Traceback' not in response.get_data(as_text=True)
+    finally:
+        client.application.config['DEBUG'] = False
+
+
+def test_application_error_on_a_page_is_a_status_page(client):
+    client.application.config['DEBUG'] = False
     response = client.get('/pages/__phase5_forbidden', follow_redirects=False)
-    assert response.status_code == 302
-    assert urlparse(response.headers['Location']).path == '/'
+    assert response.status_code == 403
+    page = response.get_data(as_text=True)
+    assert 'Not allowed' in page
+    assert '<pre>' not in page

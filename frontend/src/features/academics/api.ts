@@ -27,9 +27,9 @@ export function optionsOf(value: unknown): Option[] {
     .filter((row) => row.id > 0 && row.name)
 }
 
-export async function sendJson(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: object) {
+export async function sendJson<T = unknown>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: object) {
   const { csrf_token: csrfToken } = await getCsrfToken()
-  return apiRequest(path, {
+  return apiRequest<T>(path, {
     method,
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: body ? JSON.stringify(body) : undefined,

@@ -3,6 +3,7 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { Dialog } from '../../../shared/components/dialog'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice, WarningNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Device = {
@@ -122,18 +123,9 @@ export function DevicesPage() {
         <p className="text-sm text-gray-500">Register a device, then copy its key. The key is shown once.</p>
         <button type="button" className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" onClick={() => setOpen(true)}>Register device</button>
       </div>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-3 text-sm text-green-700">{notice}</p> : null}
-      {secret ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">New key — copy it now. It will not be shown again.</p>
-          <p className="mt-2 break-all font-mono text-sm text-amber-950">{secret}</p>
-          <div className="mt-3 flex gap-2">
-            <button type="button" className="rounded-md bg-amber-700 px-3 py-2 text-sm font-semibold text-white" onClick={() => { void navigator.clipboard?.writeText(secret) }}>Copy</button>
-            <button type="button" className="rounded-md border border-amber-300 px-3 py-2 text-sm text-amber-900" onClick={() => setSecret('')}>Dismiss</button>
-          </div>
-        </div>
-      ) : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
+      <WarningNotice message={secret ? `${notice ? `${notice} ` : ''}New key — copy it now. It will not be shown again.` : ''} detail={secret} hold onDone={() => setSecret('')} />
       <div className="min-h-[320px] overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="overflow-auto">
           <table className="w-full min-w-[860px] text-left text-sm">

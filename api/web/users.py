@@ -27,6 +27,7 @@ _MESSAGES = {
     'users_unavailable': 'The page could not be loaded.',
     'user_username_invalid': 'Enter a username up to 50 characters.',
     'user_password_invalid': 'Enter a password up to 128 characters.',
+    'password_policy': 'The password does not meet the security policy.',
     'user_role_invalid': 'Choose a role.',
     'user_status_invalid': 'Choose a valid status.',
     'user_username_taken': 'That username is already in use.',
@@ -168,6 +169,9 @@ def _create():
         password = payload.get('password')
         if not isinstance(password, str) or _CONTROL.search(password) or not password.strip() or len(password) > 128:
             raise InputError('user_password_invalid')
+        from services.security_policy import enforced_problem
+        if enforced_problem(password):
+            raise InputError('password_policy')
         role = required_text(payload.get('role'), 50, 'user_role_invalid')
         status = payload.get('status') or 'active'
         if status not in _STATUSES:
@@ -187,6 +191,8 @@ def _create():
             (username, generate_password_hash(password), role, status),
         )
         user_id = cursor.lastrowid
+        from services.security_policy import remember_password_change
+        remember_password_change(cursor, user_id)
         log_activity(session.get('user_id'), 'create_user', f'Created new user: {username} with role {role}',
                      entity_type='user', entity_id=user_id, cursor=cursor)
         connection.commit()

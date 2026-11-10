@@ -35,10 +35,17 @@ def _sigmoid(value: float) -> float:
 
 
 def _default_model_path() -> str:
-    # Keep model artifact inside repository for simple deployment.
-    return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "models", "timetable_quality_model.json")
-    )
+    """QUALITY_MODEL_PATH from the active app when there is one, else the repository artifact. Per tenant when one is bound."""
+    from flask import current_app, has_app_context
+
+    from core.tenancy import scoped_model_path
+
+    path = None
+    if has_app_context():
+        path = current_app.config.get('QUALITY_MODEL_PATH')
+    if not path:
+        path = os.path.join(os.path.dirname(__file__), "..", "models", "timetable_quality_model.json")
+    return os.path.abspath(scoped_model_path(path))
 
 
 def _feature_vector(features: dict) -> list[float]:

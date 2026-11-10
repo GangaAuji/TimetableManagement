@@ -95,6 +95,136 @@ def test_proxy_log_counts_before_the_page_and_then_loads_unfiltered_totals(monke
     assert connection.closed is False
 
 
+class _DecisionCursor:
+    def __init__(self, ones, alls=None):
+        self.ones = list(ones)
+        self.alls = list(alls or [])
+        self.calls = []
+        self.rowcount = 0
+        self.closed = False
+
+    def execute(self, sql, params=None):
+        text = ' '.join(sql.split())
+        self.calls.append((text, list(params or [])))
+        if text.startswith('UPDATE'):
+            self.rowcount = 1
+
+    def fetchone(self):
+        if not self.ones:
+            return None
+        return self.ones.pop(0)
+
+    def fetchall(self):
+        if not self.alls:
+            return []
+        return self.alls.pop(0)
+
+    def close(self):
+        self.closed = True
+
+
+class _DecisionConnection:
+    def __init__(self, cursor):
+        self.cursor_obj = cursor
+        self.actions = []
+
+    def cursor(self, dictionary=False):
+        return self.cursor_obj
+
+    def commit(self):
+        self.actions.append('commit')
+
+    def rollback(self):
+        self.actions.append('rollback')
+
+    def close(self):
+        self.actions.append('close')
+
+
+def _request(**overrides):
+    row = {
+        'id': 4,
+        'original_faculty_id': 9,
+        'proxy_faculty_id': None,
+        'absence_date': '2026-11-09',
+        'status': 'UNASSIGNED',
+        'approval_status': 'PENDING',
+        'day_of_week': 'Monday',
+        'start_time': '09:00:00',
+        'end_time': '10:00:00',
+        'subject_id': 3,
+    }
+    row.update(overrides)
+    return row
+
+
+def _bind_decision(monkeypatch, cursor, free=True):
+    connection = _DecisionConnection(cursor)
+    notices = []
+    monkeypatch.setattr(proxy_service, 'get_db_connection', lambda: connection)
+    monkeypatch.setattr(proxy_service, 'faculty_timetable_free', lambda *args, **kwargs: free)
+    monkeypatch.setattr(proxy_service, '_notify', lambda _cursor, proxy_id: notices.append(proxy_id))
+    return connection, notices
+
+
+def test_approving_a_proxy_request_maps_the_chosen_faculty(monkeypatch):
+    cursor = _DecisionCursor(
+        [_request(), None],
+        [[{'user_id': 12, 'name': 'Bea', 'employee_id': 'E2'}]],
+    )
+    connection, notices = _bind_decision(monkeypatch, cursor)
+    assert proxy_service.decide_proxy_request(4, 'approve', 12, None, 7) == 'ok'
+    update = cursor.calls[-1]
+    assert "status = 'ASSIGNED'" in update[0]
+    assert "approval_status = 'APPROVED'" in update[0]
+    assert update[1] == [12, 7, None, 4]
+    assert notices == [4]
+    assert connection.actions == ['commit', 'close']
+    assert cursor.closed is True
+
+
+def test_approving_uses_the_substitute_the_teacher_named(monkeypatch):
+    cursor = _DecisionCursor(
+        [_request(proxy_faculty_id=15), {'user_id': 15, 'name': 'Cara', 'employee_id': 'E3'}, None],
+        [[]],
+    )
+    _bind_decision(monkeypatch, cursor)
+    assert proxy_service.decide_proxy_request(4, 'approve', None, 'Covered', 7) == 'ok'
+    assert cursor.calls[-1][1] == [15, 7, 'Covered', 4]
+
+
+def test_rejecting_a_proxy_request_leaves_the_assignment_status(monkeypatch):
+    cursor = _DecisionCursor([_request(status='ASSIGNED', proxy_faculty_id=12)])
+    connection, notices = _bind_decision(monkeypatch, cursor)
+    assert proxy_service.decide_proxy_request(4, 'reject', None, 'Not available', 7) == 'ok'
+    sql, params = cursor.calls[-1]
+    assert "approval_status = 'REJECTED'" in sql
+    assert 'status =' not in sql.replace('approval_status', '')
+    assert params == [7, 'Not available', 4]
+    assert notices == []
+    assert connection.actions == ['commit', 'close']
+
+
+def test_approval_requires_a_faculty_member_who_is_free(monkeypatch):
+    cursor = _DecisionCursor([_request()])
+    _bind_decision(monkeypatch, cursor)
+    assert proxy_service.decide_proxy_request(4, 'approve', None, None, 7) == 'choice'
+    assert not any(sql.startswith('UPDATE') for sql, _params in cursor.calls)
+
+    busy = _DecisionCursor([_request()], [[{'user_id': 12, 'name': 'Bea', 'employee_id': 'E2'}]])
+    _bind_decision(monkeypatch, busy, free=False)
+    assert proxy_service.decide_proxy_request(4, 'approve', 12, None, 7) == 'busy'
+    assert not any(sql.startswith('UPDATE') for sql, _params in busy.calls)
+
+
+def test_a_decided_proxy_request_cannot_be_changed(monkeypatch):
+    cursor = _DecisionCursor([_request(approval_status='APPROVED')])
+    connection, _notices = _bind_decision(monkeypatch, cursor)
+    assert proxy_service.decide_proxy_request(4, 'reject', None, None, 7) == 'closed'
+    assert len(cursor.calls) == 1
+    assert connection.actions == ['close']
+
+
 def test_proxy_log_closes_the_connection_when_the_page_asks(monkeypatch):
     connection = _Connection()
     monkeypatch.setattr(proxy_service, 'get_db_connection', lambda: connection)

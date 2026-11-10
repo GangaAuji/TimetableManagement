@@ -8,6 +8,8 @@ from mysql.connector import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from core.pagination import bounded_page_size, page_bounds
+from core.scope import current_scope
+from data_access import institutions as institutions_store
 from extensions import get_db_connection
 from api.web.access import (
     InputError,
@@ -15,11 +17,13 @@ from api.web.access import (
     body,
     close,
     flag,
+    id_list,
     iso_date,
     optional_text,
     permission_denied,
     reject_input,
     required_text,
+    sharing_input,
     whole_number,
 )
 from api.web.responses import json_error, json_ok
@@ -29,16 +33,20 @@ _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 _EMAIL = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 _CREATE_FIELDS = frozenset((
     'username', 'password', 'name', 'email', 'department_id', 'phone',
-    'designation', 'employee_id', 'is_active',
+    'designation', 'employee_id', 'is_active', 'sharing', 'shared_with',
 ))
 _UPDATE_FIELDS = frozenset((
-    'password', 'name', 'email', 'department_id', 'phone', 'designation', 'is_active',
+    'password', 'name', 'email', 'department_id', 'phone', 'designation', 'is_active', 'sharing', 'shared_with',
 ))
 _MESSAGES = {
     'invalid_body': 'The faculty member could not be saved.',
+    'sharing_invalid': 'Sharing must be private, listed or organization.',
+    'shared_with_invalid': 'Choose the institutions this faculty member is listed to.',
+    'faculty_not_owned': 'Only the institution this faculty member belongs to can change the record.',
     'faculty_name_invalid': 'Enter a name up to 100 characters.',
     'faculty_username_invalid': 'Enter a username up to 50 characters.',
     'faculty_password_invalid': 'Enter a password up to 128 characters.',
+    'password_policy': 'The password does not meet the security policy.',
     'faculty_email_invalid': 'Enter a valid email address.',
     'faculty_phone_invalid': 'Phone must be 20 characters or fewer.',
     'faculty_designation_invalid': 'Designation must be 50 characters or fewer.',
@@ -95,6 +103,9 @@ def _password(value, required):
         return None
     if not isinstance(value, str) or _CONTROL.search(value) or not value.strip() or len(value) > 128:
         raise InputError('faculty_password_invalid')
+    from services.security_policy import enforced_problem
+    if enforced_problem(value):
+        raise InputError('password_policy')
     return value
 
 
@@ -146,15 +157,51 @@ def _in_scope(faculty_id, scope):
     return scope is None or faculty_id in scope
 
 
-def _department(cursor, value):
+def _department(cursor, value, scope):
+    """A department the scope may use; the faculty member belongs to its institution."""
     department_id = whole_number(value, 1000000, 'faculty_department_invalid', lower=1)
-    cursor.execute('SELECT id FROM departments WHERE id = %s', (department_id,))
-    if not cursor.fetchone():
+    cursor.execute('SELECT institution_id FROM departments WHERE id = %s', (department_id,))
+    row = cursor.fetchone()
+    if not row or not scope.allows(row.get('institution_id')):
         raise InputError('faculty_department_invalid')
     return department_id
 
 
-def _public(row, include_username=False):
+def _sharing(cursor, payload, own_institution_id):
+    sharing = sharing_input(payload.get('sharing'))
+    shared_with = id_list(payload.get('shared_with'), 'shared_with_invalid') if sharing == 'listed' else []
+    shared_with = [item for item in shared_with if item != own_institution_id]
+    if shared_with:
+        marks = ', '.join(['%s'] * len(shared_with))
+        cursor.execute(f'SELECT COUNT(*) AS n FROM institutions WHERE id IN ({marks})', tuple(shared_with))
+        if int(cursor.fetchone()['n']) != len(shared_with):
+            raise InputError('shared_with_invalid')
+    return sharing, shared_with
+
+
+def _institution_clause(scope, alias='f', department_alias='d'):
+    """Faculty the current institution owns or may allocate (shared to it)."""
+    if scope.institution_id is not None:
+        return scope.faculty_clause(alias, department_alias)
+    return scope.clause(f'{department_alias}.institution_id')
+
+
+def _owned_faculty(cursor, faculty_id, scope):
+    """(row, error): the faculty row with its institution when the scope may change it."""
+    cursor.execute(
+        'SELECT f.id, f.user_id, f.department_id, d.institution_id FROM faculty f '
+        'LEFT JOIN departments d ON d.id = f.department_id WHERE f.id = %s',
+        (faculty_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None, _fail('faculty_not_found', 404)
+    if not scope.allows(row.get('institution_id')):
+        return None, _fail('faculty_not_owned', 403)
+    return row, None
+
+
+def _public(row, include_username=False, scope=None, shares=None):
     item = {
         'id': safe_count(row.get('id')),
         'name': safe_text(row.get('name'), 100),
@@ -168,6 +215,14 @@ def _public(row, include_username=False):
     }
     if include_username or 'username' in row:
         item['username'] = safe_text(row.get('username') or '', 50)
+    if 'sharing' in row:
+        institution_id = safe_count(row.get('institution_id')) or None
+        item['sharing'] = row.get('sharing') if row.get('sharing') in institutions_store.SHARING else 'private'
+        item['institution_id'] = institution_id
+        item['institution_name'] = safe_text(row.get('institution_name') or '', 150)
+        item['owned'] = scope.allows(institution_id) if scope is not None else True
+        if shares is not None:
+            item['shared_with'] = [safe_count(value) for value in shares.get(item['id'], [])]
     return item
 
 
@@ -234,8 +289,10 @@ def _list():
         scope_sql, scope_params = _scope_clause(scope)
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        where = ["u.role = 'Teacher'", "COALESCE(u.status, 'active') = 'active'"]
-        params = []
+        institution_scope = current_scope(cursor)
+        institution_sql, institution_params = _institution_clause(institution_scope)
+        where = ["u.role = 'Teacher'", "COALESCE(u.status, 'active') = 'active'", institution_sql]
+        params = list(institution_params)
         if search:
             where.append('(f.name LIKE %s OR f.email LIKE %s OR f.employee_id LIKE %s)')
             term = f'%{search}%'
@@ -259,6 +316,7 @@ def _list():
         base = """
             FROM faculty f
             LEFT JOIN departments d ON f.department_id = d.id
+            LEFT JOIN institutions i ON i.id = d.institution_id
             LEFT JOIN users u ON f.user_id = u.id
         """
         cursor.execute(f'SELECT COUNT(f.id) AS total {base} {clause}', bound)
@@ -267,25 +325,40 @@ def _list():
         cursor.execute(
             f"""
             SELECT f.id, f.name, f.email, u.username, f.phone, f.is_active, f.employee_id,
-                   f.designation, f.department_id, d.name AS department_name
+                   f.designation, f.department_id, d.name AS department_name, f.sharing,
+                   d.institution_id, i.name AS institution_name
             {base} {clause}
             ORDER BY {_FACULTY_SORTS[sort]} {order}
             LIMIT %s OFFSET %s
             """,
             bound + (per_page, offset),
         )
-        faculty = [_public(row, include_username=True) for row in cursor.fetchall()]
-        count_base = """
+        rows = cursor.fetchall()
+        shares = institutions_store.fetch_shares_for(cursor, 'faculty', [row['id'] for row in rows]) if institution_scope.multiple else {}
+        faculty = [_public(row, include_username=True, scope=institution_scope, shares=shares) for row in rows]
+        count_base = f"""
             FROM faculty f
+            LEFT JOIN departments d ON f.department_id = d.id
             LEFT JOIN users u ON f.user_id = u.id
-            WHERE u.role = 'Teacher' AND COALESCE(u.status, 'active') = 'active'
+            WHERE u.role = 'Teacher' AND COALESCE(u.status, 'active') = 'active' AND {institution_sql}
         """
-        cursor.execute(f'SELECT COUNT(f.id) AS total {count_base} AND f.is_active = 1 {scope_sql}', tuple(scope_params))
+        count_params = tuple(institution_params) + tuple(scope_params)
+        cursor.execute(f'SELECT COUNT(f.id) AS total {count_base} AND f.is_active = 1 {scope_sql}', count_params)
         total_active = safe_count(cursor.fetchone()['total'])
-        cursor.execute(f'SELECT COUNT(f.id) AS total {count_base} AND f.is_active = 0 {scope_sql}', tuple(scope_params))
+        cursor.execute(f'SELECT COUNT(f.id) AS total {count_base} AND f.is_active = 0 {scope_sql}', count_params)
         total_inactive = safe_count(cursor.fetchone()['total'])
-        cursor.execute('SELECT id, name FROM departments ORDER BY name')
-        departments = [{'id': safe_count(row['id']), 'name': safe_text(row['name'], 100)} for row in cursor.fetchall()]
+        department_sql, department_params = institution_scope.clause('institution_id')
+        cursor.execute(f'SELECT id, name, institution_id FROM departments WHERE {department_sql} ORDER BY name', department_params)
+        departments = [
+            {'id': safe_count(row['id']), 'name': safe_text(row['name'], 100), 'institution_id': safe_count(row.get('institution_id')) or None}
+            for row in cursor.fetchall()
+        ]
+        institutions = []
+        if institution_scope.multiple:
+            institutions = [
+                {'id': safe_count(row['id']), 'name': safe_text(row['name'], 150), 'short_name': safe_text(row.get('short_name'), 40)}
+                for row in institutions_store.fetch_institutions(cursor, active_only=True)
+            ]
         return json_ok({
             'faculty': faculty,
             'page': page,
@@ -294,6 +367,8 @@ def _list():
             'total_active': total_active,
             'total_inactive': total_inactive,
             'departments': departments,
+            'institutions': institutions,
+            'institution_id': institution_scope.institution_id,
             'permissions': _permissions(),
         })
     except InputError as exc:
@@ -316,20 +391,26 @@ def _detail(faculty_id):
             return _fail('faculty_not_found', 404)
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
+        institution_scope = current_scope(cursor)
+        institution_sql, institution_params = _institution_clause(institution_scope)
         cursor.execute(
-            """
+            f"""
             SELECT f.id, f.name, f.email, f.department_id, u.username, f.phone,
-                   f.employee_id, f.designation, f.is_active
+                   f.employee_id, f.designation, f.is_active, f.sharing,
+                   d.institution_id, i.name AS institution_name
             FROM faculty f
             LEFT JOIN users u ON f.user_id = u.id
-            WHERE f.id = %s
+            LEFT JOIN departments d ON d.id = f.department_id
+            LEFT JOIN institutions i ON i.id = d.institution_id
+            WHERE f.id = %s AND {institution_sql}
             """,
-            (faculty_id,),
+            (faculty_id, *institution_params),
         )
         row = cursor.fetchone()
         if not row:
             return _fail('faculty_not_found', 404)
-        return json_ok(_public(row, include_username=True))
+        shares = institutions_store.fetch_shares_for(cursor, 'faculty', [faculty_id]) if institution_scope.multiple else {}
+        return json_ok(_public(row, include_username=True, scope=institution_scope, shares=shares))
     except Exception:
         current_app.logger.exception('Faculty detail failed')
         return json_error(_MESSAGES['faculty_unavailable'], 500, 'faculty_unavailable')
@@ -355,7 +436,10 @@ def _create():
         is_active = flag(payload.get('is_active'))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        department_id = _department(cursor, payload.get('department_id'))
+        institution_scope = current_scope(cursor)
+        department_id = _department(cursor, payload.get('department_id'), institution_scope)
+        institution_id = institutions_store.institution_of_department(cursor, department_id)
+        sharing, shared_with = _sharing(cursor, payload, institution_id)
         cursor.execute('SELECT id FROM users WHERE username = %s', (username,))
         if cursor.fetchone():
             return _fail('faculty_username_taken')
@@ -367,15 +451,20 @@ def _create():
             (username, generate_password_hash(password)),
         )
         user_id = cursor.lastrowid
+        from services.security_policy import remember_password_change
+        remember_password_change(cursor, user_id)
         if not employee_id:
             employee_id = f'EMP{datetime.now().year}{user_id:06d}'
         cursor.execute(
             """
-            INSERT INTO faculty (id, user_id, name, email, department_id, employee_id, phone, designation, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO faculty (id, user_id, name, email, department_id, employee_id, phone, designation, is_active, sharing)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (user_id, user_id, name, email, department_id, employee_id, phone, designation, 1 if is_active else 0),
+            (user_id, user_id, name, email, department_id, employee_id, phone, designation, 1 if is_active else 0, sharing),
         )
+        institutions_store.replace_shares(cursor, 'faculty', user_id, shared_with, created_by=session.get('user_id'))
+        if institution_id is not None:
+            institutions_store.ensure_membership(cursor, user_id, institution_id, role='Teacher', department_id=department_id)
         connection.commit()
         return json_ok({'id': safe_count(user_id)}, 201)
     except InputError as exc:
@@ -412,27 +501,32 @@ def _update(faculty_id):
         is_active = flag(payload.get('is_active'))
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        department_id = _department(cursor, payload.get('department_id'))
-        cursor.execute('SELECT user_id FROM faculty WHERE id = %s', (faculty_id,))
-        current = cursor.fetchone()
-        if not current:
-            return _fail('faculty_not_found', 404)
+        institution_scope = current_scope(cursor)
+        current, error = _owned_faculty(cursor, faculty_id, institution_scope)
+        if error is not None:
+            return error
+        department_id = _department(cursor, payload.get('department_id'), institution_scope)
+        institution_id = institutions_store.institution_of_department(cursor, department_id)
+        sharing, shared_with = _sharing(cursor, payload, institution_id)
         cursor.execute('SELECT id FROM faculty WHERE email = %s AND id != %s', (email, faculty_id))
         if cursor.fetchone():
             return _fail('faculty_email_taken')
         cursor.execute(
             """
             UPDATE faculty
-            SET name = %s, email = %s, department_id = %s, phone = %s, designation = %s, is_active = %s
+            SET name = %s, email = %s, department_id = %s, phone = %s, designation = %s, is_active = %s, sharing = %s
             WHERE id = %s
             """,
-            (name, email, department_id, phone, designation, 1 if is_active else 0, faculty_id),
+            (name, email, department_id, phone, designation, 1 if is_active else 0, sharing, faculty_id),
         )
+        institutions_store.replace_shares(cursor, 'faculty', faculty_id, shared_with, created_by=session.get('user_id'))
         if password and current.get('user_id'):
             cursor.execute(
                 'UPDATE users SET password = %s WHERE id = %s AND role = %s',
                 (generate_password_hash(password), current['user_id'], 'Teacher'),
             )
+            from services.security_policy import remember_password_change
+            remember_password_change(cursor, current['user_id'])
         connection.commit()
         return json_ok({'id': safe_count(faculty_id)})
     except InputError as exc:
@@ -476,11 +570,18 @@ def _deactivate():
             return _fail('faculty_not_found', 404)
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
+        institution_scope = current_scope(cursor)
         placeholders = ','.join(['%s'] * len(ids))
-        cursor.execute(f'SELECT id, user_id FROM faculty WHERE id IN ({placeholders})', tuple(ids))
+        cursor.execute(
+            f'SELECT f.id, f.user_id, d.institution_id FROM faculty f LEFT JOIN departments d ON d.id = f.department_id '
+            f'WHERE f.id IN ({placeholders})',
+            tuple(ids),
+        )
         rows = cursor.fetchall()
         if len(rows) != len(ids):
             return _fail('faculty_not_found', 404)
+        if any(not institution_scope.allows(row.get('institution_id')) for row in rows):
+            return _fail('faculty_not_owned', 403)
         cursor.execute(f'UPDATE faculty SET is_active = 0 WHERE id IN ({placeholders})', tuple(ids))
         user_ids = [row['user_id'] for row in rows if row.get('user_id')]
         if user_ids:

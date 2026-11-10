@@ -20,6 +20,7 @@ _MESSAGES = {
     'account_birth_invalid': 'Enter a valid birth date.',
     'account_photo_invalid': 'Profile photo must be a PNG, JPG, or GIF.',
     'account_password_invalid': 'Enter the current password and a new password of 8 to 128 characters.',
+    'password_policy': 'The password does not meet the security policy.',
     'account_password_mismatch': 'The current password is incorrect.',
 }
 
@@ -29,6 +30,98 @@ def register_account_routes(blueprint):
     blueprint.add_url_rule('/account', 'account_update', _update, methods=['PUT'])
     blueprint.add_url_rule('/account', 'account_update_form', _update_form, methods=['POST'])
     blueprint.add_url_rule('/account/password', 'account_password', _password, methods=['POST'])
+    blueprint.add_url_rule('/account/face-consent', 'account_face_consent', _face_consent, methods=['GET'])
+    blueprint.add_url_rule('/account/face-consent', 'account_face_consent_give', _face_consent_give, methods=['POST'])
+    blueprint.add_url_rule('/account/face-consent', 'account_face_consent_withdraw', _face_consent_withdraw, methods=['DELETE'])
+
+
+def _consent_payload(cursor, user_id):
+    from services.face.safeguards import active_consent, consent_required, notice_version
+
+    current = active_consent(cursor, user_id, notice_version())
+    cursor.execute('SELECT COUNT(*) AS n FROM mobile_face_templates WHERE user_id = %s AND is_active = 1', (user_id,))
+    templates = cursor.fetchone()['n']
+    return {
+        'required': bool(consent_required()),
+        'notice_version': safe_text(notice_version(), 40),
+        'given': current is not None,
+        'given_at': safe_stamp(current['given_at']) if current else '',
+        'has_template': templates > 0,
+    }
+
+
+def _face_consent():
+    """Whether the signed-in person has consented to face recognition under the current notice."""
+    denied = _signed_in()
+    if denied:
+        return denied
+    connection = cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        return json_ok(_consent_payload(cursor, session.get('user_id')))
+    except Exception:
+        current_app.logger.exception('Face consent view failed')
+        return json_error(_MESSAGES['account_unavailable'], 500, 'account_unavailable')
+    finally:
+        close(cursor, connection)
+
+
+def _face_consent_give():
+    from services.face.safeguards import record_consent
+
+    denied = _signed_in()
+    if denied:
+        return denied
+    connection = cursor = None
+    try:
+        payload = body(frozenset(('agree',)))
+        if payload.get('agree') is not True:
+            raise InputError('invalid_body')
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        consent_id = record_consent(cursor, session.get('user_id'), source='web')
+        log_activity(session.get('user_id'), 'face_consent_given', 'Consented to face recognition',
+                     'face_consent', consent_id, cursor=cursor)
+        connection.commit()
+        return json_ok(_consent_payload(cursor, session.get('user_id')))
+    except InputError as exc:
+        return reject_input(_MESSAGES, exc.code)
+    except Exception:
+        if connection is not None:
+            connection.rollback()
+        current_app.logger.exception('Face consent failed')
+        return json_error(_MESSAGES['account_unavailable'], 500, 'account_unavailable')
+    finally:
+        close(cursor, connection)
+
+
+def _face_consent_withdraw():
+    """Withdraw consent: the person's face templates are deleted at once, not at the retention deadline."""
+    from services.face.safeguards import withdraw_consent
+
+    denied = _signed_in()
+    if denied:
+        return denied
+    connection = cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        withdrawn, deleted = withdraw_consent(cursor, session.get('user_id'))
+        log_activity(session.get('user_id'), 'face_consent_withdrawn',
+                     f'Withdrew face recognition consent; {deleted} template(s) deleted', 'face_consent', None,
+                     new_values={'consents_closed': withdrawn, 'templates_deleted': deleted}, cursor=cursor)
+        connection.commit()
+        payload = _consent_payload(cursor, session.get('user_id'))
+        payload['templates_deleted'] = int(deleted)
+        return json_ok(payload)
+    except Exception:
+        if connection is not None:
+            connection.rollback()
+        current_app.logger.exception('Face consent withdrawal failed')
+        return json_error(_MESSAGES['account_unavailable'], 500, 'account_unavailable')
+    finally:
+        close(cursor, connection)
 
 
 def _date_text(value):
@@ -165,10 +258,14 @@ def _password():
         row = cursor.fetchone()
         if not row or not check_password_hash(row.get('password') or '', current_password):
             return json_error(_MESSAGES['account_password_mismatch'], 400, 'account_password_mismatch')
+        from services.security_policy import enforced_problem, remember_password_change
+        if enforced_problem(new_password, cursor):
+            raise InputError('password_policy')
         cursor.execute(
             'UPDATE users SET password = %s WHERE id = %s',
             (generate_password_hash(new_password), session.get('user_id')),
         )
+        remember_password_change(cursor, session.get('user_id'))
         log_activity(session.get('user_id'), 'change_password', 'Changed password', cursor=cursor)
         connection.commit()
         return json_ok({'saved': True})

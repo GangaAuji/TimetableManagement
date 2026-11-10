@@ -3,8 +3,7 @@
 from datetime import time
 
 from academic_rules.clashes import faculty_timetable_free, times_overlap
-from routes.admin_utils import _is_faculty_free
-from routes.faculty.teacher import is_faculty_available
+from services.admin_queries import faculty_is_free as _is_faculty_free
 
 
 class _Cursor:
@@ -39,7 +38,6 @@ def test_faculty_free_check_leaves_inactive_rows_in_place():
 
     free = _Cursor(None)
     assert _is_faculty_free(free, 4, 'Monday', time(9, 0), time(10, 0)) is True
-    assert is_faculty_available(free, 4, 'Monday', time(9, 0), time(10, 0)) is True
     assert 'is_active' not in free.sql
 
     active = _Cursor(None)

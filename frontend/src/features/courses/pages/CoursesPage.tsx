@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { ApiError } from '../../../shared/api/client'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, useDataTable, type TableColumnSpec } from '../../../shared/components/table-page'
 import {
   createCourse,
@@ -186,8 +187,8 @@ export function CoursesPage() {
         </div>
       </section>
 
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-      {notice ? <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />

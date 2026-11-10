@@ -12,11 +12,31 @@ from academic_rules.clashes import times_overlap
 from academic_rules.holidays import holidays_for_week
 from academic_rules.availability import faculty_is_available as generation_faculty_available
 from academic_rules.weekdays import weekday_name
+from data_access.institutions import candidate_rooms_clause
 from services.timetable_quality_service import score_timetable_candidate
 
 # Timetable generation. Callers import this module.
 
 WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+
+def _course_institution(cursor, department_id):
+    """Institution of the course's department, or None when the tenant has a single institution.
+
+    None makes every room a candidate, which is the pre-0014 behaviour.
+    """
+    if not department_id:
+        return None
+    try:
+        cursor.execute('SELECT COUNT(*) AS n FROM institutions WHERE is_active = 1')
+        row = cursor.fetchone()
+        if int((row or {}).get('n') or 0) <= 1:
+            return None
+        cursor.execute('SELECT institution_id FROM departments WHERE id = %s', (department_id,))
+        row = cursor.fetchone()
+        return int(row['institution_id']) if row and row.get('institution_id') is not None else None
+    except Exception:
+        return None
 
 
 def _parse_time(value: str, field: str) -> time:
@@ -74,6 +94,46 @@ def build_time_slots(day_start: time, day_end: time, lecture_minutes: int, break
     return slots
 
 
+def load_lab_batches(cursor, course_id, class_id, division_id, on_date=None):
+    """The active lab batch groups a division's practicals are split into, with each batch's size.
+
+    Prefers the split of the academic year that contains `on_date` (the
+    week being scheduled); otherwise the newest year's split. The size is
+    the current member count, or the capacity when nobody is assigned yet.
+    Returns [] when the division has no batches, so practicals stay whole-division.
+    """
+    try:
+        cursor.execute(
+            """
+            SELECT g.id, g.name, g.capacity, g.academic_year_id, ay.start_date, ay.end_date,
+                   (SELECT COUNT(*) FROM lab_batch_members m WHERE m.lab_batch_group_id = g.id AND m.ended_at IS NULL) AS members
+            FROM lab_batch_groups g
+            JOIN academic_years ay ON ay.id = g.academic_year_id
+            WHERE g.course_id = %s AND g.class_id = %s AND (g.division_id = %s OR g.division_id IS NULL) AND g.is_active = 1
+            ORDER BY ay.start_date DESC, g.name
+            """,
+            (course_id, class_id, division_id),
+        )
+        rows = cursor.fetchall()
+    except Exception:
+        return []
+    if not rows:
+        return []
+    chosen_year = None
+    if on_date is not None:
+        for row in rows:
+            if row.get('start_date') and row.get('end_date') and row['start_date'] <= on_date <= row['end_date']:
+                chosen_year = row['academic_year_id']
+                break
+    if chosen_year is None:
+        chosen_year = rows[0]['academic_year_id']
+    return [
+        {'id': int(row['id']), 'name': row['name'], 'size': int(row['members'] or row.get('capacity') or 0) or None}
+        for row in rows
+        if row['academic_year_id'] == chosen_year
+    ]
+
+
 def generate_timetable_for_class(
     course_id,
     class_id,
@@ -89,8 +149,20 @@ def generate_timetable_for_class(
     preview_only: bool = False,
     candidate_count: int = 7,
     created_by: int | None = None,
+    rules_override: dict | None = None,
+    version_id: int | None = None,
 ):
-    """Generate a weekly timetable for the given class/division respecting availability, holidays, and proxies."""
+    """Generate a weekly timetable for the given class/division respecting availability, holidays, and proxies.
+
+    Candidates are ranked by the quality score minus the weighted rule cost of
+    services/timetable/rules.py (capability `timetable_preferences`), so this generator and the
+    joint solver prefer the same timetables; `rules_override` adjusts weights for this run only.
+
+    With `version_id` (capability `timetable_versions`) the result is written as a draft: new rows
+    with `is_active = 0` and that version, the live timetable untouched. Other cohorts' rows of the
+    same draft count as busy and the live rows of cohorts the draft covers do not, so a multi-class
+    job stays clash-free once published (services/timetable/versions.py).
+    """
 
     working_days = working_days or WEEKDAY_ORDER[:6]
     working_days_set = {day for day in working_days if day in WEEKDAY_ORDER}
@@ -152,6 +224,13 @@ def generate_timetable_for_class(
             return {'status': 'error', 'message': 'Course not found.'}
         program = course_row['program'] or 'UG'
         course_department_id = course_row.get('department_id')
+        # The institution this class belongs to decides which rooms may be used (own + shared).
+        course_institution_id = _course_institution(cursor, course_department_id)
+        # Soft rules (legacy objective when the capability is off) and, when on, teacher preferences.
+        from services.timetable import rules as rule_set
+
+        rules, preferences_on = rule_set.effective_rules(cursor, course_institution_id or 1, {'rules_override': rules_override})
+        preferences = {}
 
         # Resolve academic days (exclude holidays)
         holiday_rows = holidays_for_week(cursor, program, week_start, week_end)
@@ -173,7 +252,17 @@ def generate_timetable_for_class(
                 continue
             days_with_dates.append((day_name, current_date))
 
+        from services.academic_calendar import teaching_dates
+
+        kept = teaching_dates(cursor, course_institution_id or 1, [current for _name, current in days_with_dates])
+        for day_name, current_date in days_with_dates:
+            if current_date not in kept:
+                skipped_holidays.append({'day': day_name, 'date': current_date.isoformat(), 'name': 'Outside the teaching term'})
+        days_with_dates = [(day_name, current_date) for day_name, current_date in days_with_dates if current_date in kept]
+
         if not days_with_dates:
+            if any(item.get('name') == 'Outside the teaching term' for item in skipped_holidays):
+                return {'status': 'error', 'message': 'None of the selected days fall in a teaching term.'}
             return {'status': 'error', 'message': 'All selected days fall on holidays for the chosen week.'}
 
         # Gather subject requirements
@@ -253,6 +342,8 @@ def generate_timetable_for_class(
         )
         proxy_pool_rows = cursor.fetchall()
         current_app.logger.info('Fetched %d proxy_pool_rows', len(proxy_pool_rows or []))
+        if preferences_on:
+            preferences = rule_set.load_preferences(cursor, {row['faculty_id'] for row in proxy_pool_rows})
         proxy_faculty_map: dict[int, list[dict[str, int | str]]] = defaultdict(list)
         for row in proxy_pool_rows:
             proxy_faculty_map[row['subject_id']].append(
@@ -262,6 +353,10 @@ def generate_timetable_for_class(
                     'is_primary': bool(row['is_primary']),
                 }
             )
+
+        lab_batches = load_lab_batches(cursor, course_id, class_id, division_id, week_start)
+        if lab_batches:
+            current_app.logger.info('Division has %d lab batch(es); practicals are scheduled per batch', len(lab_batches))
 
         # Build session requirements per subject
         sessions: list[dict[str, object]] = []
@@ -285,16 +380,22 @@ def generate_timetable_for_class(
                 # Create individual 1-hour practical sessions instead of grouping into blocks
                 # This allows flexible scheduling while respecting the 2-hour consecutive limit
                 num_practical_sessions = int(practical_hours)  # 4 hours = 4 sessions
+                # With lab batches (docs/DESIGN_LAB_BATCHES.md) every practical hour is one session per
+                # batch; sessions of different batches may share a time slot (parallel labs).
                 for _ in range(num_practical_sessions):
-                    sessions.append(
-                        {
-                            'subject_id': subject['id'],
-                            'subject_name': subject['name'],
-                            'type': 'Practical',
-                            'block_slots': 1,  # Each practical is 1 session (1 hour for PG, 45 min for UG)
-                            'faculty_candidates': subject_faculties,
-                        }
-                    )
+                    for batch in (lab_batches or [None]):
+                        sessions.append(
+                            {
+                                'subject_id': subject['id'],
+                                'subject_name': subject['name'],
+                                'type': 'Practical',
+                                'block_slots': 1,  # Each practical is 1 session (1 hour for PG, 45 min for UG)
+                                'faculty_candidates': subject_faculties,
+                                'lab_batch_group_id': batch['id'] if batch else None,
+                                'lab_batch_name': batch['name'] if batch else None,
+                                'group_size': batch['size'] if batch else None,
+                            }
+                        )
 
         if not sessions:
             return {'status': 'error', 'message': 'No lecture or practical requirements configured for this class.'}
@@ -338,16 +439,26 @@ def generate_timetable_for_class(
         except Exception:
             has_is_active_column = False
 
+        # Rows that count as busy: active rows outside this cohort, or (drafting) the version's rows.
+        busy_params = ()
+        if version_id is not None:
+            from services.timetable.versions import busy_clause
+
+            busy_sql, busy_params = busy_clause(version_id, alias='t')
+            busy_filter = f"\n              AND {busy_sql}"
+        elif has_is_active_column:
+            busy_filter = "\n              AND COALESCE(t.is_active, 1) = 1"
+        else:
+            busy_filter = ''
+
         # Faculty workload and availability
         faculty_busy_query = """
-            SELECT faculty_id, day_of_week, start_time, end_time
-            FROM timetable
-            WHERE faculty_id IS NOT NULL
-              AND NOT (course_id = %s AND class_id = %s AND division_id = %s)
-        """
-        if has_is_active_column:
-            faculty_busy_query += "\n              AND COALESCE(is_active, 1) = 1"
-        cursor.execute(faculty_busy_query, (course_id, class_id, division_id))
+            SELECT t.faculty_id, t.day_of_week, t.start_time, t.end_time
+            FROM timetable t
+            WHERE t.faculty_id IS NOT NULL
+              AND NOT (t.course_id = %s AND t.class_id = %s AND t.division_id = %s)
+        """ + busy_filter
+        cursor.execute(faculty_busy_query, (course_id, class_id, division_id) + busy_params)
         faculty_busy: dict[int, dict[str, list[tuple[time, time]]]] = defaultdict(lambda: defaultdict(list))
         for row in cursor.fetchall():
             busy_start = _coerce_time_value(row['start_time'])
@@ -417,9 +528,13 @@ def generate_timetable_for_class(
             # Load rooms if table exists
             cur3 = connection.cursor(dictionary=True)
             try:
-                # Try with capacity and department_id if available
+                # Only rooms this institution owns or has been given (shared or organization-wide).
                 try:
-                    cur3.execute("SELECT id, room_number, room_type, capacity, department_id FROM rooms")
+                    room_clause, room_params = candidate_rooms_clause(course_institution_id, 'r')
+                    cur3.execute(
+                        f"SELECT r.id, r.room_number, r.room_type, r.capacity, r.department_id FROM rooms r WHERE {room_clause}",
+                        room_params,
+                    )
                     include_dept = True
                 except Exception:
                     cur3.execute("SELECT id, room_number, room_type, capacity FROM rooms")
@@ -443,14 +558,12 @@ def generate_timetable_for_class(
             if has_room_column:
                 cur4 = connection.cursor(dictionary=True)
                 room_usage_query = """
-                    SELECT day_of_week, start_time, end_time, room_id
-                    FROM timetable
-                    WHERE room_id IS NOT NULL
-                      AND NOT (course_id = %s AND class_id = %s AND division_id = %s)
-                """
-                if has_is_active_column:
-                    room_usage_query += "\n                      AND COALESCE(is_active, 1) = 1"
-                cur4.execute(room_usage_query, (course_id, class_id, division_id))
+                    SELECT t.day_of_week, t.start_time, t.end_time, t.room_id
+                    FROM timetable t
+                    WHERE t.room_id IS NOT NULL
+                      AND NOT (t.course_id = %s AND t.class_id = %s AND t.division_id = %s)
+                """ + busy_filter
+                cur4.execute(room_usage_query, (course_id, class_id, division_id) + busy_params)
                 for r in cur4.fetchall():
                     if not r['room_id']:
                         continue
@@ -459,11 +572,32 @@ def generate_timetable_for_class(
                     re = _coerce_time_value(r['end_time'])
                     existing_room_usage[day][int(r['room_id'])].append((rs, re))
                 cur4.close()
+                # Approved room bookings for the week share the ledger (services/bookings.py; empty when off).
+                cur5 = connection.cursor(dictionary=True)
+                try:
+                    from services import bookings as bookings_store
+
+                    for day, per_room in bookings_store.room_usage_for_week(cur5, dict(days_with_dates)).items():
+                        for room_id, spans in per_room.items():
+                            existing_room_usage[day][int(room_id)].extend(spans)
+                finally:
+                    cur5.close()
         except Exception:
             # If any room-related metadata fails, proceed without room assignment
             rooms_by_type = defaultdict(list)
             has_room_column = False
             existing_room_usage = defaultdict(lambda: defaultdict(list))
+
+        # Workload norms (J5): max weekly hours per teacher; a hard cap when the capability says so.
+        from services import workload as workload_norms
+
+        workload_max = workload_norms.max_hours(cursor, institution_id=course_institution_id or 1)
+        workload_hard = bool(workload_max) and workload_norms.enforcement(cursor) == 'hard'
+
+        def _span_hours(spans: list[tuple[time, time]]) -> float:
+            return sum(
+                max(0, (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute)) for start, end in spans
+            ) / 60.0
 
         def faculty_is_available(
             faculty_id: int,
@@ -472,7 +606,7 @@ def generate_timetable_for_class(
             day_date: date,
             faculty_busy_state: dict[int, dict[str, list[tuple[time, time]]]],
         ) -> tuple[bool, str | None]:
-            return generation_faculty_available(
+            ok, reason = generation_faculty_available(
                 faculty_id,
                 day_name,
                 slot_group,
@@ -481,6 +615,12 @@ def generate_timetable_for_class(
                 availability_map,
                 faculty_absences,
             )
+            if not ok or not workload_hard or workload_max.get(faculty_id) is None:
+                return ok, reason
+            scheduled = sum(_span_hours(spans) for spans in faculty_busy_state.get(faculty_id, {}).values())
+            if scheduled + _span_hours(slot_group) > float(workload_max[faculty_id]) + 1e-9:
+                return False, f'weekly workload limit ({workload_max[faculty_id]:g} h) reached'
+            return True, None
 
         def build_distributed_sessions(candidate_sessions: list[dict[str, object]], seed_value: int) -> list[dict[str, object]]:
             # Round-robin by subject with seed-driven shuffle for candidate diversity.
@@ -510,17 +650,17 @@ def generate_timetable_for_class(
             return distributed
 
         # Determine expected group size for capacity matching
-        required_capacity = 0
+        division_capacity = 0
         try:
             curcap = connection.cursor()
             curcap.execute(
                 "SELECT COUNT(*) FROM students WHERE course_id = %s AND class_id = %s AND division_id = %s",
                 (course_id, class_id, division_id),
             )
-            required_capacity = int(curcap.fetchone()[0] or 0)
+            division_capacity = int(curcap.fetchone()[0] or 0)
             curcap.close()
         except Exception:
-            required_capacity = 0
+            division_capacity = 0
 
         # Helper: find available room for the given slot span and type
         def find_available_room(
@@ -530,7 +670,10 @@ def generate_timetable_for_class(
             slot_end: time,
             assigned_room_usage_day: dict[int, list[tuple[time, time]]],
             persisted_room_usage: dict[str, dict[int, list[tuple[time, time]]]],
+            capacity_needed: int | None = None,
         ):
+            # A lab batch needs seats for the batch, not the whole division.
+            required_capacity = capacity_needed if capacity_needed else division_capacity
             # Flexible mapping of required_type to available room_type keys in rooms_by_type
             want_practical = (required_type or '').lower().startswith('practical')
             # Candidate buckets: prefer matching labels (lab, laboratory) for practical; (room, classroom, class) for theory
@@ -756,7 +899,8 @@ def generate_timetable_for_class(
                             break
 
                     if session_chosen and candidate_faculty:
-                        def assign_single(session_obj, idx, preselected_room=None):
+                        def assign_single(session_obj, idx, preselected_room=None, teacher=None):
+                            teacher = teacher or candidate_faculty
                             slot_start, slot_end = slots[idx]
                             room_assigned = preselected_room
                             if rooms_by_type and not room_assigned:
@@ -767,6 +911,7 @@ def generate_timetable_for_class(
                                     slot_end,
                                     assigned_room_usage_day,
                                     room_usage_state,
+                                    session_obj.get('group_size'),
                                 )
                                 if not room_assigned:
                                     current_app.logger.warning(
@@ -784,15 +929,15 @@ def generate_timetable_for_class(
                                             'end_time': slot_end.strftime('%H:%M'),
                                             'subject_id': session_obj['subject_id'],
                                             'subject_name': session_obj.get('subject_name'),
-                                            'faculty_id': candidate_faculty['faculty_id'],
-                                            'faculty_name': candidate_faculty['name'],
+                                            'faculty_id': teacher['faculty_id'],
+                                            'faculty_name': teacher['name'],
                                             'session_type': session_obj['type'],
                                             'reason': 'No room available',
                                         }
                                     )
                                     room_assigned = None
 
-                            faculty_busy_state[candidate_faculty['faculty_id']][day_name].append((slot_start, slot_end))
+                            faculty_busy_state[teacher['faculty_id']][day_name].append((slot_start, slot_end))
                             if room_assigned:
                                 assigned_room_usage_day[room_assigned['id']].append((slot_start, slot_end))
                                 room_usage_state[day_name][room_assigned['id']].append((slot_start, slot_end))
@@ -805,18 +950,55 @@ def generate_timetable_for_class(
                                     'end_time': slot_end.strftime('%H:%M'),
                                     'subject_id': session_obj['subject_id'],
                                     'subject_name': session_obj['subject_name'],
-                                    'faculty_id': candidate_faculty['faculty_id'],
-                                    'faculty_name': candidate_faculty['name'],
+                                    'faculty_id': teacher['faculty_id'],
+                                    'faculty_name': teacher['name'],
                                     'session_type': session_obj['type'],
                                     'room_id': (room_assigned and room_assigned['id']) or None,
                                     'room_number': (room_assigned and room_assigned.get('room_number')) or None,
+                                    'lab_batch_group_id': session_obj.get('lab_batch_group_id'),
+                                    'lab_batch_name': session_obj.get('lab_batch_name'),
                                     'is_proxy': not any(
-                                        option['faculty_id'] == candidate_faculty['faculty_id']
+                                        option['faculty_id'] == teacher['faculty_id']
                                         for option in session_obj['faculty_candidates']
                                     ),
                                 }
                             )
                             return True, None, room_assigned
+
+                        def fill_parallel_batches(anchor, idx):
+                            """Put other lab batches' practicals beside a batch session in the same slot.
+
+                            Students of different batches are disjoint, so the slot is shared; each
+                            needs its own free teacher and lab. The slot still counts once for the day.
+                            """
+                            if not anchor.get('lab_batch_group_id'):
+                                return
+                            taken = {anchor['lab_batch_group_id']}
+                            slot_span = [slots[idx]]
+                            for other in list(candidate_sessions):
+                                batch_id = other.get('lab_batch_group_id')
+                                if not batch_id or batch_id in taken or other['type'] != 'Practical':
+                                    continue
+                                teacher_found = None
+                                for option in other['faculty_candidates']:
+                                    free, _ = faculty_is_available(option['faculty_id'], day_name, slot_span, day_date, faculty_busy_state)
+                                    if free:
+                                        teacher_found = option
+                                        break
+                                if not teacher_found:
+                                    continue
+                                room = None
+                                if rooms_by_type:
+                                    room = find_available_room(
+                                        'Practical', day_name, slots[idx][0], slots[idx][1],
+                                        assigned_room_usage_day, room_usage_state, other.get('group_size'),
+                                    )
+                                    if not room:
+                                        continue
+                                ok, _, _ = assign_single(other, idx, room, teacher_found)
+                                if ok:
+                                    candidate_sessions.remove(other)
+                                    taken.add(batch_id)
 
                         if paired_session:
                             pre_room1 = pre_room2 = None
@@ -852,6 +1034,7 @@ def generate_timetable_for_class(
                                     last_scheduled_subjects.append((session_chosen['subject_id'], slot_index))
                                     if paired_session:
                                         last_scheduled_subjects.append((paired_session['subject_id'], slot_index + 1))
+                                        fill_parallel_batches(paired_session, slot_index + 1)
                                     slot_index += 2
                                     assigned_today += 2
                                     if proxy_info:
@@ -882,6 +1065,8 @@ def generate_timetable_for_class(
                             used_subjects_for_day.add(session_chosen['subject_id'])
                             for i in range(block_slots):
                                 last_scheduled_subjects.append((session_chosen['subject_id'], slot_index + i))
+                            if block_slots == 1:
+                                fill_parallel_batches(session_chosen, slot_index)
                             slot_index += block_slots
                             assigned_today += block_slots
                     else:
@@ -931,6 +1116,7 @@ def generate_timetable_for_class(
                     proxy_suggestions=proxy_suggestions,
                     needs_room=needs_room_entries,
                     slots_per_day=slots_per_day,
+                    rules=rules,
                 )
                 quality_score = float(score_info.get('quality_score', 0.0))
                 baseline_quality_score = float(score_info.get('baseline_quality_score', quality_score))
@@ -946,6 +1132,23 @@ def generate_timetable_for_class(
                 )
                 warnings = ['Quality scoring failed; using baseline candidate ranking fallback.']
 
+            # Explain the candidate against the rules; other cohorts' sessions are the teachers' external load.
+            try:
+                external = [
+                    {'day': busy_day, 'start_time': span[0].strftime('%H:%M'), 'end_time': span[1].strftime('%H:%M'), 'faculty_id': busy_faculty}
+                    for busy_faculty, day_map in base_faculty_busy.items()
+                    for busy_day, spans in day_map.items()
+                    for span in spans
+                ]
+                explained = rule_set.evaluate(
+                    assigned_entries, rules, preferences, external=external,
+                    slot_starts=[slot_start.strftime('%H:%M') for slot_start, _slot_end in slots],
+                    norms=workload_max or None,
+                )
+            except Exception as rule_error:
+                current_app.logger.warning('Rule evaluation failed for candidate %d: %s', candidate_index, rule_error)
+                explained = {'cost': 0, 'by_rule': {}, 'violations': []}
+
             return {
                 'candidate_index': candidate_index,
                 'candidate_seed': candidate_seed,
@@ -959,12 +1162,16 @@ def generate_timetable_for_class(
                 'warnings': warnings,
                 'model_source': model_source,
                 'features': feature_snapshot,
+                'rule_cost': int(explained.get('cost') or 0),
+                'rule_costs': explained.get('by_rule') or {},
+                'violations': explained.get('violations') or [],
             }
 
         candidate_results = [run_candidate(index + 1) for index in range(candidate_count)]
+        # Rank: quality less the rule cost (each cost point is half a quality point), then fewer gaps.
         candidate_results.sort(
             key=lambda item: (
-                float(item.get('quality_score') or 0.0),
+                float(item.get('quality_score') or 0.0) - 0.5 * float(item.get('rule_cost') or 0),
                 -len(item.get('unassigned') or []),
                 -len(item.get('needs_room') or []),
             ),
@@ -993,11 +1200,28 @@ def generate_timetable_for_class(
                     'assigned_count': len(item.get('assigned') or []),
                     'unassigned_count': len(item.get('unassigned') or []),
                     'needs_room_count': len(item.get('needs_room') or []),
+                    'rule_cost': item.get('rule_cost', 0),
                 }
             )
 
-        # Persist timetable if not previewing
-        if not preview_only:
+        # Persist timetable if not previewing. Drafting: skip archive/retire, the live rows stay.
+        drafting = version_id is not None
+        if not preview_only and drafting:
+            for entry in assigned_entries:
+                cursor.execute(
+                    """
+                    INSERT INTO timetable (course_id, class_id, division_id, day_of_week, start_time, end_time, subject_id,
+                                           faculty_id, room_id, lab_batch_group_id, is_active, version_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s)
+                    """,
+                    (
+                        course_id, class_id, division_id, entry['day'], entry['start_time'], entry['end_time'],
+                        entry['subject_id'], entry['faculty_id'], entry.get('room_id') or None,
+                        entry.get('lab_batch_group_id') or None, int(version_id),
+                    ),
+                )
+            connection.commit()
+        if not preview_only and not drafting:
             # Archive the currently active timetable version before replacement.
             archive_scope_clause = "course_id = %s AND class_id = %s AND division_id = %s"
             archive_params = (course_id, class_id, division_id)
@@ -1059,6 +1283,9 @@ def generate_timetable_for_class(
                 if has_room_column and entry.get('room_id'):
                     insert_columns.append('room_id')
                     insert_values.append(entry.get('room_id'))
+                if entry.get('lab_batch_group_id'):
+                    insert_columns.append('lab_batch_group_id')
+                    insert_values.append(entry.get('lab_batch_group_id'))
                 if has_is_active_column:
                     insert_columns.append('is_active')
                     insert_values.append(1)
@@ -1069,9 +1296,16 @@ def generate_timetable_for_class(
                     f"INSERT INTO timetable ({column_sql}) VALUES ({placeholder_sql})",
                     tuple(insert_values),
                 )
+            from services.webhooks import on_timetable_published
+
+            on_timetable_published(
+                cursor, course_id=course_id, class_id=class_id, division_id=division_id, reason='generated',
+                slot_count=len(assigned_entries), solver='greedy',
+            )
             connection.commit()
 
-            # Persist quality scoring metadata for phase-2 ML data.
+        if not preview_only:
+            # Persist quality scoring metadata for phase-2 ML data (drafts included).
             try:
                 run_id = str(uuid4())
                 cursor.execute(
@@ -1171,6 +1405,10 @@ def generate_timetable_for_class(
             'candidate_count': candidate_count,
             'selected_candidate_index': best_candidate.get('candidate_index', 1),
             'top_candidates': top_candidates,
+            'rule_cost': best_candidate.get('rule_cost', 0),
+            'rule_costs': best_candidate.get('rule_costs', {}),
+            'violations': best_candidate.get('violations', []),
+            'version_id': int(version_id) if (version_id is not None and not preview_only) else None,
         }
     finally:
 

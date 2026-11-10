@@ -23,12 +23,17 @@ PAGE_ACCESS = ROOT / 'frontend' / 'src' / 'app' / 'page-access.ts'
 
 # Rows that exist on installed databases but no code checks. A new unchecked
 # permission fails the canon test until it is wired into a check or added here.
+# attendance_manage_faculty, attendance_view_defaulters, attendance_view_details
+# and roles_delete_role guarded legacy pages only; the JSON API consolidated
+# them under attendance_view / attendance_manage / attendance_view_faculty and
+# has no role delete.
 UNENFORCED = frozenset({
+    'attendance_manage_faculty', 'attendance_view_defaulters', 'attendance_view_details',
     'attendance_view_reports', 'courses_manage_subjects', 'courses_view_subjects',
-    'faculty_add_absence', 'faculty_approve_absence', 'faculty_approve_proxy', 'faculty_change_availability',
-    'faculty_delete_absence', 'faculty_export_data', 'faculty_view_absence', 'faculty_view_availability',
+    'faculty_add_absence', 'faculty_approve_absence',
+    'faculty_delete_absence', 'faculty_export_data', 'faculty_view_absence',
     'faculty_view_timetable', 'invitations_create', 'invitations_resend', 'invitations_revoke', 'invitations_view',
-    'roles_clone_role', 'rooms_export_utilization', 'rooms_view_schedule', 'students_export_data',
+    'roles_clone_role', 'roles_delete_role', 'rooms_export_utilization', 'rooms_view_schedule', 'students_export_data',
     'timetable_delete', 'timetable_export', 'timetable_view', 'timetable_view_conflicts',
 })
 

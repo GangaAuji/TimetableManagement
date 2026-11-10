@@ -4,6 +4,7 @@ import { Dialog, fieldClass } from '../../academics/ui'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { DataTableHead, TablePager, TableToolbar, useDataTable, type TableColumnSpec } from '../../../shared/components/table-page'
 import { getCsrfToken } from '../../../shared/api/endpoints'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
@@ -95,8 +96,8 @@ export function RolesPage() {
           {canAdd && <button type="button" onClick={openAdd} className={primaryButton}>Add role</button>}
         </div>
       </header>
-      {error && !formOpen && <p className="mb-3 text-xs text-red-700">{error}</p>}
-      {notice && <p className="mb-3 text-xs text-gray-600">{notice}</p>}
+      {!formOpen ? <FailureNotice message={error} /> : null}
+      <SuccessNotice message={notice} />
       <div className="grid flex-1 content-start gap-2 overflow-auto sm:grid-cols-2 xl:grid-cols-3">
         {rows.length > 0 && visible.length === 0 && <p className="col-span-full py-10 text-center text-xs text-gray-400">No roles match this search.</p>}
         {visible.map((row) => (
@@ -140,7 +141,7 @@ export function RolesPage() {
               <input required type="number" min={1} max={99} value={lockedLevel ? '1' : level} disabled={lockedLevel} onChange={(event) => setLevel(event.target.value)} className={fieldClass()} />
             </label>
             <p className="text-xs text-gray-500">Super Admin is 1. Use 2, 3, 4, and so on for the roles under it. The same numbers work for a college or a school.</p>
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            <FailureNotice message={error} />
             <button type="submit" disabled={saving} className={primaryButton}>{saving ? 'Saving...' : 'Save'}</button>
           </form>
         </Dialog>
@@ -221,8 +222,8 @@ export function RoleAssignmentsPage() {
       </aside>
       <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         {users.length === 500 && <p className="px-4 py-2 text-xs text-gray-500">Showing the first 500 users.</p>}
-        {error && <p className="px-4 py-2 text-xs text-red-700">{error}</p>}
-        {notice && <p className="px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+        <FailureNotice message={error} />
+        <SuccessNotice message={notice} />
         <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -437,8 +438,8 @@ export function RolePermissionsPage() {
           </div>
         </form>
       )}
-      {error && <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       {!canUpdate && !error && <p className="mb-3 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs text-gray-500">You can view these permissions. Updating them needs the role change permission.</p>}
       <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[240px_1fr]">
         <aside className="overflow-auto rounded-2xl border border-gray-200 bg-white p-2">

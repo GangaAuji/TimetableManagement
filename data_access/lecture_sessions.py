@@ -27,7 +27,7 @@ def fetch_slot(cursor, timetable_id):
     """The slot with its course program and semester dates. None when the slot does not exist."""
     cursor.execute(
         """
-        SELECT t.id, t.course_id, t.class_id, t.division_id, t.subject_id, t.faculty_id, t.day_of_week,
+        SELECT t.id, t.course_id, t.class_id, t.division_id, t.lab_batch_group_id, t.subject_id, t.faculty_id, t.day_of_week,
                t.start_time, t.end_time, t.semester_id, t.academic_year_id, COALESCE(t.is_active, 1) AS is_active,
                co.program, sem.start_date AS semester_start, sem.end_date AS semester_end,
                COALESCE(sub.is_elective, 0) AS is_elective
@@ -48,7 +48,7 @@ def fetch_mobile_sessions_for_date(cursor, session_date):
         """
         SELECT ls.id, ls.timetable_id, ls.session_date,
                COALESCE(ls.marked_by, f.id) AS marked_by,
-               t.course_id, t.class_id, t.division_id, t.subject_id, t.semester_id, t.academic_year_id,
+               t.course_id, t.class_id, t.division_id, t.lab_batch_group_id, t.subject_id, t.semester_id, t.academic_year_id,
                COALESCE(sub.is_elective, 0) AS is_elective
         FROM lecture_sessions ls
         JOIN timetable t ON t.id = ls.timetable_id
@@ -233,13 +233,25 @@ def fetch_proxies_for_date(cursor, session_date):
     return {row['timetable_id']: row['proxy_faculty_id'] for row in cursor.fetchall()}
 
 
+def _timetable_has_lab_batches(cursor):
+    """The backfill runs on a database still at 0007, before timetable.lab_batch_group_id existed."""
+    cursor.execute(
+        "SELECT COUNT(*) AS n FROM information_schema.columns "
+        "WHERE table_schema = DATABASE() AND table_name = 'timetable' AND column_name = 'lab_batch_group_id'"
+    )
+    row = cursor.fetchone()
+    count = row['n'] if isinstance(row, dict) else row[0]
+    return bool(count)
+
+
 def fetch_unlinked_mark_groups(cursor):
     """Attendance rows with no session, grouped by slot, date and marker, with the slot's details."""
+    batch_column = 't.lab_batch_group_id' if _timetable_has_lab_batches(cursor) else 'NULL AS lab_batch_group_id'
     cursor.execute(
-        """
+        f"""
         SELECT a.timetable_id, a.attendance_date, a.marked_by, COUNT(*) AS marks, MIN(a.marked_at) AS first_marked_at,
                t.day_of_week, COALESCE(t.is_active, 1) AS is_active, t.faculty_id, t.course_id, t.class_id,
-               t.division_id, t.subject_id, t.semester_id, t.academic_year_id, co.program,
+               t.division_id, {batch_column}, t.subject_id, t.semester_id, t.academic_year_id, co.program,
                (s.is_elective = 1 OR s.course_type IN ('Elective', 'Elective Practical')) AS is_elective,
                f.user_id AS marker_user_id
         FROM attendance a

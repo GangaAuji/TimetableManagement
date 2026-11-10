@@ -1,3 +1,4 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useState } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
@@ -131,7 +132,7 @@ export function AuditPage() {
 
   return (
     <section className="flex flex-col gap-2">
-      {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error} />
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_240px]">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <StatLink href="/admin/audit/logs" icon="fa-bolt" iconClass="bg-indigo-50 text-indigo-600" label="Last 24 hours" value={stats.activities} spark={series.activities} color="#6366f1" />

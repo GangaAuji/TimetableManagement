@@ -102,6 +102,17 @@ def save_face_template(cursor, values):
     )
 
 
+def save_face_consent(cursor, user_id, notice_version):
+    """Record that the person agreed, at registration, to face recognition under this notice version."""
+    cursor.execute(
+        """
+        INSERT INTO face_consents (user_id, notice_version, given_at, recorded_by, source)
+        VALUES (%s, %s, UTC_TIMESTAMP(), NULL, 'web')
+        """,
+        (user_id, notice_version),
+    )
+
+
 def mark_invitation_used(cursor, invitation_id):
     """Mark one invitation used."""
     cursor.execute("""

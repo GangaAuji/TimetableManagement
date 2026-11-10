@@ -9,6 +9,8 @@ from datetime import date, timedelta
 import click
 from flask.cli import with_appcontext
 
+from core.tenancy.cli import tenant_option
+
 
 @click.group('attendance')
 def attendance():
@@ -43,6 +45,7 @@ def _connection(accepted=()):
 @click.option('--to', 'date_to', default=None, help='Last day of the range (default: yesterday).')
 @click.option('--dry-run', is_flag=True, help='Report what would be written and change nothing.')
 @with_appcontext
+@tenant_option
 def close_day_command(day, date_from, date_to, dry_run):
     """Record not_marked for every lecture of a past day that nobody marked or cancelled."""
     from services.lecture_sessions import close_day
@@ -92,6 +95,7 @@ def close_day_command(day, date_from, date_to, dry_run):
 @attendance.command('backfill-sessions')
 @click.option('--dry-run', is_flag=True, help='Report sessions, links and anomalies; change nothing.')
 @with_appcontext
+@tenant_option
 def backfill_command(dry_run):
     """Create held sessions for every marked lecture and link the marks. Never invents unmarked lectures.
 

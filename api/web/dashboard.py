@@ -7,8 +7,9 @@ from flask import current_app, session
 from data_access.admin_dashboard import fetch_department_students, fetch_faculty_workload, fetch_open_work, fetch_upcoming_holidays
 from data_access.attendance_calc import count_not_marked_sessions
 from data_access.invitations import fetch_invitation_stats
+from core.scope import current_scope
 from extensions import get_db_connection
-from routes.admin_utils import format_time
+from utils.dates import format_hhmm as format_time
 from services.attendance_calc import cohort_reports, daily_trend, figures_dict, pooled_figures, policy
 from api.web.responses import json_error, json_ok
 from api.web.security import ADMIN_ROLES, safe_count, safe_stamp, safe_text
@@ -127,19 +128,33 @@ def register_dashboard_routes(blueprint):
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
 
-            def count(query):
-                cursor.execute(query)
+            def count(query, params=()):
+                cursor.execute(query, params)
                 row = cursor.fetchone()
                 return safe_count(row['count'] if row else 0)
 
-            total_students = count("SELECT COUNT(id) as count FROM students WHERE is_active = 1")
-            total_faculty = count("SELECT COUNT(id) as count FROM faculty WHERE is_active = 1")
-            total_courses = count("SELECT COUNT(id) as count FROM courses WHERE is_active = 1")
-            total_departments = count("SELECT COUNT(id) as count FROM departments WHERE is_active = 1")
-            total_rooms = count("SELECT COUNT(id) as count FROM rooms")
-            total_batches = count("SELECT COUNT(id) as count FROM course_batches WHERE is_active = 1")
+            # Counts follow the chosen institution; a Super Admin with none chosen sees the organization.
+            scope = current_scope(cursor)
+            student_sql, student_params = scope.student_clause('s')
+            course_sql, course_params = scope.course_clause('c')
+            department_sql, department_params = scope.clause('institution_id')
+            room_sql, room_params = scope.clause('institution_id')
+            total_students = count(f"SELECT COUNT(s.id) as count FROM students s WHERE s.is_active = 1 AND {student_sql}", student_params)
+            total_faculty = count(
+                f"SELECT COUNT(f.id) as count FROM faculty f LEFT JOIN departments d ON d.id = f.department_id "
+                f"WHERE f.is_active = 1 AND {scope.clause('d.institution_id')[0]}",
+                scope.clause('d.institution_id')[1],
+            )
+            total_courses = count(f"SELECT COUNT(c.id) as count FROM courses c WHERE c.is_active = 1 AND {course_sql}", course_params)
+            total_departments = count(f"SELECT COUNT(id) as count FROM departments WHERE is_active = 1 AND {department_sql}", department_params)
+            total_rooms = count(f"SELECT COUNT(id) as count FROM rooms WHERE {room_sql}", room_params)
+            total_batches = count(
+                f"SELECT COUNT(cb.id) as count FROM course_batches cb JOIN courses c ON c.id = cb.course_id "
+                f"WHERE cb.is_active = 1 AND {course_sql}",
+                course_params,
+            )
 
-            cursor.execute("SELECT room_type, COUNT(*) as count FROM rooms GROUP BY room_type")
+            cursor.execute(f"SELECT room_type, COUNT(*) as count FROM rooms WHERE {room_sql} GROUP BY room_type", room_params)
             room_breakdown = {}
             for row in cursor.fetchall():
                 room_type = safe_text(row.get('room_type'), 40) or 'Room'

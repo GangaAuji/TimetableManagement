@@ -48,7 +48,7 @@ def test_fewer_failed_logins_do_not_lock(client, factory):
     assert login(client, user).status_code == 302
 
 
-# Legacy /admin/users/export checked users_view_user (routes/user_management/actions.py)
+# The user export once checked users_view_user; /api/users/export must check users_export_data.
 
 def _hod_with(factory, client, *permissions):
     hod = factory.user('HOD')
@@ -58,20 +58,27 @@ def _hod_with(factory, client, *permissions):
     return hod
 
 
-def test_legacy_user_export_needs_users_export_data(client, factory):
+def test_user_export_needs_users_export_data(client, factory):
     _hod_with(factory, client, 'users_view_user')
-    assert client.get('/admin/users/export').status_code == 403
+    assert client.get('/api/users/export').status_code == 403
 
 
-def test_legacy_user_export_with_users_export_data(client, factory):
+def test_user_export_with_users_export_data(client, factory):
+    _hod_with(factory, client, 'users_export_data')
+    response = client.get('/api/users/export')
+    assert response.status_code == 200
+    assert isinstance(response.get_json()['data']['users'], list)
+
+
+def test_user_export_without_a_session_is_401(client):
+    assert client.get('/api/users/export').status_code == 401
+
+
+def test_the_legacy_export_url_no_longer_serves_a_file(client, factory):
     _hod_with(factory, client, 'users_export_data')
     response = client.get('/admin/users/export')
-    assert response.status_code == 200
-    assert response.mimetype == 'text/csv'
-
-
-def test_legacy_user_export_without_a_session_is_401(client):
-    assert client.get('/admin/users/export').status_code == 401
+    assert response.status_code in (302, 404)
+    assert response.mimetype != 'text/csv'
 
 
 # Report download used its own check, not the shared one (api/web/reports.py)

@@ -9,11 +9,11 @@ creates alembic_version and nothing else.
 """
 
 import click
-from flask import current_app
 from flask.cli import with_appcontext
 
 from core.schema.baseline import BASELINE_REVISION, BASELINE_SNAPSHOT, SUPPORTED_SERVER
 from core.schema.introspect import compare, load_snapshot, read_schema, server_version
+from core.tenancy.cli import tenant_option
 
 _STAMPED = """
 SELECT version_num FROM `alembic_version`
@@ -24,9 +24,8 @@ WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'alembic_version'
 """
 
 
-def _read_live(engine):
+def _read_live(connection):
     """Return (database name, server version, stamped versions, schema) without writing."""
-    connection = engine.raw_connection()
     try:
         cursor = connection.cursor()
         cursor.execute('START TRANSACTION READ ONLY')
@@ -55,17 +54,19 @@ def _read_live(engine):
 @click.command('db-adopt')
 @click.option('--check', is_flag=True, help='Compare only. Never stamp, even when identical.')
 @with_appcontext
+@tenant_option
 def db_adopt(check):
     """Stamp an existing database at the baseline if its schema is identical."""
+    from extensions import get_db_connection
+    from models.db import connection_settings
+
     if not BASELINE_SNAPSHOT.exists():
         raise click.ClickException(
             f'Baseline snapshot {BASELINE_SNAPSHOT.name} is missing. See docs/DATABASE.md.'
         )
     expected = load_snapshot(BASELINE_SNAPSHOT)
-    migrate = current_app.extensions['migrate']
-    engine = migrate.db.get_engine()
 
-    name, version, stamped, live = _read_live(engine)
+    name, version, stamped, live = _read_live(get_db_connection())
     click.echo(f'Database `{name}` on {version}.')
 
     if stamped:
@@ -93,9 +94,9 @@ def db_adopt(check):
         click.echo('--check given: not stamped.')
         return
 
-    from flask_migrate import stamp
+    from core.schema.runner import run_alembic
 
-    stamp(directory=migrate.directory, revision=BASELINE_REVISION)
+    run_alembic(connection_settings(), 'stamp', BASELINE_REVISION)
     click.echo(f'Stamped `{name}` at {BASELINE_REVISION}. Run `flask db upgrade` for later revisions.')
 
 
@@ -111,6 +112,7 @@ def seed():
     help='Grant default role permissions this database has not had yet. Each one is granted only once.',
 )
 @with_appcontext
+@tenant_option
 def seed_run(apply_role_defaults):
     """Insert missing default rows. Existing rows are never changed or deleted."""
     from core.schema.status import database_reason
@@ -141,8 +143,20 @@ def seed_run(apply_role_defaults):
 def register_commands(app):
     from core.admin_cli import admin
     from core.attendance_cli import attendance
+    from core.face_cli import face
+    from core.notifications_cli import notifications_group
+    from core.license_cli import license_group
+    from core.support_cli import support_group
+    from core.tenancy.cli import tenant
+    from core.workers_cli import workers
 
     app.cli.add_command(db_adopt)
     app.cli.add_command(seed)
     app.cli.add_command(admin)
     app.cli.add_command(attendance)
+    app.cli.add_command(tenant)
+    app.cli.add_command(workers)
+    app.cli.add_command(face)
+    app.cli.add_command(notifications_group)
+    app.cli.add_command(license_group)
+    app.cli.add_command(support_group)

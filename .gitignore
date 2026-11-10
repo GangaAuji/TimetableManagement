@@ -123,3 +123,9 @@ reset_passwords.py
 
 !tests/
 !tests/**
+
+deploy/keys/
+deploy/docker.env
+deploy/license/*
+!deploy/license/.gitkeep
+license.json

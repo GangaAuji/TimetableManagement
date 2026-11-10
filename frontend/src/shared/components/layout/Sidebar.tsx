@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { linkVisible, type AccessSession } from '../../../app/page-access'
-import { adminNavigation, portalNavigation, type NavGroup, type NavLink, type NavMenu as NavMenuItem } from '../../../features/navigation/admin-navigation'
+import { adminNavigation, portalNavigation, type NavEntry, type NavGroup, type NavLink, type NavMenu as NavMenuItem } from '../../../features/navigation/admin-navigation'
 import { apiRequest } from '../../api/client'
 import { appPath } from '../../api/auth'
 import { getCsrfToken, type Branding } from '../../api/endpoints'
@@ -17,15 +17,27 @@ type SidebarProps = {
   onNavigate: () => void
 }
 
+function isMenu(item: NavEntry): item is NavMenuItem {
+  return 'children' in item
+}
+
+function visibleEntries(source: NavEntry[], access: AccessSession): NavEntry[] {
+  const items: NavEntry[] = []
+  for (const item of source) {
+    if (isMenu(item)) {
+      const children = item.children.filter((child) => linkVisible(access, child))
+      if (children.length > 0) items.push({ ...item, children })
+    } else if (linkVisible(access, item)) {
+      items.push(item)
+    }
+  }
+  return items
+}
+
 function visibleGroups(groups: NavGroup[], access: AccessSession) {
   return groups.flatMap((group) => {
-    const links = (group.links || []).filter((item) => linkVisible(access, item))
-    const menus = (group.menus || []).flatMap((menu) => {
-      const children = menu.children.filter((item) => linkVisible(access, item))
-      return children.length > 0 ? [{ ...menu, children }] : []
-    })
-    if (links.length === 0 && menus.length === 0) return []
-    return [{ ...group, links, menus }]
+    const items = visibleEntries(group.items ?? [...(group.menus || []), ...(group.links || [])], access)
+    return items.length > 0 ? [{ ...group, items }] : []
   })
 }
 
@@ -107,7 +119,7 @@ function keepActiveLinkVisible(nav: HTMLElement) {
 export function Sidebar({ open, branding, username, role, photo, access, onNavigate }: SidebarProps) {
   const { pathname } = useLocation()
   const navRef = useRef<HTMLElement>(null)
-  const groups = role === 'Teacher' || role === 'Student' ? portalNavigation(role, pathname) : visibleGroups(adminNavigation(pathname), access)
+  const groups = role === 'Teacher' || role === 'Student' ? portalNavigation(role, pathname, access.capabilities) : visibleGroups(adminNavigation(pathname), access)
   const initial = (username || 'U').slice(0, 1).toUpperCase()
   const logo = staticAssetUrl(branding.site_logo)
   const portrait = staticAssetUrl(photo)
@@ -145,22 +157,24 @@ export function Sidebar({ open, branding, username, role, photo, access, onNavig
       <nav
         ref={navRef}
         aria-label="Primary"
-        className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 py-4 pb-24"
+        className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 py-4"
         onScroll={(event) => sessionStorage.setItem(sidebarScrollKey, String(event.currentTarget.scrollTop))}
       >
-        {groups.map((group, index) => (
+        {groups.map((group, index) => {
+          const entries: NavEntry[] = group.items ?? [...(group.menus || []), ...(group.links || [])]
+          return (
           <div key={`${group.title || 'home'}-${index}`} className={group.title ? 'mt-5' : undefined}>
             {group.title ? (
               <p className="shell-muted mb-2 px-3 text-xs font-bold tracking-wider uppercase">{group.title}</p>
             ) : null}
-            {group.menus?.map((menu) => (
-              <NavMenu key={menu.label} menu={menu} onNavigate={onNavigate} />
-            ))}
-            {group.links?.map((item) => (
-              <NavAnchor key={item.href} item={item} onNavigate={onNavigate} />
+            {entries.map((item) => (
+              isMenu(item)
+                ? <NavMenu key={item.label} menu={item} onNavigate={onNavigate} />
+                : <NavAnchor key={item.href} item={item} onNavigate={onNavigate} />
             ))}
           </div>
-        ))}
+          )
+        })}
       </nav>
 
       <div className="shell-line shrink-0 border-t p-4">

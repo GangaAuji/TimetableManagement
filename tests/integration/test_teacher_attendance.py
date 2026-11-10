@@ -218,24 +218,23 @@ def test_an_elective_course_type_without_the_flag_still_needs_a_choice(client, f
     assert mark(client, elective['timetable_id'], elective['chose']).status_code == 200
 
 
-# Lab batches. The schema has no lab sub-batch tables; timetable.course_batch_id is a
-# course intake (admission year), not a lab group. docs/DESIGN_LAB_BATCHES.md proposes the
-# tables for timetable v2.
+# Lab batches (docs/DESIGN_LAB_BATCHES.md, revision 0012). A practical slot with
+# timetable.lab_batch_group_id takes only that batch's current members; a slot without one
+# still takes the whole division. timetable.course_batch_id stays the intake cohort.
 
 @pytest.fixture
 def batch_lab(factory):
     setup = factory.academic()
-    ours = factory.insert('course_batches', course_id=setup['course_id'], batch_name='Lab A', start_year=2026, end_year=2029)
-    other = factory.insert('course_batches', course_id=setup['course_id'], batch_name='Lab B', start_year=2026, end_year=2029)
+    groups = factory.lab_batches(setup, ('A1', 'A2'))
     timetable_id, _ = _subject_lecture(
         factory, setup, course_type='Core Practical', theory_practical='Practical',
         credits=2, theory_credits=0, practical_credits=2, marks=50, theory_marks=0, practical_marks=50,
     )
-    factory.execute('UPDATE timetable SET course_batch_id = %s WHERE id = %s', (ours, timetable_id))
+    factory.execute('UPDATE timetable SET lab_batch_group_id = %s WHERE id = %s', (groups['A1'], timetable_id))
     inside = factory.user('Student', setup=setup)
     outside = factory.user('Student', setup=setup)
-    factory.execute('UPDATE students SET course_batch_id = %s WHERE id = %s', (ours, inside['student_id']))
-    factory.execute('UPDATE students SET course_batch_id = %s WHERE id = %s', (other, outside['student_id']))
+    factory.enrol_in_batch(groups['A1'], inside)
+    factory.enrol_in_batch(groups['A2'], outside)
     return setup, timetable_id, inside, outside
 
 
@@ -245,12 +244,30 @@ def test_batch_lecture_accepts_a_student_in_the_batch(client, factory, batch_lab
     assert mark(client, timetable_id, inside).status_code == 200
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'No lab sub-batch tables exist yet, so a practical takes the whole division. '
-    'See docs/DESIGN_LAB_BATCHES.md (timetable v2).'
-))
 def test_batch_lecture_refuses_a_student_in_another_batch(client, factory, batch_lab):
     setup, timetable_id, _, outside = batch_lab
     login(client, setup['teacher'])
     assert mark(client, timetable_id, outside).status_code == 400
     assert saved(factory, timetable_id) == []
+
+
+def test_batch_lecture_refuses_a_student_whose_membership_ended(client, factory, batch_lab):
+    setup, timetable_id, inside, _ = batch_lab
+    factory.execute('UPDATE lab_batch_members SET ended_at = %s WHERE student_id = %s', ('2026-11-01', inside['student_id']))
+    login(client, setup['teacher'])
+    assert mark(client, timetable_id, inside).status_code == 400
+
+
+def test_batch_lecture_roster_lists_only_the_batch(client, factory, batch_lab):
+    setup, timetable_id, inside, _ = batch_lab
+    login(client, setup['teacher'])
+    response = client.get(f'/api/portal/attendance/mark/{timetable_id}')
+    assert response.status_code == 200
+    assert [row['id'] for row in response.get_json()['data']['students']] == [inside['student_id']]
+
+
+def test_the_whole_division_slot_still_takes_both_batches(client, factory, batch_lab):
+    setup, _timetable_id, inside, outside = batch_lab
+    login(client, setup['teacher'])
+    assert mark(client, setup['timetable_id'], inside).status_code == 200
+    assert mark(client, setup['timetable_id'], outside).status_code == 200

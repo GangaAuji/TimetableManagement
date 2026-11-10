@@ -70,7 +70,12 @@ class Student:
     enrolled_to: date | None = None
     # (subject_id, semester_id or None, academic_year_id or None) from student_subject_selections, not Withdrawn.
     chosen_subjects: frozenset = field(default_factory=frozenset)
+    # Lab batch groups the student is in with no dates (lab_batch_members rows that never ended).
     batch_ids: frozenset = field(default_factory=frozenset)
+    # (lab_batch_group_id, added_at or None, ended_at or None): dated memberships. When given, they
+    # decide a batch slot's roster on each date, so a student who moved batches keeps the old batch's
+    # lectures up to the move. batch_ids is used only when this is empty.
+    batch_memberships: frozenset = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

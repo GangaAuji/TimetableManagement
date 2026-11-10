@@ -1,9 +1,8 @@
-"""Role changes, pagination, proxy assignment, and the timetable move. No live database."""
+"""Bulk user actions, pagination, proxy assignment, and the timetable move. No live database."""
 
 from datetime import date, time
 
 from services import admin_queries
-from services import roles as role_service
 from services import user_actions
 from services.timetable import generator
 
@@ -76,25 +75,6 @@ def _bind(monkeypatch, module, connection):
     if hasattr(module, 'current_app'):
         monkeypatch.setattr(module, 'current_app', _App())
     return flashes, activities
-
-
-def test_duplicate_role_does_not_roll_back(monkeypatch):
-    connection = _Connection([{'id': 3}])
-    flashes, activities = _bind(monkeypatch, role_service, connection)
-    role_service.create_role('Admin', 'desk', [1], {'user_id': 9})
-    assert flashes == [('Role already exists.', 'danger')]
-    assert connection.actions == ['close']
-    assert activities == []
-    assert connection.cursor_obj.closed is True
-
-
-def test_super_admin_role_is_not_deleted(monkeypatch):
-    connection = _Connection([{'name': 'Super Admin'}])
-    flashes, _activities = _bind(monkeypatch, role_service, connection)
-    role_service.remove_role(1, {'user_id': 9})
-    assert flashes == [('Cannot delete Super Admin role.', 'danger')]
-    assert len(connection.cursor_obj.calls) == 1
-    assert connection.actions == ['close']
 
 
 def test_short_bulk_password_does_not_roll_back(monkeypatch):

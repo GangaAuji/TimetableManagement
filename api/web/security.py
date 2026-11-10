@@ -71,7 +71,7 @@ def _settings_upload():
     return _multipart_upload('/api/settings')
 
 
-_PUBLIC_GET = frozenset(('/api/branding', '/api/csrf-token', '/api/session'))
+_PUBLIC_GET = frozenset(('/api/branding', '/api/csrf-token', '/api/session', '/api/sso'))
 
 
 def api_is_public():
@@ -97,7 +97,8 @@ def require_authenticated_api():
     role = session.get('role')
     if not isinstance(role, str) or not role.strip():
         return json_error('You do not have permission to do that.', 403, 'forbidden')
-    return None
+    from services.security_policy import request_block
+    return request_block()
 
 
 def reject_unsafe_request():

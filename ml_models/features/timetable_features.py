@@ -14,14 +14,27 @@ def extract_timetable_features(
     proxy_suggestions: list[dict],
     needs_room: list[dict],
     slots_per_day: dict[str, int] | None = None,
+    rules: dict | None = None,
 ) -> dict:
-    """Compute normalized quality risk dimensions from timetable generation output."""
+    """Compute normalized quality risk dimensions from timetable generation output.
+
+    When `rules` carries a weight above 0 for `max_hours_per_day` / `max_consecutive_hours`
+    (services/timetable/rules.py) their `hours` parameters replace the built-in fatigue
+    thresholds (4 sessions a day, 3 consecutive); otherwise the historical values are kept.
+    """
 
     assigned = assigned or []
     unassigned = unassigned or []
     proxy_suggestions = proxy_suggestions or []
     needs_room = needs_room or []
     slots_per_day = slots_per_day or {}
+    rules = rules or {}
+    day_limit = 4
+    run_limit = 3
+    if (rules.get("max_hours_per_day") or {}).get("weight"):
+        day_limit = int(rules["max_hours_per_day"].get("hours") or day_limit)
+    if (rules.get("max_consecutive_hours") or {}).get("weight"):
+        run_limit = int(rules["max_consecutive_hours"].get("hours") or run_limit)
 
     total_slots = max(1, len(assigned) + len(unassigned))
     total_days = max(1, len(slots_per_day))
@@ -48,18 +61,18 @@ def extract_timetable_features(
         sessions.sort(key=lambda s: s.get("start_time", ""))
         day_count = len(sessions)
 
-        # Mild penalty after 4 sessions/day, steeper after 6.
-        fatigue_penalty += max(0, day_count - 4) * 0.08
-        fatigue_penalty += max(0, day_count - 6) * 0.05
+        # Mild penalty beyond the day limit, steeper two hours past it.
+        fatigue_penalty += max(0, day_count - day_limit) * 0.08
+        fatigue_penalty += max(0, day_count - (day_limit + 2)) * 0.05
 
-        # Penalty for 3+ consecutive same-day slots.
+        # Penalty for runs at or beyond the consecutive limit.
         run_length = 1
         for idx in range(1, len(sessions)):
             prev_end = sessions[idx - 1].get("end_time")
             this_start = sessions[idx].get("start_time")
             if prev_end == this_start:
                 run_length += 1
-                if run_length >= 3:
+                if run_length >= run_limit:
                     fatigue_penalty += 0.1
             else:
                 run_length = 1

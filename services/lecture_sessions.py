@@ -6,6 +6,7 @@ back on a dry run) themselves. See docs/DESIGN_ATTENDANCE_CALCULATION.md, 3.
 """
 
 import json
+import logging
 from collections import OrderedDict
 from datetime import date
 
@@ -39,6 +40,8 @@ from data_access.lecture_sessions import (
 from data_access.teacher_attendance import fetch_lecture_roster
 from security import log_activity
 
+logger = logging.getLogger(__name__)
+
 CANCEL_REASONS = frozenset(('faculty_absent', 'institution', 'exam', 'other'))
 SOURCES = frozenset(('teacher', 'mobile', 'admin', 'close_day', 'backfill'))
 
@@ -60,6 +63,11 @@ class SessionNotFound(Exception):
 
 def record_held_session(cursor, timetable_id, session_date, marked_by_faculty_id, source):
     """Make sure a held session exists for the slot and date; return its id. Raises SessionCancelled."""
+    from services.academic_calendar import refuse_session
+
+    if refuse_session(cursor, timetable_id, session_date):
+        existing = fetch_session_for(cursor, timetable_id, session_date)
+        raise SessionCancelled(existing['id'] if existing else 0)
     existing = fetch_session_for(cursor, timetable_id, session_date)
     if existing and existing['status'] == CANCELLED:
         raise SessionCancelled(existing['id'])
@@ -89,7 +97,18 @@ def cancel_lecture(cursor, *, timetable_id, session_date, actor_user_id, reason,
                     'session_date': str(session_date)},
         cursor=cursor,
     )
+    _notify_cancelled(cursor, timetable_id, session_date, reason, notes)
     return session_id
+
+
+def _notify_cancelled(cursor, timetable_id, session_date, reason, notes):
+    """Queue the cancellation notices in the same transaction; a notification problem never blocks the cancellation."""
+    from services import notifications
+
+    try:
+        notifications.on_lecture_cancelled(cursor, timetable_id=timetable_id, session_date=session_date, reason=reason, notes=notes or '')
+    except Exception:
+        logger.exception('Cancellation notices for lecture %s on %s were not queued', timetable_id, session_date)
 
 
 def restore_lecture(cursor, session_id, actor_user_id, today=None):
@@ -155,7 +174,7 @@ def _fill_mobile_absences(cursor, day, dry_run):
         if session['marked_by'] is None:
             continue
         marked = fetch_marked_student_ids(cursor, session['id'])
-        for student in fetch_lecture_roster(cursor, session):
+        for student in fetch_lecture_roster(cursor, session, day):
             if student['id'] in marked:
                 continue
             if dry_run or insert_absent_mark(cursor, student['id'], session, ABSENT_FILL_REMARK):
@@ -180,12 +199,18 @@ def close_day(connection, day, *, dry_run=False, today=None):
         slots = fetch_active_slots_for_weekday(cursor, weekday)
         existing = fetch_session_dates(cursor, day)
         proxies = fetch_proxies_for_date(cursor, day)
+        from services.academic_calendar import non_teaching_slot_ids
+
+        closed = non_teaching_slot_ids(cursor, day)
         counts = {'date': str(day), 'weekday': weekday, 'slots': len(slots), 'created': 0, 'existing': 0,
-                  'holiday': 0, 'outside_semester': 0, 'absent_filled': 0, 'dry_run': dry_run}
+                  'holiday': 0, 'outside_semester': 0, 'outside_term': 0, 'absent_filled': 0, 'dry_run': dry_run}
         counts['absent_filled'] = _fill_mobile_absences(cursor, day, dry_run)
         for slot in slots:
             if slot['id'] in existing:
                 counts['existing'] += 1
+                continue
+            if slot['id'] in closed:
+                counts['outside_term'] += 1
                 continue
             if not is_working_day(day, slot['program'], holidays):
                 counts['holiday'] += 1
@@ -290,7 +315,7 @@ def backfill_sessions(connection, *, dry_run=False):
             strangers = [m for m in group['markers'] if m['marker_user_id'] not in (group['faculty_id'], proxy)]
             if strangers:
                 report.note('marker_not_teacher', timetable_id, day, f"marked_by {[m['marked_by'] for m in strangers]}")
-            roster = {row['id'] for row in fetch_lecture_roster(cursor, group)}
+            roster = {row['id'] for row in fetch_lecture_roster(cursor, group, day)}
             outside = fetch_unlinked_marks_outside_roster(cursor, timetable_id, day, roster)
             if outside:
                 report.note('outside_roster', timetable_id, day, f'students {outside}')

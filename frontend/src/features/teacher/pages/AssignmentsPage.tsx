@@ -1,3 +1,4 @@
+import { FailureNotice } from '../../../shared/components/success-notice'
 import { useEffect, useState } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
@@ -43,35 +44,49 @@ export function AssignmentsPage() {
   return (
     <section className="flex flex-1 flex-col gap-2">
       <p className="text-sm text-gray-500">Subjects allocated to you, with their class and division.</p>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      <div className="min-h-[320px] overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className="overflow-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-              <tr>
-                <th className="px-4 py-3">Subject</th>
-                <th className="px-4 py-3">Department</th>
-                <th className="px-4 py-3">Class / course</th>
-                <th className="px-4 py-3">Division</th>
-                <th className="px-4 py-3">Syllabus</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-16 text-center text-gray-500">No subjects are assigned yet.</td></tr>
-              ) : rows.map((row) => (
-                <tr key={`${row.subject}-${row.className}-${row.division}`} className="hover:bg-indigo-50/40">
-                  <td className="px-4 py-3 font-semibold text-gray-800">{row.subject}</td>
-                  <td className="px-4 py-3 text-gray-700">{row.department || '—'}</td>
-                  <td className="px-4 py-3 text-gray-700">{row.className}{row.course ? ` · ${row.course}` : ''}</td>
-                  <td className="px-4 py-3 text-gray-700">{row.division || '—'}</td>
-                  <td className="px-4 py-3">{row.syllabus ? <a className="font-semibold text-indigo-600" href={row.syllabus} target="_blank" rel="noreferrer">Open</a> : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <FailureNotice message={error} />
+      {rows.length === 0 && !error ? (
+        <p className="rounded-2xl border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">No subjects are assigned yet.</p>
+      ) : (
+        <>
+          <ul className="grid gap-2 md:hidden">
+            {rows.map((row) => (
+              <li key={`${row.subject}-${row.className}-${row.division}`} className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="font-bold text-gray-800">{row.subject}</p>
+                <p className="mt-1 text-sm text-gray-600">{row.className}{row.course ? ` · ${row.course}` : ''}</p>
+                <p className="text-xs text-gray-500">{row.department || 'No department'} · Div {row.division || '—'}</p>
+                {row.syllabus ? <a className="mt-2 inline-flex text-sm font-semibold text-gray-800 underline" href={row.syllabus} target="_blank" rel="noreferrer">Open syllabus</a> : null}
+              </li>
+            ))}
+          </ul>
+          <div className="hidden min-h-[320px] overflow-hidden rounded-2xl border border-gray-200 bg-white md:block">
+            <div className="overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                  <tr>
+                    <th className="px-4 py-3">Subject</th>
+                    <th className="px-4 py-3">Department</th>
+                    <th className="px-4 py-3">Class / course</th>
+                    <th className="px-4 py-3">Division</th>
+                    <th className="px-4 py-3">Syllabus</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((row) => (
+                    <tr key={`${row.subject}-${row.className}-${row.division}`}>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{row.subject}</td>
+                      <td className="px-4 py-3 text-gray-700">{row.department || '—'}</td>
+                      <td className="px-4 py-3 text-gray-700">{row.className}{row.course ? ` · ${row.course}` : ''}</td>
+                      <td className="px-4 py-3 text-gray-700">{row.division || '—'}</td>
+                      <td className="px-4 py-3">{row.syllabus ? <a className="font-semibold text-gray-800 underline" href={row.syllabus} target="_blank" rel="noreferrer">Open</a> : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

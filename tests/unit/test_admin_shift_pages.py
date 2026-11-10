@@ -148,6 +148,7 @@ def test_proxy_page_uses_the_log_service_and_closes_it(monkeypatch):
 
     monkeypatch.setattr(proxy_api, 'load_proxy_log', fake)
     monkeypatch.setattr(proxy_api, 'permission_denied', lambda *args, **kwargs: None)
+    monkeypatch.setattr(proxy_api, 'allowed', lambda name: False)
     app = Flask('proxy-page')
     app.secret_key = 'test'
     with app.test_request_context('/api/proxy?status=ASSIGNED&approval_status=APPROVED&date_from=2026-10-01&date_to=2026-10-31&page=2'):
@@ -157,6 +158,7 @@ def test_proxy_page_uses_the_log_service_and_closes_it(monkeypatch):
     assert captured['args'] == (2, 'ASSIGNED', 'APPROVED', '2026-10-01', '2026-10-31', True)
     assert payload['success'] is True
     assert payload['data']['summary']['assigned'] == 0
+    assert payload['data']['can_change'] is False
 
 
 def test_shift_response_uses_the_shift_service(monkeypatch):

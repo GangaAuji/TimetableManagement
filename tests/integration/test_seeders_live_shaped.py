@@ -88,12 +88,15 @@ def test_first_run_adds_no_role_permissions_and_lists_what_it_would_add(copy):
     after = snapshot(copy)
 
     assert results['roles'].added == 0
-    assert results['branding_settings'].added == 0
+    assert results['branding_settings'].added == 2
+    new_branding = {row[1] for row in after['branding_settings']} - {row[1] for row in before['branding_settings']}
+    assert new_branding == {'maintenance_title', 'maintenance_message'}
+    kept = {row[1] for row in before['branding_settings']}
+    assert {row for row in after['branding_settings'] if row[1] in kept} == set(before['branding_settings'])
     assert results['permissions'].added == 2
     added = {row[1] for row in after['permissions']} - {row[1] for row in before['permissions']}
     assert added == NEW_PERMISSIONS
     assert after['roles'] == before['roles']
-    assert after['branding_settings'] == before['branding_settings']
     assert after['role_permissions'] == before['role_permissions']
 
     role_permissions = results['role_permissions']

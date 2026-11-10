@@ -18,9 +18,9 @@ The running application is split by job. Screens stay in `frontend`. HTTP and pe
 | `features/invitations` | Invitation list for staff |
 | `features/timetable` | Class timetable and the generation screen |
 | `features/attendance`, `shifts`, `proxy` | Teaching operations |
-| `features/reports`, `audit`, `devices`, `settings` | Reports, audit, mobile devices, branding |
+| `features/reports`, `audit`, `devices`, `settings` | Reports, audit, mobile devices, branding, the Institutions page |
 | `features/teacher`, `account` | Teacher tools and the shared profile page |
-| `shared` | API client, shell, tables, theme, and page spacing |
+| `shared` | API client, shell (with the institution switcher in the header), tables, theme, page spacing, `institutions.ts` and `SharingFields` for the sharing controls |
 
 Staff links point at `/admin/...`. Teacher and student links stay at `/my-...`. `page-access.ts` is the list of which permission opens which staff page.
 
@@ -30,8 +30,8 @@ Staff links point at `/admin/...`. Teacher and student links stay at `/my-...`. 
 
 | Module | Work |
 | --- | --- |
-| `session.py`, `security.py`, `access.py` | Session, security token, request checks, shared permission denial |
-| `branding.py`, `settings.py` | Public branding and the saved settings screen |
+| `session.py`, `security.py`, `access.py` | Session (including the current institution and `POST /session/institution`), security token, request checks, shared permission denial |
+| `branding.py`, `settings.py`, `institutions.py` | Public branding, the saved settings screen, the organization and its institutions |
 | `dashboard.py` | Staff home counts |
 | `departments.py`, `courses.py`, `rooms.py`, `catalog/` | Academic setup |
 | `people/` | Students and faculty records |
@@ -47,21 +47,22 @@ Staff links point at `/admin/...`. Teacher and student links stay at `/my-...`. 
 
 ## Services
 
-`services` holds the work the routes call.
+`services` holds the work the API modules and workers call.
 
 | Area | Files | Work |
 | --- | --- | --- |
-| Sign-in | `login.py`, `registration.py`, `invitations.py` | Student, teacher, and admin sign-in, and invitation registration |
-| Academic setup | `departments.py`, `courses.py`, `academic_years.py`, `semesters.py`, `subjects.py`, `batches.py`, `allocations.py` | Catalog saves |
-| Timetable | `timetable/generator.py`, `timetable_jobs.py`, `timetable_quality_service.py` | Generation, the job queue, and the quality model |
-| Attendance | `attendance_admin/`, `teacher_attendance.py`, `student_portal.py` | Staff attendance and the teacher or student views |
-| Reports | `export_jobs.py`, `reports_admin/` | Queued CSV jobs and report datasets |
-| People and access | `users.py`, `roles.py`, `user_permissions.py`, `faculty_admin.py`, `admin_students.py` | Accounts, roles, faculty, and students |
+| Sign-in | `login.py`, `registration.py`, `invitations.py`, `sso.py` | Student, teacher, and admin sign-in, invitation registration, OpenID Connect |
+| Timetable | `timetable/generator.py`, `timetable/joint_solver.py`, `timetable_slots.py`, `timetable_jobs.py`, `timetable_quality_service.py`, `lab_batches.py` | Generation, manual slots, the job queue, the quality model, lab batches |
+| Attendance | `attendance_calc.py`, `lecture_sessions.py`, `teacher_attendance.py`, `student_portal.py`, `attendance_admin/_common.py` | Percentages and defaulters, sessions, the teacher and student views, mobile log promotion |
+| Reports | `export_jobs.py`, `reports_admin/` | Queued CSV/Excel/PDF jobs, report datasets, NAAC/NBA templates |
+| Notifications and webhooks | `notifications.py`, `webhooks.py`, `job_claims.py`, `worker_process.py` | The outboxes, the claim pattern, and the worker threads |
+| Integrations | `api_keys.py`, `webhooks.py`, `sso.py`, `secrets_at_rest.py` | Public API keys, webhook endpoints, SSO settings, encryption of stored secrets |
+| People and access | `users.py`, `user_actions.py`, `user_permissions.py`, `faculty_admin.py`, `profile.py`, `admin_queries.py` | Accounts, bulk actions, permissions, faculty, the account page |
 | Audit | `audit_logs.py` | Activity, sessions, and failed sign-ins |
-| Face | `face/face_embedding.py` | Embedding used by invitation registration |
+| Face | `face/` | Embeddings, encrypted templates, consent, liveness safeguards |
 
-`academic_rules` holds clash, holiday, and availability checks used while a timetable is built. `data_access` holds the SQL helpers those services call. `models/db.py` is the shared database connection used by the older request path. `security` holds permission checks, session activity, and the in-process rate limit.
+`academic_rules` holds clash, holiday, and availability checks used while a timetable is built. `data_access` holds the SQL helpers those services call; `data_access/institutions.py` adds the institution, membership and sharing queries, and `core/scope.py` turns the session into the per-request `Scope` whose predicates the catalog, people and timetable modules apply ([DESIGN_INSTITUTIONS.md](DESIGN_INSTITUTIONS.md)). `extensions.get_db_connection` is the one way to open a connection (`models/db.py` resolves the tenant's settings behind it). `security` holds the audit writers, permission lookups, session activity, and the shared rate limit; request-level permission checks are `api.web.access.permission_denied` / `allowed`.
 
-## What still renders through Flask
+## One request path
 
-`routes/` still contains the older admin, teacher, student, and academic views. Those views call `ui/pages.py`, which sends the browser to the React path. New browser work goes through `api/web` and `frontend/src`, not through a new HTML template.
+Every screen is a React page talking to `/api`. The only Flask views left are on `routes/auth.py`: the sign-in and sign-out forms, invitation registration, the SSO start/callback, `/health` and the favicon. The older server-rendered admin, teacher, student and academic blueprints were removed with the services that only they used; a bookmark to one of those URLs reaches the 404 handler in `ui/errors.py`, which sends the browser to the matching React path (`ui/pages.react_path`). New browser work goes through `api/web` and `frontend/src`.

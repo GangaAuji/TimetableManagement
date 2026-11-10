@@ -15,6 +15,15 @@ def fetch_login_user(cursor, username):
     return cursor.fetchone()
 
 
+def fetch_pending_user(cursor, user_id, username):
+    """Return the user a pending second-factor sign-in may finish as, with its lock state."""
+    cursor.execute(
+        f"SELECT {_LOGIN_COLUMNS}, username FROM users WHERE id = %s AND username = %s",
+        (user_id, username),
+    )
+    return cursor.fetchone()
+
+
 def fetch_admin_login_user(cursor, username):
     """Return an admin, super admin, or HOD row for this username, with its lock state."""
     cursor.execute(

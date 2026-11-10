@@ -87,13 +87,17 @@ def component_of(row):
     return PRACTICAL if 'Practical' in (row.get('course_type') or '') else THEORY
 
 
-def to_student(row, selections=()):
+def to_student(row, selections=(), memberships=()):
     return Student(
         id=row['id'], course_id=row['course_id'], class_id=row.get('class_id'), division_id=row.get('division_id'),
         enrolled_from=row.get('enrolled_from'), enrolled_to=row.get('enrolled_to'),
         chosen_subjects=frozenset(
             (choice['subject_id'], choice.get('semester_id'), choice.get('academic_year_id'))
             for choice in selections
+        ),
+        batch_ids=frozenset(member['lab_batch_group_id'] for member in memberships if member.get('ended_at') is None),
+        batch_memberships=frozenset(
+            (member['lab_batch_group_id'], member.get('added_at'), member.get('ended_at')) for member in memberships
         ),
     )
 
@@ -104,6 +108,7 @@ def to_slot(row):
         division_id=row.get('division_id'), component=component_of(row), is_elective=bool(row.get('is_elective')),
         semester_id=row.get('semester_id'), academic_year_id=row.get('academic_year_id'),
         faculty_user_id=row.get('faculty_user_id'), is_active=bool(row.get('is_active', 1)),
+        batch_id=row.get('lab_batch_group_id'),
     )
 
 
@@ -125,6 +130,7 @@ class Inputs:
 
     students: dict = field(default_factory=dict)      # id -> row
     selections: dict = field(default_factory=dict)    # student id -> [rows]
+    memberships: dict = field(default_factory=dict)   # student id -> [lab_batch_members rows]
     slot_rows: dict = field(default_factory=dict)     # id -> row
     slots: dict = field(default_factory=dict)         # id -> Slot
     session_rows: dict = field(default_factory=dict)  # id -> row
@@ -134,7 +140,9 @@ class Inputs:
     excuses: list = field(default_factory=list)       # Excuse
 
     def student(self, student_id):
-        return to_student(self.students[student_id], self.selections.get(student_id, ()))
+        return to_student(
+            self.students[student_id], self.selections.get(student_id, ()), self.memberships.get(student_id, ()),
+        )
 
 
 def load_inputs(cursor, student_rows, date_from=None, date_to=None):
@@ -144,6 +152,8 @@ def load_inputs(cursor, student_rows, date_from=None, date_to=None):
         return inputs
     for choice in rows.fetch_selections(cursor, student_ids):
         inputs.selections.setdefault(choice['student_id'], []).append(choice)
+    for member in rows.fetch_batch_memberships(cursor, student_ids):
+        inputs.memberships.setdefault(member['student_id'], []).append(member)
     cohorts = {(row['course_id'], row['class_id']) for row in student_rows if row.get('course_id') and row.get('class_id')}
     for slot in rows.fetch_slots(cursor, cohorts, student_ids):
         inputs.slot_rows[slot['id']] = slot

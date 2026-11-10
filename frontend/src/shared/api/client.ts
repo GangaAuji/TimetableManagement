@@ -1,5 +1,6 @@
 const errorMessages: Record<string, string> = {
   unauthorized: 'Sign in to continue.',
+  maintenance: 'The system is temporarily unavailable.',
   rate_limited: 'Too many requests. Wait a moment and try again.',
   forbidden: 'You do not have permission to do that.',
   invalid_body: 'The request could not be accepted.',
@@ -162,6 +163,18 @@ const errorMessages: Record<string, string> = {
   portal_denied: 'You do not have permission to do that.',
   portal_date: 'Enter a valid date.',
   account_password_invalid: 'Enter the current password and a new password of 8 to 128 characters.',
+  password_policy: 'The password does not meet the security policy.',
+  password_expired: 'Change your password to continue.',
+  security_policy_unavailable: 'Apply the database upgrade before saving the security policy.',
+  security_policy_invalid: 'Check the security policy and try again.',
+  security_policy_lockout: 'Include the network you are using, or leave the list empty.',
+  license_required: 'A valid license is required before this can be added.',
+  license_students: 'The license does not allow another student.',
+  license_institutions: 'The license does not allow another institution.',
+  branding_scope_unavailable: 'Apply the database upgrade before saving branding for one institution.',
+  branding_institution: 'That institution is not available.',
+  admin_network: 'Sign-in is not allowed from this network.',
+  session_idle: 'Your session timed out. Sign in again.',
   account_password_mismatch: 'The current password is incorrect.',
   teacher_unavailable: 'The page could not be loaded.',
   student_unavailable: 'The page could not be loaded.',
@@ -198,6 +211,12 @@ const errorMessages: Record<string, string> = {
   availability_selection_invalid: 'Select at least one faculty member and one day.',
   availability_save_failed: 'The availability could not be saved.',
   proxy_filters_invalid: 'Enter a valid date range.',
+  proxy_missing: 'That proxy request was not found.',
+  proxy_closed: 'This request has already been decided.',
+  proxy_choice_required: 'Choose the faculty who will take this class.',
+  proxy_choice_invalid: 'Choose a faculty member who can take this subject.',
+  proxy_busy: 'That faculty already has a class at this time.',
+  proxy_note_invalid: 'The note must be 200 characters or less.',
   shift_name_invalid: 'Enter a shift name up to 80 characters.',
   shift_code_invalid: 'Enter a shift code using letters, numbers, _ or -.',
   shift_time_invalid: 'Enter a start and end time.',
@@ -217,23 +236,70 @@ const errorMessages: Record<string, string> = {
   attendance_record_missing: 'That attendance record was not found.',
   attendance_filters_invalid: 'Check the filters and try again.',
   attendance_limit_invalid: 'Choose between 1 and 500 logs.',
+  bookings_unavailable: 'Room bookings could not be loaded.',
+  bookings_table_missing: 'The bookings table is missing; apply the database migrations first.',
+  booking_title_invalid: 'Give the booking a title of up to 120 characters.',
+  booking_notes_invalid: 'Notes may be up to 500 characters.',
+  booking_kind_invalid: 'Choose event, exam, maintenance or external.',
+  booking_when_invalid: 'Give either a date or a weekday for the booking.',
+  booking_time_invalid: 'Enter start and end times with the end after the start.',
+  booking_room_invalid: 'That room is not available to this institution.',
+  booking_room_busy: 'That room is timetabled at that time.',
+  booking_room_booked: 'That room is already booked at that time.',
+  booking_not_found: 'That booking was not found.',
+  booking_not_owned: 'Only the institution that owns the room can decide this booking.',
+  booking_decided: 'That booking has already been decided.',
+  booking_filter_invalid: 'The filter is not valid.',
+  norms_unavailable: 'Workload norms could not be loaded.',
+  terms_unavailable: 'Academic terms could not be loaded.',
+  term_invalid: 'Give a name, a kind and dates inside the academic year.',
+  term_overlap: 'Those dates overlap another term for this institution.',
+  term_not_found: 'That term was not found.',
+  terms_table_missing: 'The academic terms table is missing; apply the database migrations first.',
+  syllabus_unavailable: 'The syllabus tables are missing; apply the database migrations first.',
+  assessment_unavailable: 'The assessment tables are missing; apply the database migrations first.',
+  assessment_invalid: 'Check the component, outcome or mapping and try again.',
+  assessment_marks_invalid: 'Marks must be from 0 up to the component maximum, with at most one decimal place.',
+  assessment_locked: 'That component is locked. Unlock it before changing marks or the scheme.',
+  assessment_in_use: 'A locked component still uses an outcome you are removing.',
+  assessment_import_invalid: 'The file needs a header row with roll_number and marks.',
+  exam_unavailable: 'The exam tables are missing; apply the database migrations first.',
+  exam_invalid: 'Check the exam name, dates, subjects and rooms, then try again.',
+  exam_not_found: 'That exam was not found.',
+  exam_no_students: 'A paper has no students. Check the cohort and, for an elective, the subject selections.',
+  exam_no_room: 'Choose at least one room with seats.',
+  exam_no_invigilator: 'There is no active faculty member who can invigilate.',
+  exam_unsolved: 'No exam timetable fits those rooms, the seating gap and invigilator availability.',
+  syllabus_invalid: 'Each unit needs a number from 1 to 99, a title and planned hours from 0.5 to 400.',
+  syllabus_in_use: 'A lesson has been logged against a unit you are removing.',
+  lesson_invalid: 'Choose a unit and a topic, and hours between 0.5 and 3.',
+  lesson_unit: 'That unit is not part of this subject.',
+  norms_invalid: 'Norms are hours per week from 0 to 60, with the minimum no higher than the maximum.',
+  capability_off: 'This feature is switched off for your institution.',
+  second_factor_unavailable: 'Second factor is not available until the database migration is applied.',
+  second_factor_invalid: 'That code was not accepted.',
+  second_factor_enrolled: 'An authenticator is already set up. Use a current code to replace it.',
+  second_factor_required: 'Your role must keep an authenticator app.',
 }
 
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  /** The server's error object as sent (code, message and any extras such as `alternatives`); treat as untrusted. */
+  readonly details: Record<string, unknown>
 
-  constructor(message: string, status: number, code = '') {
+  constructor(message: string, status: number, code = '', details: Record<string, unknown> = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
 type Envelope<T> =
   | { success: true; data: T }
-  | { success: false; error?: { code?: string; message?: string } }
+  | { success: false; error?: { code?: string; message?: string; [key: string]: unknown } }
 
 function messageFor(status: number, code: string): string {
   if (code && errorMessages[code]) return errorMessages[code]
@@ -257,7 +323,7 @@ async function parseEnvelope<T>(response: Response): Promise<T> {
   const envelope = body as Envelope<T>
   if (envelope.success) return envelope.data
   const code = envelope.error?.code || ''
-  throw new ApiError(messageFor(response.status, code), response.status, code)
+  throw new ApiError(messageFor(response.status, code), response.status, code, envelope.error && typeof envelope.error === 'object' ? envelope.error : {})
 }
 
 function sameOriginApiPath(path: string): string {
@@ -283,7 +349,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   try {
     return await parseEnvelope<T>(response)
   } catch (error) {
-    if (error instanceof ApiError) throw error
+    if (error instanceof ApiError) {
+      if (error.code === 'session_idle' || error.code === 'admin_network') window.location.assign('/')
+      throw error
+    }
     throw new ApiError(messageFor(response.status, ''), response.status)
   }
 }

@@ -87,11 +87,16 @@ def apply_bulk_user_action(action, ids, new_password, session):
         if action == 'reset_password':
             if new_password and len(new_password) < 8:
                 return {'error': 'New password must be at least 8 characters.'}, 400
+            from services.security_policy import enforced_problem, remember_password_change
+            if new_password and enforced_problem(new_password, cursor):
+                return {'error': 'The password does not meet the security policy.'}, 400
             if not new_password:
                 new_password = _temp_password()
             target_ids = [row['id'] for row in fetch_bulk_targets(cursor, ids)]
             if target_ids:
                 update_bulk_passwords(cursor, generate_password_hash(new_password), target_ids)
+                for target_id in target_ids:
+                    remember_password_change(cursor, target_id)
             log_activity(session['user_id'], 'bulk_reset_password', f"Affected IDs: {','.join(ids)}", cursor=cursor)
             connection.commit()
             return {'message': 'Passwords reset successfully.', 'temp_password': new_password}, 200
@@ -109,6 +114,9 @@ def reset_user_password(user_id, new_password, session):
     """Reset one password. Return the JSON payload and status."""
     if new_password and len(new_password) < 8:
         return {'error': 'Password must be at least 8 characters.'}, 400
+    from services.security_policy import enforced_problem, remember_password_change
+    if new_password and enforced_problem(new_password):
+        return {'error': 'The password does not meet the security policy.'}, 400
     if not new_password:
         new_password = _temp_password()
     hashed = generate_password_hash(new_password)
@@ -120,6 +128,7 @@ def reset_user_password(user_id, new_password, session):
         if account_problem(cursor, session['user_id'], user_id):
             return {'error': 'You cannot reset the password for that account.'}, 403
         update_user_password(cursor, hashed, user_id)
+        remember_password_change(cursor, user_id)
         log_activity(session['user_id'], 'reset_password', f'Reset password for user ID {user_id}',
                      entity_type='user', entity_id=user_id, cursor=cursor)
         connection.commit()

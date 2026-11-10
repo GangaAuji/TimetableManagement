@@ -12,7 +12,14 @@ ALLOWED_REPORT_TYPES = {
     'audit-logs',
     'shifts',
     'proxy-log',
-    'invitations'
+    'invitations',
+    # Accreditation (NAAC/NBA) templates: services/reports_admin/accreditation.py
+    'defaulters',
+    'subject-wise',
+    'monthly-register',
+    'faculty-workload',
+    'syllabus-coverage',
+    'co-attainment',
 }
 
 REPORT_LABELS = {
@@ -22,14 +29,22 @@ REPORT_LABELS = {
     'shifts': 'Shift Management',
     'proxy-log': 'Proxy Log',
     'invitations': 'Invitations',
+    'defaulters': 'Defaulter list (NAAC/NBA)',
+    'subject-wise': 'Subject-wise attendance (NAAC/NBA)',
+    'monthly-register': 'Monthly attendance register (NAAC/NBA)',
+    'faculty-workload': 'Faculty workload (NAAC/NBA)',
+    'syllabus-coverage': 'Syllabus coverage',
+    'co-attainment': 'CO and PO attainment',
     'users-export': 'Users export',
     'audit-export': 'Audit log export',
     'timetable-export': 'Timetable export',
 }
 
 def _get_reports_storage_dir():
-    """Get and create storage folder for processed CSV files."""
-    reports_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'reports')
+    """Get and create storage folder for processed CSV files (per tenant when one is bound)."""
+    from core.tenancy import scoped_storage_dir
+
+    reports_dir = os.path.join(scoped_storage_dir(current_app.config['UPLOAD_FOLDER']), 'reports')
     os.makedirs(reports_dir, exist_ok=True)
     return reports_dir
 

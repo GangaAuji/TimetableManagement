@@ -2,6 +2,8 @@ export type AccessSession = {
   role: string
   unrestricted: boolean
   permissions: readonly string[]
+  /** Effective optional features (docs/DESIGN_CAPABILITIES.md). Missing or false = off. */
+  capabilities?: Readonly<Record<string, boolean>>
 }
 
 export type PagePermission = string | readonly string[]
@@ -37,6 +39,19 @@ export const pagePermission = {
   permissions: ['roles_view_role', 'roles_change_role'],
   invitations: 'users_change_user',
   settings: 'admin_view_settings',
+  notifications: ['notifications_view', 'admin_view_settings'],
+  integrations: ['integrations_view', 'admin_view_settings'],
+  institutions: ['institutions_view', 'admin_view_settings'],
+  capabilities: ['capabilities_view', 'admin_view_settings'],
+  security: ['security_policy_view', 'admin_view_settings'],
+  calendar: ['academic_terms_view', 'academicyears_view'],
+  syllabus: ['syllabus_view', 'subjects_view_subject'],
+  assessments: ['assessments_view', 'subjects_view_subject'],
+  exams: ['exams_view', 'timetable_generate'],
+  bookings: ['bookings_view', 'rooms_view_room'],
+  rules: ['timetable_rules_view', 'timetable_generate'],
+  workload: ['workload_norms_view', 'timetable_generate'],
+  versions: ['timetable_versions_view', 'timetable_change', 'timetable_generate'],
   audit: ['reports_view_audit', 'users_view_activity_log'],
 } as const
 
@@ -45,6 +60,9 @@ const staffHomeRoles = new Set(['Admin', 'Super Admin', 'HOD'])
 
 const staffRules: { pattern: RegExp; permission?: PagePermission; roles?: readonly string[]; open?: boolean }[] = [
   { pattern: /^\/timetable\/generate$/, permission: pagePermission.generate },
+  { pattern: /^\/timetable\/rules$/, permission: pagePermission.rules },
+  { pattern: /^\/timetable\/workload$/, permission: pagePermission.workload },
+  { pattern: /^\/timetable\/versions$/, permission: pagePermission.versions },
   { pattern: /^\/timetable$/, permission: pagePermission.timetable },
   { pattern: /^\/attendance\/manage$/, permission: pagePermission.attendanceRecords },
   { pattern: /^\/attendance\/faculty$/, permission: pagePermission.facultyAttendance },
@@ -62,15 +80,26 @@ const staffRules: { pattern: RegExp; permission?: PagePermission; roles?: readon
   { pattern: /^\/students$/, permission: pagePermission.students },
   { pattern: /^\/departments$/, permission: pagePermission.departments },
   { pattern: /^\/academic-years$/, permission: pagePermission.years },
+  { pattern: /^\/academic-terms$/, permission: pagePermission.calendar },
+  { pattern: /^\/academic-syllabus$/, permission: pagePermission.syllabus },
+  { pattern: /^\/academic-assessments$/, permission: pagePermission.assessments },
+  { pattern: /^\/academic-exams$/, permission: pagePermission.exams },
   { pattern: /^\/semesters$/, permission: pagePermission.semesters },
   { pattern: /^\/subjects$/, permission: pagePermission.subjects },
   { pattern: /^\/courses$/, permission: pagePermission.courses },
   { pattern: /^\/batches$/, permission: pagePermission.batches },
+  { pattern: /^\/lab-batches$/, permission: pagePermission.batches },
   { pattern: /^\/allocations$/, permission: pagePermission.allocations },
   { pattern: /^\/holidays$/, permission: pagePermission.holidays },
+  { pattern: /^\/rooms\/bookings$/, permission: pagePermission.bookings },
   { pattern: /^\/rooms$/, permission: pagePermission.rooms },
   { pattern: /^\/proxy$/, permission: pagePermission.proxy },
   { pattern: /^\/invitations$/, permission: pagePermission.invitations },
+  { pattern: /^\/settings\/notifications$/, permission: pagePermission.notifications },
+  { pattern: /^\/settings\/integrations$/, permission: pagePermission.integrations },
+  { pattern: /^\/settings\/institutions$/, permission: pagePermission.institutions },
+  { pattern: /^\/settings\/capabilities$/, permission: pagePermission.capabilities },
+  { pattern: /^\/settings\/security$/, permission: pagePermission.security },
   { pattern: /^\/settings$/, permission: pagePermission.settings },
   { pattern: /^\/audit(\/|$)/, permission: pagePermission.audit },
   { pattern: /^\/devices$/, roles: deviceRoles },
@@ -78,10 +107,10 @@ const staffRules: { pattern: RegExp; permission?: PagePermission; roles?: readon
   { pattern: /^\/$/, open: true },
 ]
 
-const teacherPaths = /^\/(my-timetable|my-classes|my-assignments|my-shifts|my-availability|my-proxy|my-attendance(?:\/(?:mark|history)\/\d+)?|account|profile)$/
-const studentPaths = /^\/(my-timetable|my-attendance(?:\/\d+)?|account|profile)$/
+const teacherPaths = /^\/(my-timetable|my-classes|my-assignments|my-shifts|my-availability|my-proxy|my-internals|my-duties|my-attendance(?:\/(?:mark|history)\/\d+)?|account|profile)$/
+const studentPaths = /^\/(my-timetable|my-attendance(?:\/\d+)?|my-internals|account|profile)$/
 const legacyPaths = /^\/(login|teacher|student|profile)(\/|$)/
-const formerStaffPaths = /^\/(rooms|departments|courses|academics|academic-years|semesters|subjects|batches|allocations|holidays|students|faculty|users|permissions|roles|invitations|settings|audit|timetable|attendance|reports|shifts|proxy|devices)(\/|$)/
+const formerStaffPaths = /^\/(rooms|departments|courses|academics|academic-years|semesters|subjects|batches|lab-batches|allocations|holidays|students|faculty|users|permissions|roles|invitations|settings|audit|timetable|attendance|reports|shifts|proxy|devices)(\/|$)/
 
 export function hasPermission(session: AccessSession, permission?: PagePermission) {
   if (!permission) return false
@@ -90,7 +119,8 @@ export function hasPermission(session: AccessSession, permission?: PagePermissio
   return names.some((name) => session.permissions.includes(name))
 }
 
-export function linkVisible(session: AccessSession, link: { permission?: PagePermission; roles?: readonly string[] }) {
+export function linkVisible(session: AccessSession, link: { permission?: PagePermission; roles?: readonly string[]; capability?: string }) {
+  // The menu lists a page the account may open. The page itself stays empty while its capability is off.
   if (session.unrestricted) return true
   if (link.roles && !link.roles.includes(session.role)) return false
   if (link.permission) return hasPermission(session, link.permission)

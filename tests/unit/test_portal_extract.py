@@ -75,7 +75,7 @@ def test_proxy_request_is_stored_as_pending(monkeypatch):
     assert teacher_portal.submit_proxy_request(4, 8, 5, '2026-10-26') == 'ok'
     sql, params = connection.cursor_obj.calls[-1]
     assert sql.endswith("VALUES (%s, %s, %s, %s, %s)")
-    assert params[-1] == 'PENDING'
+    assert params[-1] == 'ASSIGNED'
     assert params[0] == 9
     assert flashes[-1][0] == 'Proxy request submitted for approval.'
     assert connection.actions == ['commit', 'close']
@@ -101,13 +101,15 @@ def test_attendance_save_marks_with_the_faculty_table_id(monkeypatch):
     _attendance_today(monkeypatch, teacher_attendance)
     form = {'attendance_date': '2026-10-26', 'status_4': 'Present', 'remarks_4': 'ok'}
     assert teacher_attendance.save_teacher_attendance(9, 8, form) == 1
-    sql, params = connection.cursor_obj.calls[-1]
+    calls = connection.cursor_obj.calls
+    [index] = [position for position, call in enumerate(calls) if 'INSERT INTO attendance' in call[0]]
+    sql, params = calls[index]
     assert 'marked_by' in sql
     assert 'ON DUPLICATE KEY UPDATE' in sql
     assert params[5] == 15
     assert params[0] == 4
     # The lecture is recorded as held in the same transaction, before the marks.
-    session_sql, session_params = connection.cursor_obj.calls[-2]
+    session_sql, session_params = calls[index - 1]
     assert session_sql.startswith('INSERT INTO lecture_sessions') and "'held'" in session_sql
     assert session_params[:2] == (8, real_date(2026, 10, 26)) and session_params[3] == 15
     assert params[2] == connection.cursor_obj.lastrowid

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { pageFill } from '../../../shared/layout/page-frame'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
@@ -128,8 +129,8 @@ export function ShiftRequestsPage() {
         </div>
       </div>
 
-      {error && <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-      {notice && <p className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         <div className="flex-1 overflow-auto">

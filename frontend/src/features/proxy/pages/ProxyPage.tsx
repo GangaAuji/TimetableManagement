@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
-import { messageFrom } from '../../../shared/components/data-list'
+import { messageFrom, postJson } from '../../../shared/components/data-list'
+import { Dialog } from '../../../shared/components/dialog'
+import { todayInput } from '../../../shared/dates'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Entry = {
@@ -22,6 +25,7 @@ type Entry = {
   approvedBy: string
 }
 
+type Choice = { id: number; name: string; employeeId: string; free: boolean }
 type Summary = { total: number; assigned: number; unassigned: number; pending: number; approved: number; rejected: number }
 
 const emptySummary: Summary = { total: 0, assigned: 0, unassigned: 0, pending: 0, approved: 0, rejected: 0 }
@@ -73,8 +77,21 @@ function statusBadge(status: string) {
 function statusLabel(status: string) {
   if (status === 'ASSIGNED') return 'Assigned'
   if (status === 'UNASSIGNED') return 'Unassigned'
-  if (!status) return ''
+  if (!status || status === 'PENDING') return 'Pending'
   return status.charAt(0) + status.slice(1).toLowerCase()
+}
+
+function readChoice(row: Record<string, unknown>): Choice {
+  return {
+    id: safeCount(row.id),
+    name: safeText(row.name, 100),
+    employeeId: safeText(row.employee_id, 40),
+    free: row.free === true,
+  }
+}
+
+function awaitingDecision(entry: Entry) {
+  return entry.approval !== 'APPROVED' && entry.approval !== 'REJECTED'
 }
 
 function pageWindow(page: number, total: number) {
@@ -96,16 +113,26 @@ export function ProxyPage() {
   const [summary, setSummary] = useState<Summary>(emptySummary)
   const [status, setStatus] = useState('')
   const [approval, setApproval] = useState('')
-  const [draftFrom, setDraftFrom] = useState('')
-  const [draftTo, setDraftTo] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [draftFrom, setDraftFrom] = useState(todayInput)
+  const [draftTo, setDraftTo] = useState(todayInput)
+  const [dateFrom, setDateFrom] = useState(todayInput)
+  const [dateTo, setDateTo] = useState(todayInput)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [hasPrev, setHasPrev] = useState(false)
   const [hasNext, setHasNext] = useState(false)
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState('')
   const [loading, setLoading] = useState(true)
+  const [canChange, setCanChange] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [acting, setActing] = useState<Entry | null>(null)
+  const [choices, setChoices] = useState<Choice[]>([])
+  const [choice, setChoice] = useState('')
+  const [note, setNote] = useState('')
+  const [dialogError, setDialogError] = useState('')
+  const [choicesLoading, setChoicesLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setPageHeader('Faculty Substitution')
@@ -122,7 +149,7 @@ export function ProxyPage() {
     const path = query ? `/api/proxy?${query}` : '/api/proxy'
     let active = true
     setLoading(true)
-    void apiRequest<{ entries?: Record<string, unknown>[]; summary?: Record<string, unknown>; page?: number; total_pages?: number; has_prev?: boolean; has_next?: boolean }>(path)
+    void apiRequest<{ entries?: Record<string, unknown>[]; summary?: Record<string, unknown>; page?: number; total_pages?: number; has_prev?: boolean; has_next?: boolean; can_change?: boolean }>(path)
       .then((data) => {
         if (!active) return
         setEntries((data.entries || []).map(readEntry))
@@ -130,6 +157,7 @@ export function ProxyPage() {
         setTotalPages(safeCount(data.total_pages))
         setHasPrev(data.has_prev === true)
         setHasNext(data.has_next === true)
+        setCanChange(data.can_change === true)
         setError('')
       })
       .catch((reason: unknown) => {
@@ -141,7 +169,52 @@ export function ProxyPage() {
     return () => {
       active = false
     }
-  }, [approval, dateFrom, dateTo, page, status])
+  }, [approval, dateFrom, dateTo, page, reloadKey, status])
+
+  const columns = canChange
+    ? ['Date & Time', 'Original Faculty', 'Assigned Proxy', 'Class Info', 'Status', 'Approval', 'Actions']
+    : ['Date & Time', 'Original Faculty', 'Assigned Proxy', 'Class Info', 'Status', 'Approval']
+
+  function openAssign(entry: Entry) {
+    setActing(entry)
+    setNote('')
+    setChoice('')
+    setChoices([])
+    setDialogError('')
+    setSaved('')
+    setChoicesLoading(true)
+    void apiRequest<{ pending?: boolean; suggested_id?: number | null; choices?: Record<string, unknown>[] }>(`/api/proxy/${entry.id}/choices`)
+      .then((data) => {
+        const rows = (data.choices || []).map(readChoice).filter((row) => row.id > 0 && row.name)
+        setChoices(rows)
+        const suggested = rows.find((row) => row.id === safeCount(data.suggested_id) && row.free)
+        setChoice(suggested ? String(suggested.id) : '')
+        if (data.pending === false) setDialogError('This request has already been decided.')
+      })
+      .catch((reason: unknown) => setDialogError(messageFrom(reason)))
+      .finally(() => setChoicesLoading(false))
+  }
+
+  async function decide(kind: 'approve' | 'reject') {
+    if (!acting) return
+    setSaving(true)
+    setDialogError('')
+    try {
+      if (kind === 'approve') {
+        await postJson(`/api/proxy/${acting.id}/approve`, { proxy_faculty_id: Number(choice), note })
+        setSaved('Proxy assigned and approved.')
+      } else {
+        await postJson(`/api/proxy/${acting.id}/reject`, note ? { note } : {})
+        setSaved('Proxy request rejected.')
+      }
+      setActing(null)
+      setReloadKey((value) => value + 1)
+    } catch (reason) {
+      setDialogError(messageFrom(reason))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const cards = [
     { label: 'Total', value: summary.total, color: 'text-gray-800', bar: 'bg-blue-600', track: 'bg-blue-100', width: 100 },
@@ -177,7 +250,7 @@ export function ProxyPage() {
             <h2 className="text-sm leading-tight font-bold tracking-tight text-gray-800">Substitution Log</h2>
             <div className="mt-0.5 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-              <p className="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Date: {dateTo || 'Current'}</p>
+              <p className="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Date: {dateFrom && dateTo ? (dateFrom === dateTo ? dateFrom : `${dateFrom} – ${dateTo}`) : dateFrom || dateTo || 'All dates'}</p>
             </div>
           </div>
         </div>
@@ -220,9 +293,9 @@ export function ProxyPage() {
             <option value="REJECTED">Rejected</option>
           </select>
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-2 py-1">
-            <input type="date" aria-label="From" value={draftFrom} onChange={(event) => setDraftFrom(event.target.value)} className="w-28 bg-transparent text-xs text-gray-600 outline-none" />
+            <input type="date" aria-label="From" value={draftFrom} onChange={(event) => setDraftFrom(event.target.value)} className="w-36 bg-transparent text-xs text-gray-600 outline-none" />
             <span className="text-[10px] text-gray-400">to</span>
-            <input type="date" aria-label="To" value={draftTo} onChange={(event) => setDraftTo(event.target.value)} className="w-28 bg-transparent text-xs text-gray-600 outline-none" />
+            <input type="date" aria-label="To" value={draftTo} onChange={(event) => setDraftTo(event.target.value)} className="w-36 bg-transparent text-xs text-gray-600 outline-none" />
             <button type="submit" className="ml-1 text-orange-600 hover:text-orange-700" aria-label="Apply dates">
               <i className="fas fa-arrow-right text-xs" />
             </button>
@@ -230,25 +303,26 @@ export function ProxyPage() {
         </form>
       </div>
 
-      {error && <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
+      <FailureNotice message={error} />
+      <SuccessNotice message={saved} />
 
       <div className="flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-b-2xl border border-gray-200 bg-white shadow-sm">
         <div className="flex-1 overflow-auto">
           <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50">
               <tr>
-                {['Date & Time', 'Original Faculty', 'Assigned Proxy', 'Class Info', 'Status', 'Approval'].map((label) => (
+                {columns.map((label) => (
                   <th key={label} className={`px-5 py-2.5 text-[10px] font-bold tracking-wider text-gray-400 uppercase ${label === 'Status' ? 'text-center' : 'text-left'}`}>{label}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white text-xs">
               {loading && (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-400">Loading proxy records…</td></tr>
+                <tr><td colSpan={columns.length} className="px-6 py-10 text-center text-gray-400">Loading proxy records…</td></tr>
               )}
               {!loading && entries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
+                  <td colSpan={columns.length} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center text-gray-400">
                       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-50">
                         <i className="fas fa-search text-gray-300" />
@@ -312,10 +386,21 @@ export function ProxyPage() {
                         {entry.notes && <p className="mt-0.5 max-w-[100px] truncate text-[9px] text-gray-400 italic" title={entry.notes}>{entry.notes}</p>}
                       </div>
                     )}
-                    {entry.approval !== 'APPROVED' && entry.approval !== 'REJECTED' && (
+                    {awaitingDecision(entry) && (
                       <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400"><i className="far fa-clock" /> Pending</span>
                     )}
                   </td>
+                  {canChange && (
+                    <td className="px-5 py-2 whitespace-nowrap">
+                      {awaitingDecision(entry) ? (
+                        <button type="button" className="font-semibold text-orange-700 hover:text-orange-800" onClick={() => openAssign(entry)}>
+                          {entry.proxy ? 'Review' : 'Assign'}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-300">—</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -345,6 +430,38 @@ export function ProxyPage() {
           </div>
         )}
       </div>
+      {acting && (
+        <Dialog title={acting.proxy ? 'Review proxy request' : 'Assign a proxy'} onClose={() => { if (!saving) setActing(null) }}>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm">
+            <p className="font-bold text-gray-900">{acting.original}</p>
+            <p className="mt-1 text-gray-600">{acting.subject} · {acting.className} {acting.division}</p>
+            <p className="mt-1 text-xs text-gray-500">{acting.date} · {acting.start} - {acting.end}</p>
+            {acting.proxy ? <p className="mt-1 text-xs text-gray-500">Requested substitute: {acting.proxy}</p> : null}
+          </div>
+          <label className="mt-4 block" htmlFor="proxy-choice">
+            <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Proxy faculty</span>
+            <select id="proxy-choice" value={choice} onChange={(event) => setChoice(event.target.value)} className={`${fieldClass} mt-1 w-full`} disabled={choicesLoading || saving}>
+              <option value="">{choicesLoading ? 'Loading faculty…' : 'Choose a faculty member'}</option>
+              {choices.map((person) => (
+                <option key={person.id} value={person.id} disabled={!person.free}>
+                  {person.name}{person.employeeId ? ` · ${person.employeeId}` : ''}{person.free ? '' : ' · busy at this time'}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!choicesLoading && choices.length === 0 && <p className="mt-2 text-xs text-gray-500">No other faculty teaches this subject.</p>}
+          <label className="mt-4 block" htmlFor="proxy-note">
+            <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Note</span>
+            <textarea id="proxy-note" rows={3} maxLength={200} value={note} onChange={(event) => setNote(event.target.value)} className={`${fieldClass} mt-1 w-full`} placeholder="Optional note for the faculty" />
+          </label>
+          <FailureNotice message={dialogError} />
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700" disabled={saving} onClick={() => setActing(null)}>Cancel</button>
+            <button type="button" className="rounded-xl bg-gray-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={saving || choicesLoading} onClick={() => void decide('reject')}>Reject</button>
+            <button type="button" className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={saving || choicesLoading || !choice} onClick={() => void decide('approve')}>Approve</button>
+          </div>
+        </Dialog>
+      )}
     </section>
   )
 }

@@ -117,15 +117,31 @@ def _with_cursor(action, fallback):
         return fallback()
 
 
+def _local_bucket(bucket):
+    """The shared table lives in each tenant's database; the in-process fallback is shared, so prefix it."""
+    from core.tenancy import slug_for_paths
+
+    slug = slug_for_paths()
+    return f'{slug}|{bucket}' if slug else bucket
+
+
 def _shared_or_local(bucket, limit, window):
     return _with_cursor(
         lambda cursor: shared_allow(cursor, bucket, limit, window),
-        lambda: allow(bucket, limit, window),
+        lambda: allow(_local_bucket(bucket), limit, window),
     )
 
 
+def allow_bucket(bucket, limit, window):
+    """Count one hit in a named bucket (shared table, in-process fallback). False when the window is full."""
+    return _shared_or_local(bucket, limit, window)
+
+
 def _hits(bucket, window):
-    return _with_cursor(lambda cursor: shared_hits(cursor, bucket, window), lambda: local_hits(bucket, window))
+    return _with_cursor(
+        lambda cursor: shared_hits(cursor, bucket, window),
+        lambda: local_hits(_local_bucket(bucket), window),
+    )
 
 
 def _setting(name, default):

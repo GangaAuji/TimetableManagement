@@ -32,6 +32,7 @@ _MESSAGES = {
     'user_not_found': 'That user was not found.',
     'user_username_invalid': 'Enter a username of at least 3 characters.',
     'user_password_invalid': 'A new password must be at least 8 characters.',
+    'password_policy': 'The password does not meet the security policy.',
     'user_role_invalid': 'Choose Super Admin, Admin, Teacher, or Student.',
     'user_status_invalid': 'Choose a valid status.',
     'user_username_taken': 'That username is already in use.',
@@ -133,6 +134,10 @@ def _update(user_id):
         password = payload.get('password') or ''
         if not isinstance(password, str) or (password and len(password) < 8):
             raise InputError('user_password_invalid')
+        if password:
+            from services.security_policy import enforced_problem
+            if enforced_problem(password):
+                raise InputError('password_policy')
         role = normalize_role(str(payload.get('role') or '').strip())
         if role not in _ROLES:
             raise InputError('user_role_invalid')
@@ -164,6 +169,8 @@ def _update(user_id):
             return json_error(_MESSAGES['user_username_taken'], 400, 'user_username_taken')
         if result == 'email':
             return json_error(_MESSAGES['user_email_taken'], 400, 'user_email_taken')
+        if result == 'policy':
+            return json_error(_MESSAGES['password_policy'], 400, 'password_policy')
         if result != 'ok':
             return json_error(_MESSAGES['users_unavailable'], 500, 'users_unavailable')
         return json_ok({'id': safe_count(user_id)})

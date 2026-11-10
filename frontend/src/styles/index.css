@@ -262,3 +262,42 @@ html.dark :where(input, select, textarea):not([type='checkbox']):not([type='radi
 html.dark :where(input, textarea)::placeholder {
   color: #8b95a7;
 }
+
+.success-ring,
+.notice-ring {
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: success-draw 0.45s ease forwards;
+}
+
+.success-mark,
+.notice-mark {
+  stroke-dasharray: 80;
+  stroke-dashoffset: 80;
+  animation: success-draw 0.35s 0.35s ease forwards;
+}
+
+.success-pop {
+  animation: success-pop 0.45s ease;
+}
+
+@keyframes success-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes success-pop {
+  0% { transform: scale(0.86); opacity: 0; }
+  70% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success-ring,
+  .success-mark,
+  .notice-ring,
+  .notice-mark,
+  .success-pop {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

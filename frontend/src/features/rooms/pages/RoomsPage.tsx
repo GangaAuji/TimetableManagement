@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ApiError } from '../../../shared/api/client'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { useSetPageHeader } from '../../../app/page-header'
+import { SharingFields } from '../../../shared/components/SharingFields'
 import { DataTableHead, TablePager, TableToolbar, useDataTable, type TableColumnSpec } from '../../../shared/components/table-page'
+import { sharingLabels, type InstitutionOption } from '../../../shared/institutions'
 import {
   createRoom,
   deleteRoom,
@@ -25,10 +28,16 @@ const roomColumns: TableColumnSpec[] = [
   { key: 'capacity', label: 'Capacity', className: 'hidden sm:table-cell' },
   { key: 'department_name', label: 'Department', className: 'hidden md:table-cell' },
 ]
+const institutionColumn: TableColumnSpec = { key: 'institution_name', label: 'Institution', className: 'hidden lg:table-cell' }
 
 function roomValue(room: RoomRecord, key: string) {
   if (key === 'department_name') return room.department_name || 'Shared'
+  if (key === 'institution_name') return room.institution_short_name || room.institution_name
   return room[key as keyof RoomRecord]
+}
+
+function emptyDraft(institutionId: number | null): RoomDraft {
+  return { room_number: '', room_type: 'Classroom', capacity: 1, department_id: null, institution_id: institutionId, sharing: 'private', shared_with: [] }
 }
 
 function typeBadge(roomType: string) {
@@ -47,6 +56,8 @@ export function RoomsPage() {
   const setPageHeader = useSetPageHeader()
   const [rooms, setRooms] = useState<RoomRecord[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
+  const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
+  const [institutionId, setInstitutionId] = useState<number | null>(null)
   const [permissions, setPermissions] = useState<RoomPermissions>(emptyPermissions)
   const [typeFilter, setTypeFilter] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
@@ -61,8 +72,12 @@ export function RoomsPage() {
     const data = await getRooms()
     setRooms(data.rooms)
     setDepartments(data.departments)
+    setInstitutions(data.institutions)
+    setInstitutionId(data.institution_id)
     setPermissions(data.permissions)
   }
+  const multiInstitution = institutions.length > 1
+  const columns = useMemo(() => (multiInstitution ? [...roomColumns, institutionColumn] : roomColumns), [multiInstitution])
 
   useEffect(() => {
     setPageHeader('Room Configuration')
@@ -80,7 +95,7 @@ export function RoomsPage() {
     const matchesDepartment = !departmentFilter || (departmentFilter === 'Shared' ? !room.department_name : departmentName === departmentFilter)
     return matchesType && matchesDepartment
   }), [departmentFilter, rooms, typeFilter])
-  const table = useDataTable(rows, roomColumns, roomValue)
+  const table = useDataTable(rows, columns, roomValue)
 
   async function openEdit(roomId: number) {
     setError('')
@@ -93,6 +108,9 @@ export function RoomsPage() {
           room_type: (room.room_type || 'Classroom') as RoomType,
           capacity: room.capacity,
           department_id: room.department_id,
+          institution_id: room.institution_id,
+          sharing: room.sharing,
+          shared_with: room.shared_with,
         },
       })
     } catch (reason) {
@@ -151,7 +169,7 @@ export function RoomsPage() {
               <p className="text-xs text-gray-500">Classrooms, Labs & Capacity</p>
             </div>
             {permissions.add ? (
-              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white shadow hover:bg-blue-700 xl:hidden" onClick={() => setEditor({ id: null, draft: { room_number: '', room_type: 'Classroom', capacity: 1, department_id: null } })}>
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white shadow hover:bg-blue-700 xl:hidden" onClick={() => setEditor({ id: null, draft: emptyDraft(institutionId) })}>
                 <i className="fas fa-plus" />
               </button>
             ) : null}
@@ -167,7 +185,7 @@ export function RoomsPage() {
               {departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}
             </select>
             {permissions.add ? (
-              <button type="button" className="hidden items-center rounded bg-blue-600 px-4 py-1.5 text-xs whitespace-nowrap text-white shadow transition-colors hover:bg-blue-700 xl:flex" onClick={() => setEditor({ id: null, draft: { room_number: '', room_type: 'Classroom', capacity: 1, department_id: null } })}>
+              <button type="button" className="hidden items-center rounded bg-blue-600 px-4 py-1.5 text-xs whitespace-nowrap text-white shadow transition-colors hover:bg-blue-700 xl:flex" onClick={() => setEditor({ id: null, draft: emptyDraft(institutionId) })}>
                 <i className="fas fa-plus mr-2" /> Add Room
               </button>
             ) : null}
@@ -175,23 +193,23 @@ export function RoomsPage() {
         </div>
       </section>
 
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-      {notice ? <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
         <TableToolbar search={table.search} onSearch={table.setSearch} filtersOpen={table.filtersOpen} onToggleFilters={() => table.setFiltersOpen((open) => !open)} matched={table.matched} source={table.source} activeCount={table.activeCount} onClear={table.clear} />
         <div className="max-h-[70vh] overflow-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
-              <DataTableHead columns={roomColumns} sortKey={table.sortKey} sortDir={table.sortDir} onSort={table.toggleSort} filtersOpen={table.filtersOpen} filters={table.filters} onFilter={table.setFilter} trailing={<th className="px-4 py-2.5 text-right text-[10px] font-bold tracking-wider text-gray-400 uppercase">Actions</th>} />
+              <DataTableHead columns={columns} sortKey={table.sortKey} sortDir={table.sortDir} onSort={table.toggleSort} filtersOpen={table.filtersOpen} filters={table.filters} onFilter={table.setFilter} trailing={<th className="px-4 py-2.5 text-right text-[10px] font-bold tracking-wider text-gray-400 uppercase">Actions</th>} />
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">Loading rooms…</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-4 py-8 text-center text-sm text-gray-500">Loading rooms…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No rooms match these filters.</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-4 py-8 text-center text-sm text-gray-500">No rooms match these filters.</td></tr>
               ) : table.rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No rooms match these filters.</td></tr>
+                <tr><td colSpan={columns.length + 1} className="px-4 py-8 text-center text-sm text-gray-500">No rooms match these filters.</td></tr>
               ) : table.rows.map((room) => (
                 <tr key={room.id} className="group transition-colors hover:bg-blue-50">
                   <td className="px-4 py-2">
@@ -213,17 +231,24 @@ export function RoomsPage() {
                   <td className="hidden px-4 py-2 text-xs text-gray-600 md:table-cell">
                     {room.department_name || <span className="text-gray-400 italic">Shared / General</span>}
                   </td>
+                  {multiInstitution ? (
+                    <td className="hidden px-4 py-2 text-xs text-gray-600 lg:table-cell">
+                      {room.institution_short_name || room.institution_name}
+                      {!room.owned ? <span className="ml-1 rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700" title="Owned by another institution and shared with this one">shared in</span> : null}
+                      {room.owned && room.sharing !== 'private' ? <span className="ml-1 rounded border border-sky-100 bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">{sharingLabels[room.sharing]}</span> : null}
+                    </td>
+                  ) : null}
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-2 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
                       <button type="button" title="View Schedule" className="rounded p-1.5 text-teal-600 hover:bg-teal-50 hover:text-teal-800" onClick={() => void openSchedule(room.id)}>
                         <i className="fas fa-calendar-alt" />
                       </button>
-                      {permissions.change ? (
+                      {permissions.change && room.owned ? (
                         <button type="button" title="Edit" className="rounded p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-800" onClick={() => void openEdit(room.id)}>
                           <i className="fas fa-edit" />
                         </button>
                       ) : null}
-                      {permissions.delete ? (
+                      {permissions.delete && room.owned ? (
                         <button type="button" title="Delete" className="rounded p-1.5 text-red-600 hover:bg-red-50 hover:text-red-800" onClick={() => void onDelete(room)}>
                           <i className="fas fa-trash-alt" />
                         </button>
@@ -262,14 +287,40 @@ export function RoomsPage() {
                     {roomTypes.map((type) => <option key={type} value={type}>{type === 'Conference' ? 'Conference Room' : type}</option>)}
                   </select>
                 </label>
+                {multiInstitution ? (
+                  <label className="col-span-2 block text-xs font-semibold text-gray-700">
+                    Institution <span className="text-red-500">*</span>
+                    <select
+                      required
+                      value={editor.draft.institution_id ?? ''}
+                      onChange={(event) => setEditor({ ...editor, draft: { ...editor.draft, institution_id: event.target.value ? Number(event.target.value) : null, department_id: null } })}
+                      className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">-- Choose the owning institution --</option>
+                      {institutions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="col-span-2 block text-xs font-semibold text-gray-700">
                   Department
                   <select value={editor.draft.department_id ?? ''} onChange={(event) => setEditor({ ...editor, draft: { ...editor.draft, department_id: event.target.value ? Number(event.target.value) : null } })} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500">
                     <option value="">-- Shared / General Resource --</option>
-                    {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                    {departments
+                      .filter((department) => !multiInstitution || !editor.draft.institution_id || !department.institution_id || department.institution_id === editor.draft.institution_id)
+                      .map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                   </select>
                   <p className="mt-1 text-[10px] text-gray-500">Leave blank if this room is shared across departments.</p>
                 </label>
+                <div className="col-span-2">
+                  <SharingFields
+                    institutions={institutions}
+                    ownerId={editor.draft.institution_id ?? null}
+                    sharing={editor.draft.sharing ?? 'private'}
+                    sharedWith={editor.draft.shared_with ?? []}
+                    noun="room"
+                    onChange={(next) => setEditor({ ...editor, draft: { ...editor.draft, sharing: next.sharing, shared_with: next.sharedWith } })}
+                  />
+                </div>
               </div>
               <div className="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-4">
                 <button type="button" className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200" onClick={() => setEditor(null)}>Cancel</button>

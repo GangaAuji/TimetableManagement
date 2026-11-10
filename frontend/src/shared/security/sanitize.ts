@@ -1,4 +1,4 @@
-import type { Branding, DashboardSummary, SessionInfo, TodayClass } from '../api/endpoints'
+import type { Branding, DashboardSummary, SessionInfo, SessionInstitution, TodayClass } from '../api/endpoints'
 
 const hexColor = /^#[0-9A-Fa-f]{6}$/
 const assetPath = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,180}$/
@@ -15,6 +15,10 @@ export const fallbackBranding: Branding = {
   copyright_text: '© 2025',
   welcome_message: 'Welcome to our academic management system',
   footer_text: 'Powered by Timetable Management System',
+  maintenance_title: "We'll be back shortly",
+  maintenance_message: 'The timetable is temporarily unavailable while maintenance is in progress.',
+  support_email: '',
+  support_phone: '',
   site_logo: '',
   login_logo: '',
   favicon: '',
@@ -70,6 +74,10 @@ export function sanitizeBranding(input: Partial<Branding> | null | undefined): B
     copyright_text: safeText(source.copyright_text, 120) || fallbackBranding.copyright_text,
     welcome_message: safeText(source.welcome_message, 240) || fallbackBranding.welcome_message,
     footer_text: safeText(source.footer_text, 160) || fallbackBranding.footer_text,
+    maintenance_title: safeText(source.maintenance_title, 120) || fallbackBranding.maintenance_title,
+    maintenance_message: safeText(source.maintenance_message, 400) || fallbackBranding.maintenance_message,
+    support_email: safeText(source.support_email, 160),
+    support_phone: safeText(source.support_phone, 30),
     site_logo: safeAsset(source.site_logo),
     login_logo: safeAsset(source.login_logo),
     favicon: safeAsset(source.favicon),
@@ -86,12 +94,34 @@ export function sanitizeBranding(input: Partial<Branding> | null | undefined): B
   }
 }
 
+export function sanitizeInstitution(input: unknown): SessionInstitution | null {
+  if (!input || typeof input !== 'object') return null
+  const source = input as Partial<SessionInstitution>
+  const id = safeCount(source.id)
+  if (!id) return null
+  return {
+    id,
+    name: safeText(source.name, 150),
+    code: safeText(source.code, 20),
+    short_name: safeText(source.short_name, 40),
+  }
+}
+
 export function sanitizeSession(input: Partial<SessionInfo> | null | undefined): SessionInfo {
-  if (!input || input.authenticated !== true) return { authenticated: false }
+  if (!input || input.authenticated !== true) return { authenticated: false, maintenance: input?.maintenance === true }
   const role = roleName.test(input.role ?? '') ? (input.role as string) : ''
   const permissions = Array.isArray(input.permissions)
     ? input.permissions.filter((item): item is string => typeof item === 'string' && permissionName.test(item)).slice(0, 400)
     : []
+  const institutions = Array.isArray(input.institutions)
+    ? input.institutions.map(sanitizeInstitution).filter((item): item is SessionInstitution => item !== null).slice(0, 200)
+    : []
+  const capabilities: Record<string, boolean> = {}
+  if (input.capabilities && typeof input.capabilities === 'object') {
+    for (const [name, value] of Object.entries(input.capabilities as Record<string, unknown>).slice(0, 100)) {
+      if (permissionName.test(name)) capabilities[name] = value === true
+    }
+  }
   return {
     authenticated: true,
     username: safeText(input.username, 80) || 'User',
@@ -99,6 +129,13 @@ export function sanitizeSession(input: Partial<SessionInfo> | null | undefined):
     profile_photo: safeAsset(input.profile_photo) || 'default-avatar.svg',
     unrestricted: input.unrestricted === true && role === 'Super Admin',
     permissions,
+    institution: sanitizeInstitution(input.institution),
+    institutions,
+    organization_wide: input.organization_wide === true && role === 'Super Admin',
+    capabilities,
+    password_expired: input.password_expired === true,
+    license_problem: safeText(input.license_problem, 240),
+    maintenance: input.maintenance === true,
   }
 }
 

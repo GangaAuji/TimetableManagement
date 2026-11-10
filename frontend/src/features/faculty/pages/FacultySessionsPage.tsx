@@ -3,17 +3,14 @@ import { Link, useParams } from 'react-router-dom'
 import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { ListTable, displayValue, messageFrom, postJson, type DataRow } from '../../../shared/components/data-list'
+import { todayInput } from '../../../shared/dates'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Absence = { id: number; date: string; reason: string; status: string }
 type ProxyEntry = { id: number; date: string; day: string; start: string; end: string; subject: string; original: string; proxy: string; status: string; approval: string }
 
 const fieldClass = 'rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800'
-
-function todayInput() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
 
 export function FacultySessionsPage() {
   const { facultyId } = useParams()
@@ -113,8 +110,8 @@ export function FacultySessionsPage() {
           <Link to="/admin/shifts" className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700">Shifts</Link>
         </div>
       </div>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-3 text-sm text-green-700">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       <ListTable columns={[{ key: 'day', label: 'Day' }, { key: 'start_time', label: 'Start' }, { key: 'end_time', label: 'End' }, { key: 'subject', label: 'Subject' }, { key: 'class_name', label: 'Class' }, { key: 'division_name', label: 'Division' }, { key: 'room', label: 'Room' }]} rows={rows} />
       <section className="rounded-2xl border border-gray-200 bg-white p-4">
         <h2 className="text-sm font-bold text-gray-800">Absence history</h2>

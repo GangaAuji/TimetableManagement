@@ -38,7 +38,14 @@ def _install_migration_context_defaults():
 
 
 def configure_migrations(app):
-    """Attach Flask-Migrate without using it for request queries. Reads the app's own config."""
+    """Attach Flask-Migrate without using it for request queries. Reads the app's own config.
+
+    With a tenant registry there is no single database for `flask db` to act
+    on, so the command group is not registered; `flask tenant upgrade` runs
+    the migrations on each tenant instead.
+    """
+    if app.config.get('TENANT_REGISTRY_DB'):
+        return
     user = quote_plus(app.config.get('MYSQL_USER') or '')
     password = quote_plus(app.config.get('MYSQL_PASSWORD') or '')
     host = app.config.get('MYSQL_HOST') or 'localhost'

@@ -3,6 +3,8 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { messageFrom, postJson } from '../../../shared/components/data-list'
 import { DataTableHead, TablePager, TableToolbar, useDataTable, type TableColumnSpec } from '../../../shared/components/table-page'
+import { currentMonth, todayInput } from '../../../shared/dates'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type Choice = { id: number; name: string }
@@ -25,7 +27,14 @@ type ReportOptions = {
   faculty?: { id?: unknown; name?: unknown }[]
   rooms?: { id?: unknown; name?: unknown }[]
   users?: { id?: unknown; name?: unknown }[]
+  subjects?: { id?: unknown; name?: unknown }[]
+  departments?: { id?: unknown; name?: unknown }[]
+  formats?: { id?: unknown; name?: unknown }[]
 }
+
+const COHORT_TYPES = new Set(['attendance', 'invitations', 'defaulters', 'subject-wise', 'monthly-register'])
+const ACCREDITATION_TYPES = new Set(['defaulters', 'subject-wise', 'monthly-register', 'syllabus-coverage', 'co-attainment'])
+const FORMATS = ['csv', 'xlsx', 'pdf']
 type ReportList = {
   reports?: Record<string, unknown>[]
   types?: { id?: unknown; label?: unknown }[]
@@ -96,8 +105,8 @@ export function ReportsPage() {
   const [reportType, setReportType] = useState('attendance')
   const [view, setView] = useState('class')
   const [entityId, setEntityId] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [startDate, setStartDate] = useState(todayInput)
+  const [endDate, setEndDate] = useState(todayInput)
   const [courseId, setCourseId] = useState('')
   const [classId, setClassId] = useState('')
   const [divisionId, setDivisionId] = useState('')
@@ -106,6 +115,11 @@ export function ReportsPage() {
   const [status, setStatus] = useState('')
   const [role, setRole] = useState('')
   const [action, setAction] = useState('')
+  const [format, setFormat] = useState('csv')
+  const [subjectId, setSubjectId] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
+  const [month, setMonth] = useState(currentMonth)
+  const [threshold, setThreshold] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
@@ -127,6 +141,8 @@ export function ReportsPage() {
       faculty: choices(data.options?.faculty),
       rooms: choices(data.options?.rooms),
       users: choices(data.options?.users),
+      subjects: choices(data.options?.subjects),
+      departments: choices(data.options?.departments),
     })
     setRows(jobs(data.reports))
   }
@@ -154,18 +170,29 @@ export function ReportsPage() {
     setSaving(true)
     setError('')
     setNotice('')
-    const payload: Record<string, string | number> = { report_type: reportType }
+    const payload: Record<string, string | number> = { report_type: reportType, format }
     if (reportType === 'timetable') {
       payload.view = view
       payload.entity_id = Number(entityId)
-    } else {
+    } else if (reportType !== 'monthly-register' && reportType !== 'syllabus-coverage' && reportType !== 'co-attainment') {
       if (startDate) payload.start_date = startDate
       if (endDate) payload.end_date = endDate
     }
-    if (reportType === 'attendance' || reportType === 'invitations') {
+    if (COHORT_TYPES.has(reportType)) {
       if (courseId) payload.course_id = Number(courseId)
       if (classId) payload.class_id = Number(classId)
       if (divisionId) payload.division_id = Number(divisionId)
+    }
+    if (ACCREDITATION_TYPES.has(reportType) && subjectId) payload.subject_id = Number(subjectId)
+    if (reportType === 'co-attainment') {
+      if (courseId) payload.course_id = Number(courseId)
+      if (departmentId) payload.department_id = Number(departmentId)
+    }
+    if (reportType === 'defaulters' && threshold.trim()) payload.threshold = Number(threshold)
+    if (reportType === 'monthly-register') payload.month = month
+    if (reportType === 'faculty-workload') {
+      if (departmentId) payload.department_id = Number(departmentId)
+      if (facultyId) payload.faculty_id = Number(facultyId)
     }
     if (reportType === 'shifts' && facultyId) payload.faculty_id = Number(facultyId)
     if (reportType === 'audit-logs' && userId) payload.user_id = Number(userId)
@@ -195,8 +222,8 @@ export function ReportsPage() {
             <p className="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Large files run in the background so the page does not time out</p>
           </div>
         </div>
-        {error && <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-        {notice && <p className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{notice}</p>}
+        <FailureNotice message={error} />
+        <SuccessNotice message={notice} />
         {canGenerate ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label>
@@ -223,7 +250,12 @@ export function ReportsPage() {
                   </select>
                 </label>
               </>
-            ) : (
+            ) : reportType === 'monthly-register' ? (
+              <label>
+                <span className={labelClass}>Month</span>
+                <input type="month" required value={month} onChange={(event) => setMonth(event.target.value)} className={fieldClass} />
+              </label>
+            ) : reportType === 'syllabus-coverage' || reportType === 'co-attainment' ? null : (
               <>
                 <label>
                   <span className={labelClass}>From</span>
@@ -235,13 +267,40 @@ export function ReportsPage() {
                 </label>
               </>
             )}
-            {(reportType === 'attendance' || reportType === 'invitations') && (
+            {COHORT_TYPES.has(reportType) && (
               <>
-                <Select label="Course" value={courseId} onChange={setCourseId} items={options.courses || []} />
-                <Select label="Class" value={classId} onChange={setClassId} items={options.classes || []} />
+                <Select label="Course" value={courseId} onChange={setCourseId} items={options.courses || []} required={reportType === 'monthly-register'} />
+                <Select label="Class" value={classId} onChange={setClassId} items={options.classes || []} required={reportType === 'monthly-register'} />
                 <Select label="Division" value={divisionId} onChange={setDivisionId} items={options.divisions || []} />
               </>
             )}
+            {ACCREDITATION_TYPES.has(reportType) && (
+              <Select label="Subject" value={subjectId} onChange={setSubjectId} items={options.subjects || []} />
+            )}
+            {reportType === 'defaulters' && (
+              <label>
+                <span className={labelClass}>Below %</span>
+                <input type="number" min={0} max={100} step={0.5} value={threshold} onChange={(event) => setThreshold(event.target.value)} className={fieldClass} placeholder="Institution default" />
+              </label>
+            )}
+            {(reportType === 'syllabus-coverage' || reportType === 'co-attainment') && (
+              <Select label="Department" value={departmentId} onChange={setDepartmentId} items={options.departments || []} />
+            )}
+            {reportType === 'co-attainment' && (
+              <Select label="Course" value={courseId} onChange={setCourseId} items={options.courses || []} />
+            )}
+            {reportType === 'faculty-workload' && (
+              <>
+                <Select label="Department" value={departmentId} onChange={setDepartmentId} items={options.departments || []} />
+                <Select label="Faculty" value={facultyId} onChange={setFacultyId} items={options.faculty || []} />
+              </>
+            )}
+            <label>
+              <span className={labelClass}>Format</span>
+              <select value={format} onChange={(event) => setFormat(event.target.value)} className={fieldClass}>
+                {FORMATS.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
+              </select>
+            </label>
             {reportType === 'shifts' && (
               <>
                 <Select label="Faculty" value={facultyId} onChange={setFacultyId} items={options.faculty || []} />
@@ -281,7 +340,7 @@ export function ReportsPage() {
               </>
             )}
             <div className="flex items-end">
-              <button type="submit" disabled={saving || (reportType === 'timetable' && !entityId)} className="rounded-xl bg-gray-900 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
+              <button type="submit" disabled={saving || (reportType === 'timetable' && !entityId) || (reportType === 'monthly-register' && !(month && courseId && classId))} className="rounded-xl bg-gray-900 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
                 {saving ? 'Queuing...' : 'Queue report'}
               </button>
             </div>
@@ -328,12 +387,12 @@ export function ReportsPage() {
   )
 }
 
-function Select({ label, value, onChange, items }: { label: string; value: string; onChange: (value: string) => void; items: Choice[] }) {
+function Select({ label, value, onChange, items, required }: { label: string; value: string; onChange: (value: string) => void; items: Choice[]; required?: boolean }) {
   return (
     <label>
       <span className={labelClass}>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className={fieldClass}>
-        <option value="">Any</option>
+      <select value={value} onChange={(event) => onChange(event.target.value)} className={fieldClass} required={required}>
+        <option value="">{required ? 'Select' : 'Any'}</option>
         {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
     </label>

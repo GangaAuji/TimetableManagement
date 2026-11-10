@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from tests.http_helpers import ADMIN_FORM_ROLES, SAME_ORIGIN, api, csrf_token, login
+from tests.http_helpers import ADMIN_FORM_ROLES, api, login
 
 
 def _logged(factory, user, activity):
@@ -39,12 +39,10 @@ def _rename_own_role(client, factory):
 
 
 def _edit_own_account(client, user):
-    return client.post(
-        f'/admin/users/edit/{user["id"]}',
-        headers={'Origin': SAME_ORIGIN, 'X-Requested-With': 'XMLHttpRequest'},
-        data={'username': user['username'], 'role': user['role'], 'status': 'active',
-              'email': f'{user["username"]}@changed.example.org', 'csrf_token': csrf_token(client)},
-    )
+    return api(client, 'POST', f'/api/users/{user["id"]}', json={
+        'username': user['username'], 'role': user['role'], 'status': 'active',
+        'email': f'{user["username"]}@changed.example.org', 'department_id': None, 'is_hod': False,
+    })
 
 
 def _hod_who_edits_roles(factory):
@@ -80,7 +78,7 @@ def test_renaming_a_role_you_do_not_hold_is_audited(client, factory):
     assert _logged(factory, hod, 'edit_role')
 
 
-def test_editing_your_own_account_on_the_legacy_screen_is_audited(client, factory):
+def test_editing_your_own_account_is_audited(client, factory):
     root = factory.user('Super Admin')
     login(client, root)
     response = _edit_own_account(client, root)
@@ -104,7 +102,7 @@ def test_an_audit_failure_rolls_the_change_back(client, factory, monkeypatch):
     assert after == before
 
 
-@pytest.mark.parametrize('case', ('password', 'role', 'legacy_edit'))
+@pytest.mark.parametrize('case', ('password', 'role', 'edit'))
 def test_own_row_writes_take_under_two_seconds_with_the_default_lock_wait(
         default_lock_wait_app, db, factory, reset_rate_limits, case):
     client = default_lock_wait_app.test_client()

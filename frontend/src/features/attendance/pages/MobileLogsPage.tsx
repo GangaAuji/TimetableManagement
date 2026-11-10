@@ -3,6 +3,8 @@ import { useSetPageHeader } from '../../../app/page-header'
 import { apiRequest } from '../../../shared/api/client'
 import { Dialog } from '../../../shared/components/dialog'
 import { Stat, messageFrom, postJson } from '../../../shared/components/data-list'
+import { todayInput } from '../../../shared/dates'
+import { FailureNotice, SuccessNotice } from '../../../shared/components/success-notice'
 import { safeCount, safeText } from '../../../shared/security/sanitize'
 
 type LogRow = {
@@ -35,12 +37,12 @@ function processingClass(status: string) {
 
 export function MobileLogsPage() {
   const setPageHeader = useSetPageHeader()
-  const [date, setDate] = useState('')
+  const [date, setDate] = useState(todayInput)
   const [status, setStatus] = useState('')
   const [device, setDevice] = useState('')
   const [student, setStudent] = useState('')
   const [limit, setLimit] = useState('100')
-  const [applied, setApplied] = useState({ date: '', status: '', device: '', student: '', limit: '100' })
+  const [applied, setApplied] = useState(() => ({ date: todayInput(), status: '', device: '', student: '', limit: '100' }))
   const [stats, setStats] = useState({ total: 0, processed: 0, pending: 0, failed: 0 })
   const [rows, setRows] = useState<LogRow[]>([])
   const [canReprocess, setCanReprocess] = useState(false)
@@ -131,8 +133,8 @@ export function MobileLogsPage() {
         <Stat label="Pending" value={stats.pending} />
         <Stat label="Failed" value={stats.failed} />
       </div>
-      {error ? <p className="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-3 text-sm text-green-700">{notice}</p> : null}
+      <FailureNotice message={error} />
+      <SuccessNotice message={notice} />
       {!available ? <p className="text-sm text-gray-500">Student sync logs are not available yet.</p> : null}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-sm text-gray-700">Date

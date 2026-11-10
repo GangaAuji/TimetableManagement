@@ -262,19 +262,38 @@ def test_overview_lists_defaulters_from_the_module(client, factory, cohort):
     assert api(client, 'GET', '/api/attendance/overview?threshold=abc').status_code == 400
 
 
-def test_defaulter_export_works_again(client, factory, cohort):
-    admin = factory.user('Admin')
-    login(client, admin)
+def test_defaulter_list_comes_from_the_report_dataset(db, cohort):
+    """The legacy CSV URL is gone; the Reports 'defaulters' dataset carries the same figures."""
+    from services.reports_admin.accreditation import DEFAULTER_FIELDS, defaulter_rows
+
+    setup = cohort['setup']
+    filters = {
+        'start_date': '2026-03-01', 'end_date': '2026-03-31',
+        'course_id': str(setup['course_id']), 'class_id': str(setup['class_id']), 'division_id': '',
+    }
+    cursor = db.cursor(dictionary=True)
+    try:
+        rows, fieldnames, _labels, meta = defaulter_rows(cursor, filters)
+        # An out-of-range threshold falls back to the institution's setting.
+        fallback = defaulter_rows(cursor, {**filters, 'threshold': '101'})[3]
+        with pytest.raises(ValueError):
+            defaulter_rows(cursor, {**filters, 'course_id': 'abc'})
+    finally:
+        cursor.close()
+    assert fallback['threshold'] == meta['threshold']
+    assert fieldnames == DEFAULTER_FIELDS
+    assert fieldnames[:5] == ['roll_number', 'full_name', 'course_name', 'class_name', 'division_name']
+    roll = cohort['chen']['username'].split('_')[-1]
+    [chen] = [row for row in rows if str(row['roll_number']) == roll]
+    assert chen['attendance_percentage'] == 50.0 and chen['classes_needed'] == 2
+    assert meta['defaulters'] == len(rows) >= 1
+
+
+def test_the_legacy_defaulter_csv_url_is_gone(client, factory):
+    login(client, factory.user('Admin'))
     response = client.get('/admin/attendance/export/defaulters')
-    assert response.status_code == 200 and response.headers['Content-Type'].startswith('text/csv')
-    rows = list(csv.reader(io.StringIO(response.get_data(as_text=True))))
-    assert rows[0][:5] == ['Roll Number', 'Name', 'Course', 'Class', 'Division']
-    assert 'Percentage' in rows[0] and 'Classes Needed' in rows[0]
-    chen = [row for row in rows[1:] if row[0] == cohort['chen']['username'].split('_')[-1]]
-    assert len(chen) == 1
-    percentage = rows[0].index('Percentage')
-    assert chen[0][percentage] == '50.00%' and chen[0][rows[0].index('Classes Needed')] == '2'
-    assert client.get('/admin/attendance/export/defaulters?threshold=101').status_code == 400
+    assert response.status_code in (302, 404)
+    assert not response.headers.get('Content-Type', '').startswith('text/csv')
 
 
 def test_defaulters_need_the_permission(client, factory):
@@ -322,37 +341,39 @@ def test_overview_carries_the_period_figures(client, factory, cohort):
     assert data['percentage'] is None or isinstance(data['percentage'], float)
 
 
-def test_charts_come_from_the_module(client, factory, cohort, monkeypatch):
-    monkeypatch.setattr('services.attendance_admin.exports.date', MarchDay)
+def test_the_legacy_chart_and_csv_urls_are_gone(client, factory):
+    """The React overview reads /api/attendance/overview; exports go through Reports."""
     login(client, factory.user('Admin'))
-    trend = client.get('/admin/attendance/charts/data?type=trend').get_json()
-    by_label = {series['label']: dict(zip(trend['labels'], series['data'])) for series in trend['datasets']}
-    assert by_label['Present']['2026-03-02'] >= 1          # Asha, Physics
-    assert by_label['Late']['2026-03-10'] >= 1             # Ben, German
-    assert by_label['Not marked']['2026-03-17'] >= 1       # German, nobody marked
-    assert by_label['Absent']['2026-03-20'] >= 1           # Asha, EVS
-    distribution = client.get('/admin/attendance/charts/data?type=distribution').get_json()
-    course, class_name, _division = cohort_names(factory, cohort['setup'])
-    assert dict(zip(distribution['labels'], distribution['data']))[f'{course} {class_name}'] == 76.47
-    assert client.get('/admin/attendance/charts/data?type=pie').status_code == 400
+    for path in ('/admin/attendance/charts/data?type=trend', '/admin/attendance/export/overview'):
+        response = client.get(path)
+        assert response.status_code in (302, 404), path
+        assert response.headers.get('Content-Type', '').startswith('text/csv') is False
 
 
-def test_overview_export_lists_todays_cohorts(client, factory, cohort, monkeypatch):
-    monkeypatch.setattr('services.attendance_admin.exports.date', MarchDay)
-    login(client, factory.user('Admin'))
-    response = client.get('/admin/attendance/export/overview')
-    assert response.status_code == 200 and response.headers['Content-Type'].startswith('text/csv')
-    rows = list(csv.reader(io.StringIO(response.get_data(as_text=True))))
-    header = rows[0]
-    assert header[:4] == ['Course', 'Class', 'Division', 'Students'] and header[-1] == 'Percentage'
+def test_the_attendance_report_renders_the_cohort_as_csv(db, cohort, tmp_path):
+    from services.reports_admin.dataset import _build_report_export_dataset
+    from services.reports_admin.renderers import render
+
     setup = cohort['setup']
-    course, class_name, division_name = cohort_names(factory, setup)
-    ours = {row[header.index('Division')]: row for row in rows[1:] if row[0] == course and row[1] == class_name}
-    division_a = ours[division_name]
-    assert (division_a[header.index('Students')], division_a[header.index('Held')], division_a[header.index('Countable')]) == ('3', '3', '1')
-    assert division_a[header.index('Percentage')] == '0.00%'   # Asha absent; Ben and Chen unrecorded
-    division_b = ours[f"B{setup['timetable_id']}"]
-    assert division_b[header.index('Percentage')] == '100.00%'  # Dev present
+    cursor = db.cursor(dictionary=True)
+    try:
+        rows, fieldnames = _build_report_export_dataset(cursor, 'attendance', {
+            'start_date': '2026-03-01', 'end_date': '2026-03-31',
+            'course_id': str(setup['course_id']), 'class_id': str(setup['class_id']), 'division_id': '',
+        })
+    finally:
+        cursor.close()
+    target = tmp_path / 'attendance.csv'
+    written = render(str(target), 'csv', fieldnames, rows)
+    assert written == len(rows) >= 4
+    parsed = list(csv.reader(io.StringIO(target.read_text(encoding='utf-8'))))
+    header = parsed[0]
+    assert header == list(fieldnames)
+    student_col = header.index('student_id')
+    percent_col = header.index('attendance_percentage')
+    by_id = {row[student_col]: row for row in parsed[1:]}
+    assert float(by_id[str(cohort['asha']['student_id'])][percent_col]) == 70.0
+    assert float(by_id[str(cohort['dev']['student_id'])][percent_col]) == 100.0
 
 
 def test_report_dataset_lists_the_whole_cohort(db, cohort):
